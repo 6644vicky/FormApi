@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter, useSearchParams } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useState, Suspense } from "react";
 import {
   Box,
   Flex,
@@ -12,7 +12,7 @@ import {
 } from "@chakra-ui/react";
 import { supabase } from "@/lib/supabase";
 
-export default function VerifyEmailPage() {
+function VerifyEmailContent() {
   const router = useRouter();
   const toast = useToast();
   const searchParams = useSearchParams();
@@ -171,5 +171,13 @@ export default function VerifyEmailPage() {
         />
       </Box>
     </Flex>
+  );
+}
+
+export default function VerifyEmailPage() {
+  return (
+    <Suspense fallback={<Box>Loading...</Box>}>
+      <VerifyEmailContent />
+    </Suspense>
   );
 }

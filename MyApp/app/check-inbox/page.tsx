@@ -11,10 +11,10 @@ import {
   Button,
   useToast,
 } from "@chakra-ui/react";
-import { useState, useEffect } from "react";
+import { useState, useEffect, Suspense } from "react";
 import { supabase } from "@/lib/supabase";
 
-export default function CheckInboxPage() {
+function CheckInboxContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const toast = useToast();
@@ -172,5 +172,13 @@ export default function CheckInboxPage() {
         />
       </Box>
     </Flex>
+  );
+}
+
+export default function CheckInboxPage() {
+  return (
+    <Suspense fallback={<Box>Loading...</Box>}>
+      <CheckInboxContent />
+    </Suspense>
   );
 }

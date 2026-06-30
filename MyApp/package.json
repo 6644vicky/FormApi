@@ -19,12 +19,13 @@
     "@emotion/react": "^11.14.0",
     "@emotion/styled": "^11.14.1",
     "@supabase/auth-helpers-nextjs": "^0.15.0",
-    "@supabase/supabase-js": "^2.108.2",
+    "@supabase/supabase-js": "^2.110.0",
     "framer-motion": "^10.18.0",
     "next": "^16.2.9",
     "next-auth": "^4.24.14",
     "react": "^19.2.7",
-    "react-dom": "^19.2.7"
+    "react-dom": "^19.2.7",
+    "uuid": "^14.0.1"
   },
   "devDependencies": {
     "@types/node": "26.0.1",

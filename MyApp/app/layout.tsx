@@ -1,0 +1,24 @@
+import type { Metadata } from "next";
+import { Providers } from "./providers";
+import "./globals.css";
+
+export const metadata: Metadata = {
+  title: "MyApp",
+  description: "Generated with Chakra UI",
+};
+
+export default function RootLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
+  return (
+    <html lang="en" suppressHydrationWarning style={{ margin: 0, padding: 0 }}>
+      <body style={{ margin: 0, padding: 0, backgroundColor: "#FAFAFA" }}>
+        <Providers>
+          {children}
+        </Providers>
+      </body>
+    </html>
+  );
+}

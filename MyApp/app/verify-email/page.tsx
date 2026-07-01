@@ -41,14 +41,9 @@ function VerifyEmailContent() {
   useEffect(() => {
     if (!userEmail) return;
 
-    // Poll for email verification every 3 seconds
-    const interval = setInterval(async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      const user = session?.user;
-
-      if (user?.email_confirmed_at) {
-        // Email is confirmed, redirect to login page
-        clearInterval(interval);
+    // Listen for auth state changes
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      if (session?.user?.email_confirmed_at) {
         toast({
           title: "Email verified!",
           description: "Redirecting to login...",
@@ -58,11 +53,23 @@ function VerifyEmailContent() {
         });
         setTimeout(() => {
           router.push("/");
-        }, 1000);
+        }, 500);
+      }
+    });
+
+    // Also poll every 3 seconds as backup
+    const interval = setInterval(async () => {
+      await supabase.auth.refreshSession();
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session?.user?.email_confirmed_at) {
+        clearInterval(interval);
       }
     }, 3000);
 
-    return () => clearInterval(interval);
+    return () => {
+      clearInterval(interval);
+      subscription?.unsubscribe();
+    };
   }, [userEmail, router, toast]);
 
   const handleResendEmail = async () => {

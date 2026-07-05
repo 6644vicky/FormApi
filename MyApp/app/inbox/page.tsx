@@ -23,7 +23,7 @@ import {
   useToast,
   IconButton,
 } from "@chakra-ui/react";
-import { DeleteIcon, SettingsIcon, LogOutIcon } from "@chakra-ui/icons";
+import { DeleteIcon, SettingsIcon, LogOutIcon, HomeIcon, ChatIcon, QuestionIcon, ViewIcon } from "@chakra-ui/icons";
 
 interface Message {
   id: number;
@@ -70,10 +70,10 @@ const mockMessages: Message[] = [
 ];
 
 const navItems = [
-  { label: "Home", icon: "🏠" },
-  { label: "Messages", icon: "💬" },
-  { label: "Settings", icon: "⚙️" },
-  { label: "Help", icon: "❓" },
+  { label: "Home", icon: HomeIcon },
+  { label: "Messages", icon: ChatIcon },
+  { label: "Settings", icon: SettingsIcon },
+  { label: "Help", icon: QuestionIcon },
 ];
 
 export default function InboxPage() {
@@ -173,24 +173,26 @@ export default function InboxPage() {
 
         {/* Nav Items */}
         <VStack spacing="md" flex={1}>
-          {navItems.map((item) => (
-            <Button
-              key={item.label}
-              variant="unstyled"
-              w="44px"
-              h="44px"
-              display="flex"
-              alignItems="center"
-              justifyContent="center"
-              fontSize="xl"
-              bg={selectedNav === item.label ? "dark.surface" : "transparent"}
-              _hover={{ bg: "gray.200" }}
-              onClick={() => setSelectedNav(item.label)}
-              borderRadius="base"
-            >
-              {item.icon}
-            </Button>
-          ))}
+          {navItems.map((item) => {
+            const IconComponent = item.icon;
+            return (
+              <Button
+                key={item.label}
+                variant="unstyled"
+                w="44px"
+                h="44px"
+                display="flex"
+                alignItems="center"
+                justifyContent="center"
+                bg={selectedNav === item.label ? "dark.surface" : "transparent"}
+                _hover={{ bg: "gray.200" }}
+                onClick={() => setSelectedNav(item.label)}
+                borderRadius="base"
+              >
+                <IconComponent boxSize={5} color={selectedNav === item.label ? "brand.primary" : "dark.text"} />
+              </Button>
+            );
+          })}
         </VStack>
 
         {/* Account Menu */}
@@ -206,7 +208,7 @@ export default function InboxPage() {
             borderRadius="base"
             _hover={{ bg: "gray.200" }}
           >
-            <Box fontSize="xl">👤</Box>
+            <Box w="20px" h="20px" borderRadius="full" bg="dark.text" />
           </MenuButton>
           <MenuList bg="white" borderColor="light.border">
             <MenuItem onClick={handleDeleteAccount} color="red.500">

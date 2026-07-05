@@ -149,7 +149,7 @@ export default function InboxPage() {
       <VStack
         w="64px"
         h="100%"
-        bg="light.bg"
+        bg="customGray.100"
         borderRight="1px solid"
         borderColor="light.border"
         spacing={0}

@@ -83,7 +83,7 @@ export default function InboxPage() {
   const toast = useToast();
   const router = useRouter();
   const [isLoading, setIsLoading] = useState(true);
-  const [selectedNav, setSelectedNav] = useState("Messages");
+  const [selectedNav, setSelectedNav] = useState("Home");
   const [searchQuery, setSearchQuery] = useState("");
   const [userEmail, setUserEmail] = useState("");
   const [avatarUrl, setAvatarUrl] = useState("");

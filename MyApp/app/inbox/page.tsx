@@ -374,7 +374,7 @@ export default function InboxPage() {
       {/* Main Content */}
       <VStack
         flex={1}
-        bg="dark.bg"
+        bg="white"
         spacing={0}
         align="stretch"
         overflow="hidden"
@@ -384,9 +384,9 @@ export default function InboxPage() {
           h="80px"
           px="2xl"
           borderBottom="1px solid"
-          borderColor="dark.border"
+          borderColor="customGray.200"
           spacing="lg"
-          bg="dark.bg"
+          bg="white"
         >
           <VStack align="start" spacing="xs" flex={1}>
             <Heading size="sm" color="dark.text" fontWeight="semibold">

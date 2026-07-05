@@ -265,20 +265,15 @@ export default function InboxPage() {
 
           {/* Account Menu */}
           <Menu>
-            <MenuButton
-              as={Button}
-              variant="unstyled"
-              w="36px"
-              h="36px"
-              display="flex"
-              alignItems="center"
-              justifyContent="center"
-              borderRadius="full"
-              bg="brand.primary"
-              _hover={{ bg: "brand.primaryHover" }}
-              p={0}
-            >
-              <Text color="white" fontWeight="bold" fontSize="lg">V</Text>
+            <MenuButton as="div" p={0}>
+              <Avatar
+                name="Vicky"
+                bg="brand.primary"
+                color="white"
+                size="sm"
+                cursor="pointer"
+                _hover={{ bg: "brand.primaryHover" }}
+              />
             </MenuButton>
             <MenuList bg="white" borderColor="light.border">
               <MenuItem onClick={handleDeleteAccount} color="red.500">

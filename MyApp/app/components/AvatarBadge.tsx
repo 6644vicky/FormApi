@@ -19,10 +19,8 @@ export default function AvatarBadge({ userEmail = "", avatarUrl = "", onDelete }
         {avatarUrl ? (
           <Avatar
             src={avatarUrl}
-            bg="brand.primary"
-            color="white"
             size="sm"
-            _hover={{ bg: "brand.primaryHover" }}
+            _hover={{ opacity: 0.8 }}
           />
         ) : (
           <Avatar

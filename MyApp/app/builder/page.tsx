@@ -193,6 +193,7 @@ export default function BuilderPage() {
 
       <VStack
         flex={1}
+        h="100%"
         bg="customGray.100"
         spacing={0}
         align="stretch"

@@ -310,7 +310,7 @@ export default function BuilderPage() {
         pb="12px"
       >
 
-        <HStack flex={1} align="stretch" spacing={0} bg="white" borderRadius="12px" overflow="hidden">
+        <HStack flex={1} align="stretch" spacing={0} bg="white" borderRadius="12px" border="1px solid" borderColor="customGray.200" overflow="hidden">
           <VStack w="255px" h="100%" align="stretch" spacing={0} borderRight="1px solid" borderColor="customGray.200" overflow="hidden">
             <HStack h="64px" align="center" justify="space-between" pl="20px" pr="16px" pt="20px" pb="16px">
               <Text fontSize="base" fontWeight="medium" color="customGray.800">

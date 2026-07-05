@@ -1,0 +1,14 @@
+[build]
+  base = "MyApp"
+  command = "npm run build"
+  publish = "MyApp/.next"
+
+[context.production.environment]
+  NEXT_PUBLIC_SUPABASE_URL = "https://csvqiyiwnaglmhczjcaz.supabase.co"
+  NEXT_PUBLIC_SUPABASE_ANON_KEY = "sb_publishable_sEysW7RkkL0o3i8jDLvMtA_MmELTd9n"
+  SUPABASE_SERVICE_ROLE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNzdnFpeWl3bmFnbG1oY3pqY2F6Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc4MjYyODc5NywiZXhwIjoyMDk4MjA0Nzk3fQ.N0yQjTiqBwFyK11m2NrZfWND1FoZRh5iUJu9AxelNDM"
+
+[[redirects]]
+  from = "/*"
+  to = "/.netlify/functions/next"
+  status = 200

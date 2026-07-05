@@ -3,6 +3,14 @@
     "chakra-ui": {
       "command": "npx",
       "args": ["-y", "@chakra-ui/react-mcp"]
+    },
+    "figma": {
+      "command": "npx",
+      "args": ["-y", "@figma/figma-api-mcp"],
+      "env": {
+        "FIGMA_TOKEN": "${FIGMA_TOKEN}",
+        "FIGMA_FILE_ID": "7wK4NOwqNfSevFKHLCdfBM"
+      }
     }
   }
 }

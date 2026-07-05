@@ -6,6 +6,7 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import { deleteUserAccount } from "@/app/actions/deleteUser";
+import CryptoJS from "crypto-js";
 import {
   Box,
   Flex,
@@ -82,6 +83,8 @@ export default function InboxPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [selectedNav, setSelectedNav] = useState("Messages");
   const [searchQuery, setSearchQuery] = useState("");
+  const [userEmail, setUserEmail] = useState("");
+  const [avatarUrl, setAvatarUrl] = useState("");
 
   useEffect(() => {
     const checkAuth = async () => {
@@ -94,6 +97,23 @@ export default function InboxPage() {
         } else if (!session.user.email_confirmed_at) {
           router.push("/verify-email?email=" + encodeURIComponent(session.user.email || ""));
         } else {
+          const email = session.user.email || "";
+          setUserEmail(email);
+
+          // Fetch Gravatar image
+          try {
+            const emailHash = hashEmail(email.toLowerCase().trim());
+            const gravatarUrl = `https://www.gravatar.com/avatar/${emailHash}?d=404&s=36`;
+
+            // Check if Gravatar image exists
+            const response = await fetch(gravatarUrl);
+            if (response.ok) {
+              setAvatarUrl(gravatarUrl);
+            }
+          } catch (error) {
+            console.error("Error fetching Gravatar:", error);
+          }
+
           setIsLoading(false);
         }
       } catch (error) {
@@ -103,6 +123,10 @@ export default function InboxPage() {
     };
     checkAuth();
   }, [router]);
+
+  const hashEmail = (email: string): string => {
+    return CryptoJS.MD5(email).toString();
+  };
 
   const handleDeleteAccount = async () => {
     if (!window.confirm("Are you sure? This cannot be undone.")) return;
@@ -267,7 +291,8 @@ export default function InboxPage() {
           <Menu>
             <MenuButton as="div" p={0}>
               <Avatar
-                name="Vicky"
+                src={avatarUrl || undefined}
+                name={userEmail ? userEmail.charAt(0).toUpperCase() : "U"}
                 bg="brand.primary"
                 color="white"
                 size="sm"

@@ -61,6 +61,21 @@ export default function BuilderPage() {
           const email = session.user.email || "";
           setUserEmail(email);
 
+          const googlePicture = session.user.user_metadata?.picture || session.user.user_metadata?.avatar_url;
+
+          if (googlePicture) {
+            const cachedUrl = localStorage.getItem("user_avatar");
+            if (cachedUrl === googlePicture) {
+              if (avatarUrl !== googlePicture) {
+                setAvatarUrl(googlePicture);
+              }
+              return;
+            }
+            setAvatarUrl(googlePicture);
+            localStorage.setItem("user_avatar", googlePicture);
+            return;
+          }
+
           const emailHash = hashEmail(email.toLowerCase().trim());
           const gravatarUrl = `https://www.gravatar.com/avatar/${emailHash}?d=404&s=128`;
 

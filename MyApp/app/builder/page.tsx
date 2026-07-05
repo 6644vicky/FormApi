@@ -197,6 +197,9 @@ export default function BuilderPage() {
         spacing={0}
         align="stretch"
         overflow="hidden"
+        pt="12px"
+        pr="12px"
+        pb="12px"
       >
 
         <VStack flex={1} align="center" justify="center" p="8px" bg="white" borderRadius="12px" border="1px solid" borderColor="customGray.200">

@@ -25,6 +25,7 @@ import {
   Button,
   useDisclosure,
   Textarea,
+  Input,
 } from "@chakra-ui/react";
 
 export default function BuilderPage() {

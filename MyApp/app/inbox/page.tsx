@@ -304,7 +304,12 @@ export default function InboxPage() {
                 justifyContent="center"
                 bg="transparent"
                 _hover={{ bg: "transparent" }}
-                onClick={() => setSelectedNav(item.label)}
+                onClick={() => {
+                  setSelectedNav(item.label);
+                  if (item.label === "Messages") {
+                    router.push("/builder");
+                  }
+                }}
                 borderRadius="base"
                 p={0}
               >

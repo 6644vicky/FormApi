@@ -394,10 +394,10 @@ export default function InboxPage() {
           bg="white"
         >
           <VStack align="start" spacing="xs" flex={1}>
-            <Heading size="sm" color="dark.text" fontWeight="semibold">
+            <Heading size="sm" color="customGray.800" fontWeight="semibold">
               Messages
             </Heading>
-            <Text fontSize="xs" color="dark.secondary">
+            <Text fontSize="xs" color="customGray.500">
               {mockMessages.length} new messages
             </Text>
           </VStack>
@@ -408,12 +408,12 @@ export default function InboxPage() {
             onChange={(e) => setSearchQuery(e.target.value)}
             w="300px"
             h="44px"
-            bg="dark.surface"
+            bg="customGray.100"
             border="1px solid"
-            borderColor="dark.border"
-            color="dark.text"
-            _placeholder={{ color: "dark.secondary" }}
-            _focus={{ borderColor: "brand.primary", boxShadow: "0 0 0 3px rgba(147, 51, 234, 0.1)" }}
+            borderColor="customGray.300"
+            color="customGray.800"
+            _placeholder={{ color: "customGray.500" }}
+            _focus={{ borderColor: "customGray.500", boxShadow: "0 0 0 4px rgba(39, 39, 42, 0.10)" }}
             borderRadius="base"
           />
         </HStack>
@@ -430,12 +430,12 @@ export default function InboxPage() {
           {mockMessages.map((message) => (
             <Box
               key={message.id}
-              bg="dark.surface"
+              bg="white"
               border="1px solid"
-              borderColor="dark.border"
+              borderColor="customGray.200"
               borderRadius="base"
               p="lg"
-              _hover={{ bg: "dark.muted", cursor: "pointer" }}
+              _hover={{ bg: "customGray.50", cursor: "pointer" }}
               transition="all 0.2s"
             >
               <HStack justify="space-between">

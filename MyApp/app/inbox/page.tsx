@@ -237,10 +237,10 @@ export default function InboxPage() {
                   display="flex"
                   alignItems="center"
                   justifyContent="center"
-                  bg={selectedNav === item.label ? "brand.primary" : "gray.200"}
+                  bg={selectedNav === item.label ? "brand.primary" : "customGray.100"}
                   borderRadius="base"
                   transition="all 0.2s"
-                  _hover={{ bg: selectedNav === item.label ? "brand.primaryHover" : "gray.300" }}
+                  _hover={{ bg: selectedNav === item.label ? "brand.primaryHover" : "customGray.200" }}
                 >
                   {renderSvgIcon()}
                 </Box>

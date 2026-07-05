@@ -240,7 +240,7 @@ export default function InboxPage() {
                   bg={selectedNav === item.label ? "customGray.800" : "customGray.100"}
                   borderRadius="base"
                   transition="all 0.2s"
-                  _hover={{ bg: selectedNav === item.label ? "customGray.700" : "customGray.200" }}
+                  _hover={selectedNav === item.label ? {} : { bg: "customGray.200" }}
                 >
                   {renderSvgIcon()}
                 </Box>

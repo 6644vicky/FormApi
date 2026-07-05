@@ -16,14 +16,23 @@ export default function AvatarBadge({ userEmail = "", avatarUrl = "", onDelete }
   return (
     <Menu>
       <MenuButton as="div" p={0} cursor="pointer">
-        <Avatar
-          src={avatarUrl || undefined}
-          name={userEmail ? userEmail.charAt(0).toUpperCase() : "U"}
-          bg="brand.primary"
-          color="white"
-          size="sm"
-          _hover={{ bg: "brand.primaryHover" }}
-        />
+        {avatarUrl ? (
+          <Avatar
+            src={avatarUrl}
+            bg="brand.primary"
+            color="white"
+            size="sm"
+            _hover={{ bg: "brand.primaryHover" }}
+          />
+        ) : (
+          <Avatar
+            name={userEmail ? userEmail.charAt(0).toUpperCase() : "U"}
+            bg="brand.primary"
+            color="white"
+            size="sm"
+            _hover={{ bg: "brand.primaryHover" }}
+          />
+        )}
       </MenuButton>
       <MenuList bg="white" borderColor="light.border">
         {onDelete && (

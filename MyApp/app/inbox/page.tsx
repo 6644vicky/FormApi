@@ -103,7 +103,7 @@ export default function InboxPage() {
           // Fetch Gravatar image
           try {
             const emailHash = hashEmail(email.toLowerCase().trim());
-            const gravatarUrl = `https://www.gravatar.com/avatar/${emailHash}?d=404&s=36`;
+            const gravatarUrl = `https://www.gravatar.com/avatar/${emailHash}?d=404&s=128`;
 
             // Check if Gravatar image exists
             const response = await fetch(gravatarUrl);

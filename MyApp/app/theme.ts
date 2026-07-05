@@ -20,6 +20,7 @@ const theme = extendTheme({
       primary: "#9333ea",
       primaryHover: "#7c3aed",
     },
+  
     gray: {
       50: "#f9f9fa",
       100: "#f4f4f5",

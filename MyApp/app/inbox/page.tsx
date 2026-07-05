@@ -314,7 +314,7 @@ export default function InboxPage() {
               bg="white"
               border="1px solid"
               borderColor="customGray.200"
-              borderRadius="base"
+              borderRadius="12px"
               p="lg"
               _hover={{ bg: "customGray.50", cursor: "pointer" }}
               transition="all 0.2s"

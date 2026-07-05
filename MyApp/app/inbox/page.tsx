@@ -173,7 +173,7 @@ export default function InboxPage() {
         </Box>
 
         {/* Nav Items */}
-        <VStack spacing="md" flex={1}>
+        <VStack spacing="16px" flex={1}>
           {navItems.map((item) => {
             const renderSvgIcon = () => {
               const strokeColor = selectedNav === item.label ? "#ffffff" : "#27272a";

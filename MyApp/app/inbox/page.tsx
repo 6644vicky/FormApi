@@ -500,6 +500,8 @@ export default function InboxPage() {
             fontSize="sm"
             fontWeight="semibold"
             color="customGray.800"
+            px="16px"
+            py="16px"
           >
             Share feedback about Weav
           </ModalHeader>
@@ -524,7 +526,7 @@ export default function InboxPage() {
             />
           </ModalBody>
 
-          <ModalFooter gap="12px">
+          <ModalFooter gap="12px" px="16px" py="16px">
             <Button
               variant="outline"
               colorScheme="gray"

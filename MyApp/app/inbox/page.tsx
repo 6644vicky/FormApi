@@ -23,7 +23,7 @@ import {
   useToast,
   IconButton,
 } from "@chakra-ui/react";
-import { DeleteIcon, SettingsIcon, LogOutIcon, HomeIcon, ChatIcon, QuestionIcon, ViewIcon } from "@chakra-ui/icons";
+import { DeleteIcon, SettingsIcon, LogOutIcon, HomeIcon } from "@chakra-ui/icons";
 
 interface Message {
   id: number;
@@ -70,10 +70,10 @@ const mockMessages: Message[] = [
 ];
 
 const navItems = [
-  { label: "Home", icon: HomeIcon },
-  { label: "Messages", icon: ChatIcon },
-  { label: "Settings", icon: SettingsIcon },
-  { label: "Help", icon: QuestionIcon },
+  { label: "Home", icon: "home" },
+  { label: "Messages", icon: "messages" },
+  { label: "Settings", icon: "settings" },
+  { label: "Help", icon: "help" },
 ];
 
 export default function InboxPage() {
@@ -174,7 +174,22 @@ export default function InboxPage() {
         {/* Nav Items */}
         <VStack spacing="md" flex={1}>
           {navItems.map((item) => {
-            const IconComponent = item.icon;
+            const renderIcon = () => {
+              const iconProps = { boxSize: 5, color: selectedNav === item.label ? "brand.primary" : "dark.text" };
+              switch (item.icon) {
+                case "home":
+                  return <HomeIcon {...iconProps} />;
+                case "messages":
+                  return <Box as="span" fontSize="lg">💬</Box>;
+                case "settings":
+                  return <SettingsIcon {...iconProps} />;
+                case "help":
+                  return <Box as="span" fontSize="lg">?</Box>;
+                default:
+                  return null;
+              }
+            };
+
             return (
               <Button
                 key={item.label}
@@ -189,7 +204,7 @@ export default function InboxPage() {
                 onClick={() => setSelectedNav(item.label)}
                 borderRadius="base"
               >
-                <IconComponent boxSize={5} color={selectedNav === item.label ? "brand.primary" : "dark.text"} />
+                {renderIcon()}
               </Button>
             );
           })}

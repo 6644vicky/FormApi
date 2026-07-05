@@ -253,6 +253,7 @@ export default function InboxPage() {
         avatarUrl={avatarUrl}
         onDelete={handleDeleteAccount}
         onFeedbackOpen={onFeedbackOpen}
+        isLoading={!hydrated}
       />
 
       {/* Main Content */}

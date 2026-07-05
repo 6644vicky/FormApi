@@ -188,6 +188,7 @@ export default function BuilderPage() {
         avatarUrl={avatarUrl}
         onDelete={handleDeleteAccount}
         onFeedbackOpen={onFeedbackOpen}
+        isLoading={!hydrated}
       />
 
       <VStack

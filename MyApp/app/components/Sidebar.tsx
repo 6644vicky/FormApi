@@ -11,6 +11,7 @@ interface SidebarProps {
   avatarUrl?: string;
   onDelete?: () => void;
   onFeedbackOpen?: () => void;
+  isLoading?: boolean;
 }
 
 const navItems = [
@@ -20,7 +21,7 @@ const navItems = [
   { label: "Help", icon: "help" },
 ];
 
-export default function Sidebar({ selectedNav, onNavClick, userEmail = "", avatarUrl = "", onDelete, onFeedbackOpen }: SidebarProps) {
+export default function Sidebar({ selectedNav, onNavClick, userEmail = "", avatarUrl = "", onDelete, onFeedbackOpen, isLoading = false }: SidebarProps) {
   const router = useRouter();
 
   const renderSvgIcon = (icon: string, strokeColor: string) => {
@@ -151,7 +152,7 @@ export default function Sidebar({ selectedNav, onNavClick, userEmail = "", avata
         </Box>
 
         {/* Avatar Badge Component */}
-        <AvatarBadge userEmail={userEmail} avatarUrl={avatarUrl} onDelete={onDelete} />
+        <AvatarBadge userEmail={userEmail} avatarUrl={avatarUrl} onDelete={onDelete} isLoading={isLoading} />
       </VStack>
     </VStack>
   );

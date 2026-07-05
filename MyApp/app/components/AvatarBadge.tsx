@@ -1,6 +1,6 @@
 "use client";
 
-import { Avatar, Menu, MenuButton, MenuList, MenuItem, Box } from "@chakra-ui/react";
+import { Avatar, Menu, MenuButton, MenuList, MenuItem, SkeletonCircle } from "@chakra-ui/react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 
@@ -8,10 +8,15 @@ interface AvatarBadgeProps {
   userEmail?: string;
   avatarUrl?: string;
   onDelete?: () => void;
+  isLoading?: boolean;
 }
 
-export default function AvatarBadge({ userEmail = "", avatarUrl = "", onDelete }: AvatarBadgeProps) {
+export default function AvatarBadge({ userEmail = "", avatarUrl = "", onDelete, isLoading = false }: AvatarBadgeProps) {
   const router = useRouter();
+
+  if (isLoading) {
+    return <SkeletonCircle size="8" />;
+  }
 
   return (
     <Menu>

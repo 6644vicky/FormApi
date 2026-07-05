@@ -1,8 +1,8 @@
 "use client";
 
-import { VStack, Box, Button, Text, Menu, MenuButton, MenuList, MenuItem, Avatar } from "@chakra-ui/react";
+import { VStack, Box, Button, Text } from "@chakra-ui/react";
 import { useRouter } from "next/navigation";
-import { supabase } from "@/lib/supabase";
+import AvatarBadge from "@/app/components/AvatarBadge";
 
 interface SidebarProps {
   selectedNav: string;
@@ -145,25 +145,8 @@ export default function Sidebar({ selectedNav, onNavClick, userEmail = "", avata
           </svg>
         </Box>
 
-        {/* Account Menu */}
-        <Menu>
-          <MenuButton as="div" p={0}>
-            <Avatar
-              src={avatarUrl || undefined}
-              name={userEmail ? userEmail.charAt(0).toUpperCase() : "U"}
-              bg="brand.primary"
-              color="white"
-              size="sm"
-              cursor="pointer"
-              _hover={{ bg: "brand.primaryHover" }}
-            />
-          </MenuButton>
-          <MenuList bg="white" borderColor="light.border">
-            <MenuItem onClick={() => supabase.auth.signOut().then(() => router.push("/"))}>
-              Sign Out
-            </MenuItem>
-          </MenuList>
-        </Menu>
+        {/* Avatar Badge Component */}
+        <AvatarBadge userEmail={userEmail} avatarUrl={avatarUrl} />
       </VStack>
     </VStack>
   );

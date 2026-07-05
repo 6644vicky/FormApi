@@ -35,9 +35,11 @@ export default function BuilderPage() {
   const [avatarUrl, setAvatarUrl] = useState("");
   const [hydrated, setHydrated] = useState(false);
   const { isOpen: isFeedbackOpen, onOpen: onFeedbackOpen, onClose: onFeedbackClose } = useDisclosure();
+  const { isOpen: isCreateOpen, onOpen: onCreateOpen, onClose: onCreateClose } = useDisclosure();
   const [feedbackMessage, setFeedbackMessage] = useState("");
   const [isFeedbackSubmitting, setIsFeedbackSubmitting] = useState(false);
   const [feedbackError, setFeedbackError] = useState("");
+  const [agentName, setAgentName] = useState("");
 
   useEffect(() => {
     const cached = localStorage.getItem("user_avatar");
@@ -214,6 +216,7 @@ export default function BuilderPage() {
                 p="6px"
                 minW="auto"
                 _hover={{ bg: "customGray.100" }}
+                onClick={onCreateOpen}
               >
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                   <path d="M12 5v14M5 12h14" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
@@ -307,6 +310,70 @@ export default function BuilderPage() {
                 onClick={handleFeedbackSubmit}
               >
                 Send
+              </Button>
+            </HStack>
+          </ModalFooter>
+        </ModalContent>
+      </Modal>
+
+      <Modal
+        isOpen={isCreateOpen}
+        onClose={() => {
+          onCreateClose();
+          setAgentName("");
+        }}
+        isCentered
+      >
+        <ModalOverlay bg="rgba(0, 0, 0, 0.5)" />
+        <ModalContent
+          bg="#1a1a1a"
+          borderRadius="lg"
+          boxShadow="0 10px 40px rgba(0, 0, 0, 0.3)"
+        >
+          <ModalHeader pb={0} pt="lg">
+            <Heading size="md" color="white" fontWeight="bold">
+              Create agent
+            </Heading>
+            <Text fontSize="sm" color="gray.400" mt="4px">
+              Add a new agent to your workspace
+            </Text>
+          </ModalHeader>
+          <ModalBody pt="lg">
+            <Input
+              placeholder="Enter your agent's name..."
+              value={agentName}
+              onChange={(e) => setAgentName(e.target.value)}
+              bg="#2d2d2d"
+              border="1px solid"
+              borderColor="#3d3d3d"
+              color="white"
+              _placeholder={{ color: "gray.500" }}
+              _focus={{
+                borderColor: "gray.500",
+                boxShadow: "0 0 0 3px rgba(128, 128, 128, 0.1)",
+              }}
+              borderRadius="base"
+            />
+          </ModalBody>
+          <ModalFooter pt="lg">
+            <HStack spacing="md">
+              <Button
+                variant="outline"
+                borderColor="#3d3d3d"
+                color="gray.300"
+                onClick={() => {
+                  onCreateClose();
+                  setAgentName("");
+                }}
+              >
+                Cancel
+              </Button>
+              <Button
+                bg="brand.primary"
+                color="white"
+                _hover={{ bg: "brand.primaryHover" }}
+              >
+                Create agent
               </Button>
             </HStack>
           </ModalFooter>

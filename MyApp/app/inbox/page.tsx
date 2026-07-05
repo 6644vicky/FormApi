@@ -82,7 +82,6 @@ const mockMessages: Message[] = [
 export default function InboxPage() {
   const toast = useToast();
   const router = useRouter();
-  const [isLoading, setIsLoading] = useState(true);
   const [selectedNav, setSelectedNav] = useState("Home");
   const [searchQuery, setSearchQuery] = useState("");
   const [userEmail, setUserEmail] = useState("");
@@ -119,8 +118,6 @@ export default function InboxPage() {
           } catch (error) {
             console.error("Error fetching Gravatar:", error);
           }
-
-          setIsLoading(false);
         }
       } catch (error) {
         console.error("Auth check error:", error);
@@ -214,10 +211,6 @@ export default function InboxPage() {
       });
     }
   };
-
-  if (isLoading) {
-    return <Box bg="dark.bg" w="100%" h="100vh" />;
-  }
 
   return (
     <Flex h="100vh" w="100vw" bg="dark.bg" overflow="hidden" position="fixed" top={0} left={0}>

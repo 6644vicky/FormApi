@@ -30,7 +30,6 @@ import {
 export default function BuilderPage() {
   const toast = useToast();
   const router = useRouter();
-  const [isLoading, setIsLoading] = useState(true);
   const [selectedNav, setSelectedNav] = useState("Messages");
   const [userEmail, setUserEmail] = useState("");
   const [avatarUrl, setAvatarUrl] = useState("");
@@ -64,8 +63,6 @@ export default function BuilderPage() {
           } catch (error) {
             console.error("Error fetching Gravatar:", error);
           }
-
-          setIsLoading(false);
         }
       } catch (error) {
         console.error("Auth check error:", error);
@@ -148,10 +145,6 @@ export default function BuilderPage() {
       });
     }
   };
-
-  if (isLoading) {
-    return <Box bg="white" w="100%" h="100vh" />;
-  }
 
   return (
     <Flex h="100vh" w="100vw" bg="dark.bg" overflow="hidden" position="fixed" top={0} left={0}>

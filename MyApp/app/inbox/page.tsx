@@ -23,6 +23,14 @@ import {
   MenuItem,
   useToast,
   IconButton,
+  Modal,
+  ModalOverlay,
+  ModalContent,
+  ModalHeader,
+  ModalBody,
+  ModalFooter,
+  useDisclosure,
+  Textarea,
 } from "@chakra-ui/react";
 import { DeleteIcon, SettingsIcon, LogOutIcon } from "@chakra-ui/icons";
 
@@ -85,6 +93,9 @@ export default function InboxPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [userEmail, setUserEmail] = useState("");
   const [avatarUrl, setAvatarUrl] = useState("");
+  const { isOpen: isFeedbackOpen, onOpen: onFeedbackOpen, onClose: onFeedbackClose } = useDisclosure();
+  const [feedbackMessage, setFeedbackMessage] = useState("");
+  const [isFeedbackSubmitting, setIsFeedbackSubmitting] = useState(false);
 
   useEffect(() => {
     const checkAuth = async () => {
@@ -126,6 +137,55 @@ export default function InboxPage() {
 
   const hashEmail = (email: string): string => {
     return CryptoJS.MD5(email).toString();
+  };
+
+  const handleFeedbackSubmit = async () => {
+    if (!feedbackMessage.trim()) {
+      toast({
+        title: "Error",
+        description: "Please enter your feedback",
+        status: "error",
+        isClosable: true,
+      });
+      return;
+    }
+
+    setIsFeedbackSubmitting(true);
+
+    try {
+      const response = await fetch("https://formspree.io/f/mdarbajp", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          message: feedbackMessage,
+          email: userEmail,
+        }),
+      });
+
+      if (response.ok) {
+        toast({
+          title: "Thank you!",
+          description: "Your feedback has been sent successfully",
+          status: "success",
+          isClosable: true,
+        });
+        setFeedbackMessage("");
+        onFeedbackClose();
+      } else {
+        throw new Error("Failed to submit feedback");
+      }
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to send feedback. Please try again.",
+        status: "error",
+        isClosable: true,
+      });
+    } finally {
+      setIsFeedbackSubmitting(false);
+    }
   };
 
   const handleDeleteAccount = async () => {
@@ -281,6 +341,7 @@ export default function InboxPage() {
             borderRadius="base"
             cursor="pointer"
             _hover={{ bg: "customGray.200" }}
+            onClick={onFeedbackOpen}
           >
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
               <path d="M12 7V9M12 13H12.01M21 15C21 15.5304 20.7893 16.0391 20.4142 16.4142C20.0391 16.7893 19.5304 17 19 17H7L3 21V5C3 4.46957 3.21071 3.96086 3.58579 3.58579C3.96086 3.21071 4.46957 3 5 3H19C19.5304 3 20.0391 3.21071 20.4142 3.58579C20.7893 3.96086 21 4.46957 21 5V15Z" stroke="#27272A" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
@@ -425,6 +486,71 @@ export default function InboxPage() {
           ))}
         </VStack>
       </VStack>
+
+      {/* Feedback Modal */}
+      <Modal isOpen={isFeedbackOpen} onClose={onFeedbackClose} isCentered>
+        <ModalOverlay bg="rgba(0, 0, 0, 0.5)" />
+        <ModalContent
+          bg="white"
+          borderRadius="lg"
+          maxW="500px"
+          boxShadow="0 10px 40px rgba(0, 0, 0, 0.1)"
+        >
+          <ModalHeader
+            fontSize="xl"
+            fontWeight="bold"
+            color="dark.text"
+            borderBottom="1px solid"
+            borderColor="customGray.200"
+          >
+            Share feedback about Weav
+          </ModalHeader>
+
+          <ModalBody py="24px">
+            <Textarea
+              placeholder="Tell us what you think..."
+              value={feedbackMessage}
+              onChange={(e) => setFeedbackMessage(e.target.value)}
+              minH="200px"
+              bg="white"
+              border="1px solid"
+              borderColor="customGray.300"
+              color="dark.text"
+              _placeholder={{ color: "customGray.500" }}
+              _focus={{
+                borderColor: "brand.primary",
+                boxShadow: "0 0 0 3px rgba(147, 51, 234, 0.1)",
+              }}
+              borderRadius="base"
+              resize="none"
+            />
+          </ModalBody>
+
+          <ModalFooter gap="12px" borderTop="1px solid" borderColor="customGray.200">
+            <Button
+              variant="outline"
+              colorScheme="gray"
+              onClick={onFeedbackClose}
+              borderColor="customGray.300"
+              color="dark.text"
+              _hover={{ bg: "customGray.100" }}
+              borderRadius="base"
+            >
+              Cancel
+            </Button>
+            <Button
+              bg="customGray.800"
+              color="white"
+              onClick={handleFeedbackSubmit}
+              isLoading={isFeedbackSubmitting}
+              _hover={{ bg: "customGray.700" }}
+              borderRadius="base"
+            >
+              Submit
+            </Button>
+          </ModalFooter>
+        </ModalContent>
+      </Modal>
     </Flex>
   );
 }

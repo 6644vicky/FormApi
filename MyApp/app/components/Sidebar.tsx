@@ -105,6 +105,8 @@ export default function Sidebar({ selectedNav, onNavClick, userEmail = "", avata
                 onNavClick(item.label);
                 if (item.label === "Messages") {
                   router.push("/builder");
+                } else if (item.label === "Home") {
+                  router.push("/inbox");
                 }
               }}
               borderRadius="base"

@@ -5,6 +5,7 @@ export const dynamic = 'force-dynamic';
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
+import Sidebar from "@/app/components/Sidebar";
 import {
   Box,
   Flex,
@@ -69,12 +70,6 @@ export default function BuilderPage() {
     checkAuth();
   }, [router]);
 
-  const navItems = [
-    { label: "Home", icon: "home" },
-    { label: "Messages", icon: "messages" },
-    { label: "Settings", icon: "settings" },
-    { label: "Help", icon: "help" },
-  ];
 
   if (isLoading) {
     return <Box bg="white" w="100%" h="100vh" />;
@@ -82,97 +77,13 @@ export default function BuilderPage() {
 
   return (
     <Flex h="100vh" w="100vw" bg="#1a1a1a" overflow="hidden" position="fixed" top={0} left={0}>
-      {/* Main Sidebar Navigation */}
-      <VStack
-        w="64px"
-        h="100%"
-        bg="customGray.100"
-        borderRight="1px solid"
-        borderColor="light.border"
-        spacing={0}
-        align="stretch"
-        p="12px"
-        overflow="hidden"
-      >
-        {/* Logo */}
-        <Box
-          w="36px"
-          h="36px"
-          bg="brand.primary"
-          borderRadius="base"
-          display="flex"
-          alignItems="center"
-          justifyContent="center"
-          mb="xl"
-          cursor="pointer"
-        >
-          <Text fontSize="lg" fontWeight="bold" color="white">W</Text>
-        </Box>
-
-        {/* Nav Items */}
-        <VStack spacing="16px" flex={1}>
-          {navItems.map((item, index) => (
-            <Button
-              key={item.label}
-              variant="unstyled"
-              w="36px"
-              h="36px"
-              display="flex"
-              alignItems="center"
-              justifyContent="center"
-              bg="transparent"
-              _hover={{ bg: "transparent" }}
-              onClick={() => {
-                if (item.label === "Messages") {
-                  router.push("/builder");
-                }
-              }}
-              borderRadius="base"
-              p={0}
-            >
-              <Box
-                w="36px"
-                h="36px"
-                display="flex"
-                alignItems="center"
-                justifyContent="center"
-                bg="customGray.100"
-                borderRadius="base"
-                transition="all 0.2s"
-                _hover={{ bg: "customGray.200" }}
-              >
-                <Text fontSize="sm" color="customGray.800">
-                  {item.label.charAt(0).toUpperCase()}
-                </Text>
-              </Box>
-            </Button>
-          ))}
-        </VStack>
-
-        {/* Chat and Account */}
-        <VStack spacing="12px">
-          <Box
-            w="36px"
-            h="36px"
-            display="flex"
-            alignItems="center"
-            justifyContent="center"
-            bg="customGray.100"
-            borderRadius="base"
-            cursor="pointer"
-            _hover={{ bg: "customGray.200" }}
-          >
-            <Text fontSize="sm">💬</Text>
-          </Box>
-          <Avatar
-            name={userEmail ? userEmail.charAt(0).toUpperCase() : "U"}
-            bg="brand.primary"
-            color="white"
-            size="sm"
-            cursor="pointer"
-          />
-        </VStack>
-      </VStack>
+      {/* Sidebar Component */}
+      <Sidebar
+        selectedNav=""
+        onNavClick={() => {}}
+        userEmail={userEmail}
+        avatarUrl={avatarUrl}
+      />
 
       {/* Agent List Sidebar */}
       <VStack

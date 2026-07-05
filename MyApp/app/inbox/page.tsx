@@ -250,30 +250,39 @@ export default function InboxPage() {
         >
           <VStack align="start" spacing="xs" flex={1}>
             <Heading size="sm" color="customGray.800" fontWeight="semibold">
-              Messages
+              {selectedNav === "Messages" ? "Builder" : "Messages"}
             </Heading>
             <Text fontSize="xs" color="customGray.500">
-              {mockMessages.length} new messages
+              {selectedNav === "Messages" ? "" : `${mockMessages.length} new messages`}
             </Text>
           </VStack>
 
-          <Input
-            placeholder="Search messages..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            w="300px"
-            h="44px"
-            bg="customGray.100"
-            border="1px solid"
-            borderColor="customGray.300"
-            color="customGray.800"
-            _placeholder={{ color: "customGray.500" }}
-            _focus={{ borderColor: "customGray.500", boxShadow: "0 0 0 4px rgba(39, 39, 42, 0.10)" }}
-            borderRadius="base"
-          />
+          {selectedNav !== "Messages" && (
+            <Input
+              placeholder="Search messages..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              w="300px"
+              h="44px"
+              bg="customGray.100"
+              border="1px solid"
+              borderColor="customGray.300"
+              color="customGray.800"
+              _placeholder={{ color: "customGray.500" }}
+              _focus={{ borderColor: "customGray.500", boxShadow: "0 0 0 4px rgba(39, 39, 42, 0.10)" }}
+              borderRadius="base"
+            />
+          )}
         </HStack>
 
-        {/* Messages List */}
+        {/* Messages/Builder Content */}
+        {selectedNav === "Messages" ? (
+          <VStack flex={1} align="center" justify="center">
+            <Text fontSize="lg" color="customGray.800">
+              hello
+            </Text>
+          </VStack>
+        ) : (
         <VStack
           flex={1}
           overflowY="auto"
@@ -343,6 +352,7 @@ export default function InboxPage() {
             </Box>
           ))}
         </VStack>
+        )}
       </VStack>
 
       {/* Feedback Modal */}

@@ -204,7 +204,7 @@ export default function BuilderPage() {
 
         <HStack flex={1} align="stretch" spacing={0} bg="white" borderRadius="12px" border="1px solid" borderColor="customGray.200">
           <VStack w="255px" align="stretch" spacing={0} borderRight="1px solid" borderColor="customGray.200">
-            <HStack h="64px" align="center" justify="space-between" pl="24px" py="8px" pr="8px">
+            <HStack h="64px" align="center" justify="space-between" pl="24px" pt="29px" pb="8px" pr="8px">
               <Text fontSize="base" fontWeight="medium" color="customGray.800">
                 Workspace
               </Text>

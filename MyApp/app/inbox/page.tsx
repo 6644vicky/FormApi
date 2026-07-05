@@ -175,7 +175,7 @@ export default function InboxPage() {
         <VStack spacing="md" flex={1}>
           {navItems.map((item) => {
             const renderSvgIcon = () => {
-              const strokeColor = selectedNav === item.label ? "#9333ea" : "#27272a";
+              const strokeColor = selectedNav === item.label ? "#ffffff" : "#27272a";
 
               if (item.icon === "home") {
                 return (
@@ -223,12 +223,25 @@ export default function InboxPage() {
                 display="flex"
                 alignItems="center"
                 justifyContent="center"
-                bg={selectedNav === item.label ? "dark.surface" : "transparent"}
-                _hover={{ bg: "gray.200" }}
+                bg="transparent"
+                _hover={{ bg: "transparent" }}
                 onClick={() => setSelectedNav(item.label)}
                 borderRadius="base"
+                p={0}
               >
-                {renderSvgIcon()}
+                <Box
+                  w="36px"
+                  h="36px"
+                  display="flex"
+                  alignItems="center"
+                  justifyContent="center"
+                  bg={selectedNav === item.label ? "brand.primary" : "gray.200"}
+                  borderRadius="base"
+                  transition="all 0.2s"
+                  _hover={{ bg: selectedNav === item.label ? "brand.primaryHover" : "gray.300" }}
+                >
+                  {renderSvgIcon()}
+                </Box>
               </Button>
             );
           })}

@@ -147,7 +147,7 @@ export default function InboxPage() {
     <Flex h="100vh" bg="dark.bg" overflow="hidden">
       {/* Sidebar */}
       <VStack
-        w="80px"
+        w="64px"
         bg="light.bg"
         borderRight="1px solid"
         borderColor="light.border"

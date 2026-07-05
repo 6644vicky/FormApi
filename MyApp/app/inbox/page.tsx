@@ -504,7 +504,7 @@ export default function InboxPage() {
             Share feedback about Weav
           </ModalHeader>
 
-          <ModalBody py="0px" px="24px">
+          <ModalBody py="16px" px="16px">
             <Textarea
               placeholder="Tell us what you think..."
               value={feedbackMessage}

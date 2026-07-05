@@ -85,7 +85,13 @@ export default function InboxPage() {
   const [selectedNav, setSelectedNav] = useState("Home");
   const [searchQuery, setSearchQuery] = useState("");
   const [userEmail, setUserEmail] = useState("");
-  const [avatarUrl, setAvatarUrl] = useState("");
+  const [avatarUrl, setAvatarUrl] = useState(() => {
+    if (typeof window !== "undefined") {
+      const stored = localStorage.getItem("cached_avatar_url");
+      return stored || "";
+    }
+    return "";
+  });
   const { isOpen: isFeedbackOpen, onOpen: onFeedbackOpen, onClose: onFeedbackClose } = useDisclosure();
   const [feedbackMessage, setFeedbackMessage] = useState("");
   const [isFeedbackSubmitting, setIsFeedbackSubmitting] = useState(false);
@@ -108,16 +114,11 @@ export default function InboxPage() {
           const emailHash = hashEmail(email.toLowerCase().trim());
           const gravatarUrl = `https://www.gravatar.com/avatar/${emailHash}?d=404&s=128`;
 
-          const cachedUrl = localStorage.getItem(`avatar_${emailHash}`);
-          if (cachedUrl) {
-            setAvatarUrl(cachedUrl);
-          }
-
           try {
             const response = await fetch(gravatarUrl);
             if (response.ok) {
               setAvatarUrl(gravatarUrl);
-              localStorage.setItem(`avatar_${emailHash}`, gravatarUrl);
+              localStorage.setItem("cached_avatar_url", gravatarUrl);
             }
           } catch (error) {
             console.error("Error fetching Gravatar:", error);

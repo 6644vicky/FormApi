@@ -183,8 +183,8 @@ export default function InboxPage() {
               <Button
                 key={item.label}
                 variant="unstyled"
-                w="44px"
-                h="44px"
+                w="36px"
+                h="36px"
                 display="flex"
                 alignItems="center"
                 justifyContent="center"
@@ -193,7 +193,7 @@ export default function InboxPage() {
                 onClick={() => setSelectedNav(item.label)}
                 borderRadius="base"
               >
-                <Text fontSize="xl">{displayIcon}</Text>
+                <Text fontSize="lg">{displayIcon}</Text>
               </Button>
             );
           })}
@@ -204,15 +204,15 @@ export default function InboxPage() {
           <MenuButton
             as={Button}
             variant="unstyled"
-            w="44px"
-            h="44px"
+            w="36px"
+            h="36px"
             display="flex"
             alignItems="center"
             justifyContent="center"
             borderRadius="base"
             _hover={{ bg: "gray.200" }}
           >
-            <Box w="20px" h="20px" borderRadius="full" bg="dark.text" />
+            <Box w="16px" h="16px" borderRadius="full" bg="dark.text" />
           </MenuButton>
           <MenuList bg="white" borderColor="light.border">
             <MenuItem onClick={handleDeleteAccount} color="red.500">

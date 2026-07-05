@@ -101,12 +101,7 @@ export default function Sidebar({ selectedNav, onNavClick, userEmail = "", avata
               justifyContent="center"
               bg="transparent"
               _hover={{ bg: "transparent" }}
-              onClick={() => {
-                onNavClick(item.label);
-                if (item.label === "Messages") {
-                  router.push("/builder");
-                }
-              }}
+              onClick={() => onNavClick(item.label)}
               borderRadius="base"
               p={0}
             >

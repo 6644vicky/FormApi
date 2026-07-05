@@ -154,8 +154,7 @@ export default function InboxPage() {
         borderColor="light.border"
         spacing={0}
         align="stretch"
-        py="8px"
-        px="6px"
+        p="16px"
         overflow="hidden"
       >
         {/* Logo */}

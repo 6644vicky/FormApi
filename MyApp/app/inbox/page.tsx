@@ -144,10 +144,11 @@ export default function InboxPage() {
   }
 
   return (
-    <Flex h="100vh" bg="dark.bg" overflow="hidden">
+    <Flex h="100vh" w="100vw" bg="dark.bg" overflow="hidden" position="fixed" top={0} left={0}>
       {/* Sidebar */}
       <VStack
         w="64px"
+        h="100%"
         bg="light.bg"
         borderRight="1px solid"
         borderColor="light.border"
@@ -155,6 +156,7 @@ export default function InboxPage() {
         align="stretch"
         py="8px"
         px="6px"
+        overflow="hidden"
       >
         {/* Logo */}
         <Box

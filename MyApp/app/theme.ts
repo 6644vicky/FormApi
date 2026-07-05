@@ -2,6 +2,37 @@ import { extendTheme } from "@chakra-ui/react";
 
 const theme = extendTheme({
   colors: {
+    // Figma Design System Colors
+    dark: {
+      bg: "#0a0a0a",
+      surface: "#18181b",
+      border: "#222222",
+      text: "#ffffff",
+      secondary: "#888888",
+      muted: "#111111",
+    },
+    light: {
+      bg: "#f4f4f5",
+      border: "#e4e4e7",
+      text: "#27272a",
+    },
+    brand: {
+      primary: "#9333ea",
+      primaryHover: "#7c3aed",
+    },
+    gray: {
+      50: "#f9f9fa",
+      100: "#f4f4f5",
+      200: "#e4e4e7",
+      300: "#d4d4d8",
+      400: "#a1a1a6",
+      500: "#888888",
+      600: "#52525b",
+      700: "#3f3f46",
+      800: "#27272a",
+      900: "#18181b",
+      950: "#0a0a0a",
+    },
     customGray: {
       50: "#FAFAFA",
       100: "#F4F4F5",
@@ -37,6 +68,42 @@ const theme = extendTheme({
       95: "rgba(39, 39, 42, 0.95)",
       100: "rgba(39, 39, 42, 1)",
     },
+  },
+  fonts: {
+    body: '"Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
+    heading: '"Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
+  },
+  fontSizes: {
+    xs: "12px",
+    sm: "14px",
+    base: "16px",
+    lg: "18px",
+    xl: "24px",
+  },
+  fontWeights: {
+    light: 300,
+    normal: 400,
+    medium: 500,
+    semibold: 600,
+    bold: 700,
+    extrabold: 800,
+  },
+  space: {
+    xs: "2px",
+    sm: "4px",
+    md: "8px",
+    lg: "16px",
+    xl: "24px",
+    "2xl": "32px",
+  },
+  radii: {
+    none: "0",
+    sm: "4px",
+    base: "8px",
+    md: "8px",
+    lg: "12px",
+    full: "9999px",
+    pill: "28px",
   },
 });
 

@@ -153,7 +153,7 @@ export default function InboxPage() {
         borderColor="light.border"
         spacing={0}
         align="stretch"
-        py="lg"
+        py="8px"
         px="6px"
       >
         {/* Logo */}

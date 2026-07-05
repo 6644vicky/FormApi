@@ -154,7 +154,7 @@ export default function InboxPage() {
         spacing={0}
         align="stretch"
         py="lg"
-        px="md"
+        px="6px"
       >
         {/* Logo */}
         <Box

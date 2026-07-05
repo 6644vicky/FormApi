@@ -193,7 +193,6 @@ export default function BuilderPage() {
 
       <VStack
         flex={1}
-        h="100%"
         bg="customGray.100"
         spacing={0}
         align="stretch"
@@ -202,20 +201,12 @@ export default function BuilderPage() {
         px="12px"
         pb="12px"
       >
-        <HStack
-          h="80px"
-          px="2xl"
-          borderBottom="1px solid"
-          borderColor="customGray.200"
-          spacing="lg"
-          bg="white"
-        >
-          <VStack align="start" spacing="xs" flex={1}>
-            <Heading size="sm" color="customGray.800" fontWeight="semibold">
-              Builder
-            </Heading>
-          </VStack>
-        </HStack>
+
+        <VStack flex={1} align="center" justify="center" p="8px" bg="white" borderRadius="12px" border="1px solid" borderColor="customGray.200">
+          <Text fontSize="lg" color="customGray.800">
+            hello
+          </Text>
+        </VStack>
       </VStack>
 
       <Modal

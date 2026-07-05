@@ -527,7 +527,7 @@ export default function InboxPage() {
             />
           </ModalBody>
 
-          <ModalFooter gap="12px" px="16px" py="16px">
+          <ModalFooter gap="12px" px="16px" pt="0px" pb="16px">
             <Button
               variant="outline"
               colorScheme="gray"

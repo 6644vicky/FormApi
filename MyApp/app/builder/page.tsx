@@ -216,7 +216,7 @@ export default function BuilderPage() {
           </VStack>
         </HStack>
 
-        <VStack flex={1} align="center" justify="center" p="8px" bg="white" borderRadius="base">
+        <VStack flex={1} align="center" justify="center" p="8px" bg="white" borderRadius="12px" border="1px solid" borderColor="customGray.200">
           <Text fontSize="lg" color="customGray.800">
             hello
           </Text>

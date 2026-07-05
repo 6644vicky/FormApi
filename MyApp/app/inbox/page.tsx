@@ -23,7 +23,7 @@ import {
   useToast,
   IconButton,
 } from "@chakra-ui/react";
-import { DeleteIcon, SettingsIcon, LogOutIcon, HomeIcon } from "@chakra-ui/icons";
+import { DeleteIcon, SettingsIcon, LogOutIcon } from "@chakra-ui/icons";
 
 interface Message {
   id: number;
@@ -173,26 +173,30 @@ export default function InboxPage() {
 
         {/* Nav Items */}
         <VStack spacing="md" flex={1}>
-          {navItems.map((item) => (
-            <Button
-              key={item.label}
-              variant="unstyled"
-              w="44px"
-              h="44px"
-              display="flex"
-              alignItems="center"
-              justifyContent="center"
-              bg={selectedNav === item.label ? "dark.surface" : "transparent"}
-              _hover={{ bg: "gray.200" }}
-              onClick={() => setSelectedNav(item.label)}
-              borderRadius="base"
-            >
-              {item.icon === "home" && <HomeIcon boxSize={5} color={selectedNav === item.label ? "brand.primary" : "dark.text"} />}
-              {item.icon === "messages" && <Text fontSize="lg">💬</Text>}
-              {item.icon === "settings" && <SettingsIcon boxSize={5} color={selectedNav === item.label ? "brand.primary" : "dark.text"} />}
-              {item.icon === "help" && <Text fontSize="lg" fontWeight="bold">?</Text>}
-            </Button>
-          ))}
+          {navItems.map((item) => {
+            let displayIcon = "🏠";
+            if (item.icon === "messages") displayIcon = "💬";
+            else if (item.icon === "settings") displayIcon = "⚙️";
+            else if (item.icon === "help") displayIcon = "❓";
+
+            return (
+              <Button
+                key={item.label}
+                variant="unstyled"
+                w="44px"
+                h="44px"
+                display="flex"
+                alignItems="center"
+                justifyContent="center"
+                bg={selectedNav === item.label ? "dark.surface" : "transparent"}
+                _hover={{ bg: "gray.200" }}
+                onClick={() => setSelectedNav(item.label)}
+                borderRadius="base"
+              >
+                <Text fontSize="xl">{displayIcon}</Text>
+              </Button>
+            );
+          })}
         </VStack>
 
         {/* Account Menu */}

@@ -65,7 +65,9 @@ export default function Sidebar({ selectedNav, onNavClick, userEmail = "", avata
       bg="customGray.100"
       spacing={0}
       align="stretch"
-      p="12px"
+      pt="24px"
+      px="12px"
+      pb="12px"
       overflow="hidden"
     >
       {/* Logo */}

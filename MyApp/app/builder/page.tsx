@@ -197,7 +197,7 @@ export default function BuilderPage() {
         spacing={0}
         align="stretch"
         overflow="hidden"
-        pt="24px"
+        pt="12px"
         pr="12px"
         pb="12px"
       >

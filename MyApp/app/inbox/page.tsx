@@ -173,41 +173,26 @@ export default function InboxPage() {
 
         {/* Nav Items */}
         <VStack spacing="md" flex={1}>
-          {navItems.map((item) => {
-            const renderIcon = () => {
-              const iconProps = { boxSize: 5, color: selectedNav === item.label ? "brand.primary" : "dark.text" };
-              switch (item.icon) {
-                case "home":
-                  return <HomeIcon {...iconProps} />;
-                case "messages":
-                  return <Box as="span" fontSize="lg">💬</Box>;
-                case "settings":
-                  return <SettingsIcon {...iconProps} />;
-                case "help":
-                  return <Box as="span" fontSize="lg">?</Box>;
-                default:
-                  return null;
-              }
-            };
-
-            return (
-              <Button
-                key={item.label}
-                variant="unstyled"
-                w="44px"
-                h="44px"
-                display="flex"
-                alignItems="center"
-                justifyContent="center"
-                bg={selectedNav === item.label ? "dark.surface" : "transparent"}
-                _hover={{ bg: "gray.200" }}
-                onClick={() => setSelectedNav(item.label)}
-                borderRadius="base"
-              >
-                {renderIcon()}
-              </Button>
-            );
-          })}
+          {navItems.map((item) => (
+            <Button
+              key={item.label}
+              variant="unstyled"
+              w="44px"
+              h="44px"
+              display="flex"
+              alignItems="center"
+              justifyContent="center"
+              bg={selectedNav === item.label ? "dark.surface" : "transparent"}
+              _hover={{ bg: "gray.200" }}
+              onClick={() => setSelectedNav(item.label)}
+              borderRadius="base"
+            >
+              {item.icon === "home" && <HomeIcon boxSize={5} color={selectedNav === item.label ? "brand.primary" : "dark.text"} />}
+              {item.icon === "messages" && <Text fontSize="lg">💬</Text>}
+              {item.icon === "settings" && <SettingsIcon boxSize={5} color={selectedNav === item.label ? "brand.primary" : "dark.text"} />}
+              {item.icon === "help" && <Text fontSize="lg" fontWeight="bold">?</Text>}
+            </Button>
+          ))}
         </VStack>
 
         {/* Account Menu */}

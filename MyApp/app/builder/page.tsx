@@ -202,11 +202,18 @@ export default function BuilderPage() {
         pb="12px"
       >
 
-        <VStack flex={1} align="center" justify="center" p="8px" bg="white" borderRadius="12px" border="1px solid" borderColor="customGray.200">
-          <Text fontSize="lg" color="customGray.800">
-            hello
-          </Text>
-        </VStack>
+        <HStack flex={1} align="stretch" spacing={0} bg="white" borderRadius="12px" border="1px solid" borderColor="customGray.200">
+          <VStack flex={1} align="center" justify="center" p="8px" borderRight="1px solid" borderColor="customGray.200">
+            <Text fontSize="lg" color="customGray.800">
+              Left
+            </Text>
+          </VStack>
+          <VStack flex={1} align="center" justify="center" p="8px">
+            <Text fontSize="lg" color="customGray.800">
+              Right
+            </Text>
+          </VStack>
+        </HStack>
       </VStack>
 
       <Modal

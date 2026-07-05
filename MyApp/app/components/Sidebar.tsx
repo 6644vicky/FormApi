@@ -85,45 +85,47 @@ export default function Sidebar({ selectedNav, onNavClick, userEmail = "", avata
 
       {/* Nav Items */}
       <VStack spacing="16px" flex={1}>
-        {navItems.map((item) => {
-          const strokeColor = selectedNav === item.label ? "#ffffff" : "#27272a";
-
-          return (
-            <Button
-              key={item.label}
-              variant="unstyled"
+        {navItems.map((item) => (
+          <Button
+            key={item.label}
+            variant="unstyled"
+            w="36px"
+            h="36px"
+            display="flex"
+            alignItems="center"
+            justifyContent="center"
+            bg="transparent"
+            _hover={{ bg: "transparent" }}
+            onClick={() => {
+              onNavClick(item.label);
+              if (item.label === "Messages") {
+                router.push("/builder");
+              }
+            }}
+            borderRadius="base"
+            p={0}
+          >
+            <Box
               w="36px"
               h="36px"
               display="flex"
               alignItems="center"
               justifyContent="center"
-              bg="transparent"
-              _hover={{ bg: "transparent" }}
-              onClick={() => {
-                onNavClick(item.label);
-                if (item.label === "Messages") {
-                  router.push("/builder");
-                }
-              }}
+              bg={selectedNav === item.label ? "brand.primary" : "customGray.100"}
               borderRadius="base"
-              p={0}
+              transition="all 0.2s"
+              _hover={selectedNav === item.label ? {} : { bg: "customGray.200" }}
             >
-              <Box
-                w="36px"
-                h="36px"
-                display="flex"
-                alignItems="center"
-                justifyContent="center"
-                bg={selectedNav === item.label ? "customGray.800" : "customGray.100"}
-                borderRadius="base"
-                transition="all 0.2s"
-                _hover={selectedNav === item.label ? {} : { bg: "customGray.200" }}
+              <Text
+                fontSize="sm"
+                fontWeight="600"
+                color={selectedNav === item.label ? "white" : "customGray.800"}
               >
-                {renderSvgIcon(item.icon, strokeColor)}
-              </Box>
-            </Button>
-          );
-        })}
+                {item.label.charAt(0).toUpperCase()}
+              </Text>
+            </Box>
+          </Button>
+        ))}
       </VStack>
 
       {/* Chat Icon and Account Avatar */}

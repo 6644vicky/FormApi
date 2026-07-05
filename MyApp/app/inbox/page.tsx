@@ -158,8 +158,8 @@ export default function InboxPage() {
       >
         {/* Logo */}
         <Box
-          w="44px"
-          h="44px"
+          w="36px"
+          h="36px"
           bg="brand.primary"
           borderRadius="base"
           display="flex"
@@ -168,7 +168,7 @@ export default function InboxPage() {
           mb="xl"
           cursor="pointer"
         >
-          <Text fontSize="xl" fontWeight="bold" color="white">W</Text>
+          <Text fontSize="lg" fontWeight="bold" color="white">W</Text>
         </Box>
 
         {/* Nav Items */}

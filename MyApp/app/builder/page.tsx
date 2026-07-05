@@ -215,12 +215,6 @@ export default function BuilderPage() {
             </Heading>
           </VStack>
         </HStack>
-
-        <VStack flex={1} align="center" justify="center" p="8px" bg="white" borderRadius="12px" border="1px solid" borderColor="customGray.200">
-          <Text fontSize="lg" color="customGray.800">
-            hello
-          </Text>
-        </VStack>
       </VStack>
 
       <Modal

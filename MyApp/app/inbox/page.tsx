@@ -547,6 +547,7 @@ export default function InboxPage() {
 
           <ModalFooter gap="12px" px="16px" pt="0px" pb="16px">
             <Button
+              size="sm"
               variant="outline"
               colorScheme="gray"
               onClick={onFeedbackClose}
@@ -558,6 +559,7 @@ export default function InboxPage() {
               Cancel
             </Button>
             <Button
+              size="sm"
               bg="customGray.800"
               color="white"
               onClick={handleFeedbackSubmit}

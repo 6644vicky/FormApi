@@ -501,7 +501,8 @@ export default function InboxPage() {
             fontWeight="semibold"
             color="customGray.800"
             px="16px"
-            py="16px"
+            pt="16px"
+            pb="0px"
           >
             Share feedback about Weav
           </ModalHeader>

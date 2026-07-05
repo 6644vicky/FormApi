@@ -556,7 +556,7 @@ export default function InboxPage() {
               onClick={onFeedbackClose}
               borderColor="customGray.300"
               color="dark.text"
-              _hover={{ bg: "customGray.100" }}
+              _hover={{ bg: "customGray.100", borderColor: "customGray.500" }}
               borderRadius="base"
             >
               Cancel

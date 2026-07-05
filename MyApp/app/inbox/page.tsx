@@ -96,6 +96,7 @@ export default function InboxPage() {
   const { isOpen: isFeedbackOpen, onOpen: onFeedbackOpen, onClose: onFeedbackClose } = useDisclosure();
   const [feedbackMessage, setFeedbackMessage] = useState("");
   const [isFeedbackSubmitting, setIsFeedbackSubmitting] = useState(false);
+  const [feedbackError, setFeedbackError] = useState("");
 
   useEffect(() => {
     const checkAuth = async () => {
@@ -141,14 +142,11 @@ export default function InboxPage() {
 
   const handleFeedbackSubmit = async () => {
     if (!feedbackMessage.trim() || feedbackMessage.trim().length < 10) {
-      toast({
-        title: "Error",
-        description: "Please enter at least 10 characters of feedback",
-        status: "error",
-        isClosable: true,
-      });
+      setFeedbackError("Please enter at least 10 characters");
       return;
     }
+
+    setFeedbackError("");
 
     setIsFeedbackSubmitting(true);
 
@@ -488,7 +486,15 @@ export default function InboxPage() {
       </VStack>
 
       {/* Feedback Modal */}
-      <Modal isOpen={isFeedbackOpen} onClose={onFeedbackClose} isCentered>
+      <Modal
+        isOpen={isFeedbackOpen}
+        onClose={() => {
+          onFeedbackClose();
+          setFeedbackError("");
+          setFeedbackMessage("");
+        }}
+        isCentered
+      >
         <ModalOverlay bg="rgba(0, 0, 0, 0.5)" />
         <ModalContent
           bg="white"
@@ -508,23 +514,35 @@ export default function InboxPage() {
           </ModalHeader>
 
           <ModalBody py="16px" px="16px">
-            <Textarea
-              placeholder="Tell us what you think..."
-              value={feedbackMessage}
-              onChange={(e) => setFeedbackMessage(e.target.value)}
-              minH="200px"
-              bg="white"
-              border="1px solid"
-              borderColor="customGray.300"
-              color="dark.text"
-              _placeholder={{ color: "customGray.500" }}
-              _focus={{
-                borderColor: "brand.primary",
-                boxShadow: "0 0 0 3px rgba(147, 51, 234, 0.1)",
-              }}
-              borderRadius="base"
-              resize="none"
-            />
+            <VStack align="stretch" spacing="8px">
+              <Textarea
+                placeholder="Tell us what you think..."
+                value={feedbackMessage}
+                onChange={(e) => {
+                  setFeedbackMessage(e.target.value);
+                  setFeedbackError("");
+                }}
+                minH="200px"
+                bg="white"
+                border="1px solid"
+                borderColor={feedbackError ? "#FF6B6B" : "customGray.300"}
+                color="dark.text"
+                _placeholder={{ color: "customGray.500" }}
+                _focus={{
+                  borderColor: feedbackError ? "#FF6B6B" : "brand.primary",
+                  boxShadow: feedbackError
+                    ? "0 0 0 3px rgba(255, 107, 107, 0.1)"
+                    : "0 0 0 3px rgba(147, 51, 234, 0.1)",
+                }}
+                borderRadius="base"
+                resize="none"
+              />
+              {feedbackError && (
+                <Text fontSize="sm" color="#FF6B6B" fontWeight="500">
+                  {feedbackError}
+                </Text>
+              )}
+            </VStack>
           </ModalBody>
 
           <ModalFooter gap="12px" px="16px" pt="0px" pb="16px">

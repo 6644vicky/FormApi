@@ -197,7 +197,7 @@ export default function BuilderPage() {
         spacing={0}
         align="stretch"
         overflow="hidden"
-        pt="8px"
+        pt="12px"
       >
         <HStack
           h="80px"

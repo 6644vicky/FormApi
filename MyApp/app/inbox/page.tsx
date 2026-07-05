@@ -263,6 +263,7 @@ export default function InboxPage() {
         spacing={0}
         align="stretch"
         overflow="hidden"
+        pt="12px"
       >
         {/* Header */}
         <HStack

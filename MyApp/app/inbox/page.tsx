@@ -526,13 +526,16 @@ export default function InboxPage() {
                 bg="white"
                 border="1px solid"
                 borderColor={feedbackError ? "#FF6B6B" : "customGray.300"}
-                color="dark.text"
-                _placeholder={{ color: "customGray.500" }}
+                color={feedbackMessage ? "customGray.800" : "customGray.500"}
+                fontSize="sm"
+                fontWeight="normal"
+                _placeholder={{ color: "customGray.500", fontSize: "sm", fontWeight: "normal" }}
                 _focus={{
                   borderColor: feedbackError ? "#FF6B6B" : "customGray.500",
                   boxShadow: feedbackError
                     ? "0 0 0 3px rgba(255, 107, 107, 0.1)"
                     : "0 0 0 4px rgba(39, 39, 42, 0.10)",
+                  color: "customGray.800",
                 }}
                 borderRadius="base"
                 resize="none"

@@ -497,9 +497,9 @@ export default function InboxPage() {
           boxShadow="0 10px 40px rgba(0, 0, 0, 0.1)"
         >
           <ModalHeader
-            fontSize="xl"
-            fontWeight="bold"
-            color="dark.text"
+            fontSize="sm"
+            fontWeight="semibold"
+            color="customGray.800"
             borderBottom="1px solid"
             borderColor="customGray.200"
           >

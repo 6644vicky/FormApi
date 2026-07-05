@@ -538,7 +538,7 @@ export default function InboxPage() {
                 resize="none"
               />
               {feedbackError && (
-                <Text fontSize="sm" color="#FF6B6B" fontWeight="500">
+                <Text fontSize="xs" color="#FF6B6B" fontWeight="normal">
                   {feedbackError}
                 </Text>
               )}

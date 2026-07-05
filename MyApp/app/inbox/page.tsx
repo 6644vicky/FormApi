@@ -140,10 +140,10 @@ export default function InboxPage() {
   };
 
   const handleFeedbackSubmit = async () => {
-    if (!feedbackMessage.trim()) {
+    if (!feedbackMessage.trim() || feedbackMessage.trim().length < 10) {
       toast({
         title: "Error",
-        description: "Please enter your feedback",
+        description: "Please enter at least 10 characters of feedback",
         status: "error",
         isClosable: true,
       });

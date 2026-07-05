@@ -7,9 +7,10 @@ import { supabase } from "@/lib/supabase";
 interface AvatarBadgeProps {
   userEmail?: string;
   avatarUrl?: string;
+  onDelete?: () => void;
 }
 
-export default function AvatarBadge({ userEmail = "", avatarUrl = "" }: AvatarBadgeProps) {
+export default function AvatarBadge({ userEmail = "", avatarUrl = "", onDelete }: AvatarBadgeProps) {
   const router = useRouter();
 
   return (
@@ -25,6 +26,11 @@ export default function AvatarBadge({ userEmail = "", avatarUrl = "" }: AvatarBa
         />
       </MenuButton>
       <MenuList bg="white" borderColor="light.border">
+        {onDelete && (
+          <MenuItem onClick={onDelete} color="red.500">
+            Delete Account
+          </MenuItem>
+        )}
         <MenuItem onClick={() => supabase.auth.signOut().then(() => router.push("/"))}>
           Sign Out
         </MenuItem>

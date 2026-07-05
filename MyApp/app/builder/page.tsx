@@ -32,7 +32,13 @@ export default function BuilderPage() {
   const router = useRouter();
   const [selectedNav, setSelectedNav] = useState("Messages");
   const [userEmail, setUserEmail] = useState("");
-  const [avatarUrl, setAvatarUrl] = useState("");
+  const [avatarUrl, setAvatarUrl] = useState(() => {
+    if (typeof window !== "undefined") {
+      const stored = localStorage.getItem("user_avatar");
+      return stored || "";
+    }
+    return "";
+  });
   const { isOpen: isFeedbackOpen, onOpen: onFeedbackOpen, onClose: onFeedbackClose } = useDisclosure();
   const [feedbackMessage, setFeedbackMessage] = useState("");
   const [isFeedbackSubmitting, setIsFeedbackSubmitting] = useState(false);
@@ -54,11 +60,12 @@ export default function BuilderPage() {
 
           const emailHash = hashEmail(email.toLowerCase().trim());
           const gravatarUrl = `https://www.gravatar.com/avatar/${emailHash}?d=404&s=128`;
-          const cacheKey = `avatar_${emailHash}`;
 
-          const cachedUrl = localStorage.getItem(cacheKey);
+          const cachedUrl = localStorage.getItem("user_avatar");
           if (cachedUrl === gravatarUrl) {
-            setAvatarUrl(gravatarUrl);
+            if (avatarUrl !== gravatarUrl) {
+              setAvatarUrl(gravatarUrl);
+            }
             return;
           }
 
@@ -66,7 +73,7 @@ export default function BuilderPage() {
             const response = await fetch(gravatarUrl);
             if (response.ok) {
               setAvatarUrl(gravatarUrl);
-              localStorage.setItem(cacheKey, gravatarUrl);
+              localStorage.setItem("user_avatar", gravatarUrl);
             }
           } catch (error) {
             console.error("Error fetching Gravatar:", error);

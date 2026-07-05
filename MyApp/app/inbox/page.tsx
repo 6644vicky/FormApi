@@ -105,15 +105,19 @@ export default function InboxPage() {
           const email = session.user.email || "";
           setUserEmail(email);
 
-          // Fetch Gravatar image
-          try {
-            const emailHash = hashEmail(email.toLowerCase().trim());
-            const gravatarUrl = `https://www.gravatar.com/avatar/${emailHash}?d=404&s=128`;
+          const emailHash = hashEmail(email.toLowerCase().trim());
+          const gravatarUrl = `https://www.gravatar.com/avatar/${emailHash}?d=404&s=128`;
 
-            // Check if Gravatar image exists
+          const cachedUrl = localStorage.getItem(`avatar_${emailHash}`);
+          if (cachedUrl) {
+            setAvatarUrl(cachedUrl);
+          }
+
+          try {
             const response = await fetch(gravatarUrl);
             if (response.ok) {
               setAvatarUrl(gravatarUrl);
+              localStorage.setItem(`avatar_${emailHash}`, gravatarUrl);
             }
           } catch (error) {
             console.error("Error fetching Gravatar:", error);

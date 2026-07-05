@@ -52,13 +52,19 @@ export default function BuilderPage() {
           const email = session.user.email || "";
           setUserEmail(email);
 
-          try {
-            const emailHash = hashEmail(email.toLowerCase().trim());
-            const gravatarUrl = `https://www.gravatar.com/avatar/${emailHash}?d=404&s=128`;
+          const emailHash = hashEmail(email.toLowerCase().trim());
+          const gravatarUrl = `https://www.gravatar.com/avatar/${emailHash}?d=404&s=128`;
 
+          const cachedUrl = localStorage.getItem(`avatar_${emailHash}`);
+          if (cachedUrl) {
+            setAvatarUrl(cachedUrl);
+          }
+
+          try {
             const response = await fetch(gravatarUrl);
             if (response.ok) {
               setAvatarUrl(gravatarUrl);
+              localStorage.setItem(`avatar_${emailHash}`, gravatarUrl);
             }
           } catch (error) {
             console.error("Error fetching Gravatar:", error);

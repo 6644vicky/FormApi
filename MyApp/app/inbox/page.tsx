@@ -532,7 +532,7 @@ export default function InboxPage() {
                   borderColor: feedbackError ? "#FF6B6B" : "customGray.500",
                   boxShadow: feedbackError
                     ? "0 0 0 3px rgba(255, 107, 107, 0.1)"
-                    : "0 1px 2px 0 rgba(2, 6, 23, 0.05)",
+                    : "0 0 0 4px rgba(39, 39, 42, 0.10)",
                 }}
                 borderRadius="base"
                 resize="none"

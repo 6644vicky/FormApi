@@ -85,17 +85,20 @@ export default function InboxPage() {
   const [selectedNav, setSelectedNav] = useState("Home");
   const [searchQuery, setSearchQuery] = useState("");
   const [userEmail, setUserEmail] = useState("");
-  const [avatarUrl, setAvatarUrl] = useState(() => {
-    if (typeof window !== "undefined") {
-      const stored = localStorage.getItem("user_avatar");
-      return stored || "";
-    }
-    return "";
-  });
+  const [avatarUrl, setAvatarUrl] = useState("");
+  const [hydrated, setHydrated] = useState(false);
   const { isOpen: isFeedbackOpen, onOpen: onFeedbackOpen, onClose: onFeedbackClose } = useDisclosure();
   const [feedbackMessage, setFeedbackMessage] = useState("");
   const [isFeedbackSubmitting, setIsFeedbackSubmitting] = useState(false);
   const [feedbackError, setFeedbackError] = useState("");
+
+  useEffect(() => {
+    const cached = localStorage.getItem("user_avatar");
+    if (cached) {
+      setAvatarUrl(cached);
+    }
+    setHydrated(true);
+  }, []);
 
   useEffect(() => {
     const checkAuth = async () => {

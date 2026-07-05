@@ -206,7 +206,7 @@ export default function BuilderPage() {
           <VStack w="255px" align="stretch" spacing={0} borderRight="1px solid" borderColor="customGray.200">
             <VStack h="64px" align="center" justify="center" p="8px" borderBottom="1px solid" borderColor="customGray.200">
               <Text fontSize="lg" color="customGray.800">
-                Top
+                Workspace
               </Text>
             </VStack>
             <VStack flex={1} align="center" justify="center" p="8px">

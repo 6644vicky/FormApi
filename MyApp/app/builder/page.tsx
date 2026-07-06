@@ -223,7 +223,20 @@ export default function BuilderPage() {
     }
 
     try {
-      await deleteUserAccount();
+      const { data: { session } } = await supabase.auth.getSession();
+      const userId = session?.user?.id;
+
+      if (!userId) {
+        toast({
+          title: "Error",
+          description: "User ID not found",
+          status: "error",
+          isClosable: true,
+        });
+        return;
+      }
+
+      await deleteUserAccount(userId);
       await supabase.auth.signOut();
       router.push("/");
       toast({
@@ -478,12 +491,19 @@ export default function BuilderPage() {
                           borderRadius="8px"
                           p="16px"
                           position="relative"
+                          pr="44px"
                         >
-                          <Text fontSize="xs" fontFamily="monospace" color="customGray.800" overflowX="auto">
-                            curl -X POST https://api.form.example.com/submit \<br/>
-                            -H "Authorization: Bearer YOUR_API_KEY" \<br/>
-                            -d {`{form_id: "${selectedAgent}", data: {}}`}
-                          </Text>
+                          <VStack align="start" spacing="0" w="100%">
+                            <Text fontSize="xs" fontFamily="monospace" color="customGray.800">
+                              curl -X POST https://api.form.example.com/submit \
+                            </Text>
+                            <Text fontSize="xs" fontFamily="monospace" color="customGray.800">
+                              -H "Authorization: Bearer YOUR_API_KEY" \
+                            </Text>
+                            <Text fontSize="xs" fontFamily="monospace" color="customGray.800">
+                              {`-d {form_id: "${selectedAgent}", data: {}}`}
+                            </Text>
+                          </VStack>
                           <Button
                             size="sm"
                             variant="ghost"

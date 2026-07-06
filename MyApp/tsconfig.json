@@ -25,6 +25,7 @@
         "./*"
       ]
     },
+    "forceConsistentCasingInFileNames": true,
     /* Linting */
     "strict": true,
     "noUnusedLocals": false,
@@ -39,15 +40,10 @@
     ]
   },
   "include": [
-    "app",
-    "lib",
-    "middleware.ts",
+    "next-env.d.ts",
+    "**/*.ts",
+    "**/*.tsx",
     ".next/types/**/*.ts"
-  ],
-  "references": [
-    {
-      "path": "./tsconfig.node.json"
-    }
   ],
   "exclude": [
     "node_modules"

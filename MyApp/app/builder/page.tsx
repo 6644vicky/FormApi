@@ -352,7 +352,7 @@ export default function BuilderPage() {
                   bg={selectedAgent === agentObj.name ? "customGray.100" : "white"}
                   borderRadius="8px"
                   px="12px"
-                  py="12px"
+                  py="8px"
                   display="flex"
                   alignItems="center"
                   justifyContent="space-between"
@@ -363,7 +363,7 @@ export default function BuilderPage() {
                   _hover={{ bg: selectedAgent === agentObj.name ? "customGray.100" : "customGray.50" }}
                   transition="all 0.2s"
                 >
-                  <HStack spacing="4px" flex={1} minW={0} justifyContent="space-between">
+                  <HStack spacing="4px" flex={1} minW={0} justifyContent="space-between" align="center">
                     <Text fontSize="sm" fontWeight={selectedAgent === agentObj.name ? "medium" : "normal"} color={selectedAgent === agentObj.name ? "customGray.800" : "customGray.500"} noOfLines={1} overflow="hidden" textOverflow="ellipsis" minW={0}>
                       {agentObj.name}
                     </Text>
@@ -372,8 +372,8 @@ export default function BuilderPage() {
                         {agentObj.services.map((service) => (
                           <Box
                             key={service}
-                            w="8px"
-                            h="8px"
+                            w="6px"
+                            h="6px"
                             borderRadius="full"
                             bg={serviceColors[service]}
                           />
@@ -390,31 +390,162 @@ export default function BuilderPage() {
               <Text fontSize="lg" fontWeight="medium" color="customGray.800">
                 {selectedAgent || "Builder"}
               </Text>
-              <Button size="sm" bg="customGray.800" color="white" _hover={{ bg: "customGray.700" }}>
-                Save changes
-              </Button>
+              <HStack spacing="8px">
+                <Button size="sm" variant="ghost" color="customGray.800" _hover={{ bg: "customGray.50" }}>
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M3 6H5H21M8 6V4C8 2.89543 8.89543 2 10 2H14C15.1046 2 16 2.89543 16 4V6M8 6H16M9 11V17M12 11V17M15 11V17M4 6H20L19 19C19 20.1046 18.1046 21 17 21H7C5.89543 21 5 20.1046 5 19L4 6Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                  </svg>
+                </Button>
+                <Button size="sm" variant="outline" borderColor="customGray.300" color="customGray.800" _hover={{ bg: "customGray.50", borderColor: "customGray.500" }} leftIcon={
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M3 9V19C3 20.1046 3.89543 21 5 21H19C20.1046 21 21 20.1046 21 19V9M3 9H21M3 9V5C3 3.89543 3.89543 3 5 3H19C20.1046 3 21 3.89543 21 5V9M8 9V3M16 9V3" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                  </svg>
+                }>
+                  Archive
+                </Button>
+                <Button size="sm" bg="customGray.800" color="white" _hover={{ bg: "customGray.700" }}>
+                  Save changes
+                </Button>
+              </HStack>
             </HStack>
             <Tabs flex={1} display="flex" flexDirection="column">
-              <TabList px="20px" bg="white">
-                <Tab fontSize="sm" color="customGray.500" _selected={{ color: "customGray.800", borderColor: "customGray.800" }} pb="12px">
-                  Overview
+              <TabList pl="20px" borderBottom="1px solid" borderColor="customGray.200">
+                <Tab fontSize="sm" color="customGray.500" pb="12px" mb="-1px" borderBottom="2px solid transparent" _selected={{ color: "customGray.800", borderColor: "customGray.800", bg: "white" }} display="flex" alignItems="center" gap="6px">
+                  <Box w="8px" h="8px" borderRadius="full" bg={selectedAgent && agents.find(a => a.name === selectedAgent)?.services.includes("form") ? "#60A5FA" : "customGray.300"} />
+                  Form
                 </Tab>
-                <Tab fontSize="sm" color="customGray.500" _selected={{ color: "customGray.800", borderColor: "customGray.800" }} pb="12px">
-                  Settings
+                <Tab fontSize="sm" color="customGray.500" pb="12px" mb="-1px" borderBottom="2px solid transparent" _selected={{ color: "customGray.800", borderColor: "customGray.800", bg: "white" }} display="flex" alignItems="center" gap="6px">
+                  <Box w="8px" h="8px" borderRadius="full" bg={selectedAgent && agents.find(a => a.name === selectedAgent)?.services.includes("review") ? "#4ADE80" : "customGray.300"} />
+                  Rating
+                </Tab>
+                <Tab fontSize="sm" color="customGray.500" pb="12px" mb="-1px" borderBottom="2px solid transparent" _selected={{ color: "customGray.800", borderColor: "customGray.800", bg: "white" }} display="flex" alignItems="center" gap="6px">
+                  <Box w="8px" h="8px" borderRadius="full" bg={selectedAgent && agents.find(a => a.name === selectedAgent)?.services.includes("calendar") ? "#F472B6" : "customGray.300"} />
+                  Calendar
                 </Tab>
               </TabList>
               <TabPanels flex={1} overflow="hidden">
+                <TabPanel h="100%" overflow="auto" p="0">
+                  <HStack align="stretch" spacing="0" h="100%" p="0" m="0">
+                    <VStack align="stretch" spacing="12px" flex={1} p="24px">
+                      <VStack align="start" spacing="12px" w="100%" p="0">
+                        <Heading fontSize="base" fontWeight="medium" color="customGray.800">
+                          Embed code
+                        </Heading>
+                        <Text fontSize="sm" color="customGray.600">
+                          Copy and paste the embed code into your website to display this form anywhere on your pages.
+                        </Text>
+                        <Box
+                          w="100%"
+                          bg="customGray.100"
+                          border="1px solid"
+                          borderColor="customGray.200"
+                          borderRadius="8px"
+                          p="16px"
+                          position="relative"
+                        >
+                          <Text fontSize="xs" fontFamily="monospace" color="customGray.800" overflowX="auto">
+                            &lt;iframe src="https://form.example.com/{selectedAgent}" width="100%" height="600"&gt;&lt;/iframe&gt;
+                          </Text>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            position="absolute"
+                            top="12px"
+                            right="12px"
+                            onClick={() => {
+                              navigator.clipboard.writeText(`<iframe src="https://form.example.com/${selectedAgent}" width="100%" height="600"></iframe>`);
+                            }}
+                          >
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                              <path d="M3 19V5C3 3.89543 3.89543 3 5 3H14C15.1046 3 16 3.89543 16 5V19C16 20.1046 15.1046 21 14 21H5C3.89543 21 3 20.1046 3 19Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                              <path d="M21 8C21 6.89543 21.8954 6 23 6V16C23 17.1046 22.1046 18 21 18" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                            </svg>
+                          </Button>
+                        </Box>
+                      </VStack>
+                      <VStack align="start" spacing="12px" w="100%" p="0">
+                        <Heading fontSize="base" fontWeight="medium" color="customGray.800">
+                          API
+                        </Heading>
+                        <Text fontSize="sm" color="customGray.600">
+                          Connect your applications using the Form API to automate submissions and access form data securely.
+                        </Text>
+                        <Box
+                          w="100%"
+                          bg="customGray.100"
+                          border="1px solid"
+                          borderColor="customGray.200"
+                          borderRadius="8px"
+                          p="16px"
+                          position="relative"
+                        >
+                          <Text fontSize="xs" fontFamily="monospace" color="customGray.800" overflowX="auto">
+                            curl -X POST https://api.form.example.com/submit \<br/>
+                            -H "Authorization: Bearer YOUR_API_KEY" \<br/>
+                            -d {`{form_id: "${selectedAgent}", data: {}}`}
+                          </Text>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            position="absolute"
+                            top="12px"
+                            right="12px"
+                            onClick={() => {
+                              navigator.clipboard.writeText(`curl -X POST https://api.form.example.com/submit -H "Authorization: Bearer YOUR_API_KEY" -d {form_id: "${selectedAgent}", data: {}}`);
+                            }}
+                          >
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                              <path d="M3 19V5C3 3.89543 3.89543 3 5 3H14C15.1046 3 16 3.89543 16 5V19C16 20.1046 15.1046 21 14 21H5C3.89543 21 3 20.1046 3 19Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                              <path d="M21 8C21 6.89543 21.8954 6 23 6V16C23 17.1046 22.1046 18 21 18" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                            </svg>
+                          </Button>
+                        </Box>
+                      </VStack>
+                    </VStack>
+                    <VStack align="stretch" spacing="12px" flex={1} p="24px" bg="customDark.2" borderLeft="1px solid" borderLeftColor="customGray.200">
+                      <VStack align="start" spacing="8px" p="0">
+                      <Text fontSize="sm" fontWeight="medium" color="customGray.800">
+                        Workspace Name
+                      </Text>
+                      <Input
+                        placeholder="Enter workspace name"
+                        value={selectedAgent || ""}
+                        onChange={(e) => {
+                          const oldName = selectedAgent;
+                          const newName = e.target.value;
+                          if (oldName && newName) {
+                            setSelectedAgent(newName);
+                            const updatedAgents = agents.map(a => a.name === oldName ? { ...a, name: newName } : a);
+                            setAgents(updatedAgents);
+                            localStorage.setItem("workspace_agents", JSON.stringify(updatedAgents));
+                          }
+                        }}
+                        fontSize="sm"
+                        border="1px solid"
+                        borderColor="customGray.300"
+                        color="customGray.800"
+                        _placeholder={{ color: "customGray.500" }}
+                        _focus={{
+                          borderColor: "customGray.500",
+                          boxShadow: "0 0 0 3px rgba(39, 39, 42, 0.1)",
+                        }}
+                        borderRadius="base"
+                      />
+                    </VStack>
+                    </VStack>
+                  </HStack>
+                </TabPanel>
                 <TabPanel h="100%" overflow="auto">
                   <VStack align="center" justify="center" h="100%">
                     <Text fontSize="lg" color="customGray.800">
-                      Overview
+                      Rating
                     </Text>
                   </VStack>
                 </TabPanel>
                 <TabPanel h="100%" overflow="auto">
                   <VStack align="center" justify="center" h="100%">
                     <Text fontSize="lg" color="customGray.800">
-                      Settings
+                      Calendar
                     </Text>
                   </VStack>
                 </TabPanel>

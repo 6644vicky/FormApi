@@ -7,7 +7,7 @@ import { useRouter } from "next/navigation";
 import { keyframes } from "@emotion/react";
 import { supabase } from "@/lib/supabase";
 import { deleteUserAccount } from "@/app/actions/deleteUser";
-import { getAgents, createAgent } from "@/app/actions/agentActions";
+import { getAgents, createAgent, deleteAgent } from "@/app/actions/agentActions";
 import CryptoJS from "crypto-js";
 import Sidebar from "@/app/components/Sidebar";
 import {
@@ -1059,8 +1059,36 @@ export default function BuilderPage() {
                   if (selectedAgent) {
                     setIsDeleting(true);
                     try {
-                      await new Promise(resolve => setTimeout(resolve, 1000));
+                      // Get current user session
+                      const { data: { session } } = await supabase.auth.getSession();
+                      const userId = session?.user?.id;
 
+                      if (!userId) {
+                        toast({
+                          title: "Error",
+                          description: "User session not found",
+                          status: "error",
+                          isClosable: true,
+                          position: "top",
+                        });
+                        return;
+                      }
+
+                      // Delete from Supabase first
+                      const success = await deleteAgent(userId, selectedAgent);
+
+                      if (!success) {
+                        toast({
+                          title: "Error",
+                          description: "Failed to delete workspace. Please try again.",
+                          status: "error",
+                          isClosable: true,
+                          position: "top",
+                        });
+                        return;
+                      }
+
+                      // Only update local state after successful Supabase deletion
                       const updatedAgents = agents.filter(a => a.name !== selectedAgent);
                       setAgents(updatedAgents);
                       localStorage.setItem("workspace_agents", JSON.stringify(updatedAgents));

@@ -61,6 +61,13 @@ export default function BuilderPage() {
   const [createError, setCreateError] = useState("");
   const [isWorkspaceListCollapsed, setIsWorkspaceListCollapsed] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+  const { isOpen: isAddFieldOpen, onOpen: onAddFieldOpen, onClose: onAddFieldClose } = useDisclosure();
+  const [formFields, setFormFields] = useState<Array<{ id: string; name: string; type: string }>>([
+    { id: "1", name: "First name", type: "text" },
+    { id: "2", name: "Last name", type: "text" },
+    { id: "3", name: "Mail id", type: "email" },
+    { id: "4", name: "Message", type: "textarea" },
+  ]);
 
   useEffect(() => {
     const cached = localStorage.getItem("user_avatar");
@@ -475,52 +482,66 @@ export default function BuilderPage() {
                               Let's get your Intercom demo started
                             </Heading>
                           </VStack>
-                          <VStack align="stretch" spacing="16px" w="100%">
-                            <Input
-                              placeholder="First name"
-                              isDisabled
-                              fontSize="sm"
-                              border="1px solid"
-                              borderColor="customGray.200"
+                          <VStack align="stretch" spacing="12px" w="100%">
+                            {formFields.map((field) => (
+                              <HStack key={field.id} align="center" spacing="8px" w="100%">
+                                <Box flex={1}>
+                                  {field.type === "textarea" ? (
+                                    <Textarea
+                                      placeholder={field.name}
+                                      isDisabled
+                                      fontSize="sm"
+                                      border="1px solid"
+                                      borderColor="customGray.200"
+                                      color="customGray.800"
+                                      _placeholder={{ color: "customGray.400" }}
+                                      borderRadius="base"
+                                      minH="80px"
+                                      resize="none"
+                                    />
+                                  ) : (
+                                    <Input
+                                      placeholder={field.name}
+                                      isDisabled
+                                      fontSize="sm"
+                                      border="1px solid"
+                                      borderColor="customGray.200"
+                                      color="customGray.800"
+                                      _placeholder={{ color: "customGray.400" }}
+                                      borderRadius="base"
+                                      h="40px"
+                                    />
+                                  )}
+                                </Box>
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  p="4px"
+                                  minW="auto"
+                                  color="customGray.500"
+                                  _hover={{ color: "customGray.800", bg: "customGray.100" }}
+                                  onClick={() => {
+                                    setFormFields(formFields.filter(f => f.id !== field.id));
+                                  }}
+                                >
+                                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                    <path d="M3 6h18M8 6V4c0-1.1.9-2 2-2h4c1.1 0 2 .9 2 2v2m3 0v14c0 1.1-.9 2-2 2H7c-1.1 0-2-.9-2-2V6h12zM10 11v6M14 11v6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                                  </svg>
+                                </Button>
+                              </HStack>
+                            ))}
+                            <Button
+                              w="100%"
+                              variant="outline"
+                              borderColor="customGray.300"
                               color="customGray.800"
-                              _placeholder={{ color: "customGray.400" }}
-                              borderRadius="base"
+                              fontSize="sm"
                               h="40px"
-                            />
-                            <Input
-                              placeholder="Last name"
-                              isDisabled
-                              fontSize="sm"
-                              border="1px solid"
-                              borderColor="customGray.200"
-                              color="customGray.800"
-                              _placeholder={{ color: "customGray.400" }}
-                              borderRadius="base"
-                              h="40px"
-                            />
-                            <Input
-                              placeholder="Mail id"
-                              isDisabled
-                              fontSize="sm"
-                              border="1px solid"
-                              borderColor="customGray.200"
-                              color="customGray.800"
-                              _placeholder={{ color: "customGray.400" }}
-                              borderRadius="base"
-                              h="40px"
-                            />
-                            <Textarea
-                              placeholder="Message"
-                              isDisabled
-                              fontSize="sm"
-                              border="1px solid"
-                              borderColor="customGray.200"
-                              color="customGray.800"
-                              _placeholder={{ color: "customGray.400" }}
-                              borderRadius="base"
-                              minH="80px"
-                              resize="none"
-                            />
+                              onClick={onAddFieldOpen}
+                              _hover={{ bg: "customGray.50" }}
+                            >
+                              + Add Field
+                            </Button>
                           </VStack>
                           <Button
                             w="100%"
@@ -972,6 +993,64 @@ export default function BuilderPage() {
               </Button>
             </HStack>
           </ModalFooter>
+        </ModalContent>
+      </Modal>
+
+      <Modal
+        isOpen={isAddFieldOpen}
+        onClose={onAddFieldClose}
+        isCentered
+      >
+        <ModalOverlay bg="rgba(0, 0, 0, 0.5)" />
+        <ModalContent
+          bg="white"
+          borderRadius="lg"
+          boxShadow="0 10px 40px rgba(0, 0, 0, 0.1)"
+          maxW="400px"
+        >
+          <ModalHeader pb="12px" pt="lg" px="16px">
+            <Heading fontSize="base" fontWeight="medium" color="customGray.800">
+              Add a field
+            </Heading>
+          </ModalHeader>
+          <ModalBody pt="0" px="16px" pb="16px">
+            <VStack align="stretch" spacing="8px">
+              {[
+                { type: "text", label: "Short text", icon: "Aa" },
+                { type: "email", label: "Email", icon: "@" },
+                { type: "textarea", label: "Long text", icon: "¶" },
+                { type: "phone", label: "Phone", icon: "☎" },
+              ].map((fieldOption) => (
+                <Button
+                  key={fieldOption.type}
+                  variant="ghost"
+                  w="100%"
+                  justifyContent="flex-start"
+                  fontSize="sm"
+                  color="customGray.800"
+                  _hover={{ bg: "customGray.50" }}
+                  p="12px"
+                  h="auto"
+                  onClick={() => {
+                    const newField = {
+                      id: Date.now().toString(),
+                      name: fieldOption.label,
+                      type: fieldOption.type,
+                    };
+                    setFormFields([...formFields, newField]);
+                    onAddFieldClose();
+                  }}
+                >
+                  <HStack spacing="12px" w="100%">
+                    <Text fontSize="base" fontWeight="medium" color="customGray.500">
+                      {fieldOption.icon}
+                    </Text>
+                    <Text>{fieldOption.label}</Text>
+                  </HStack>
+                </Button>
+              ))}
+            </VStack>
+          </ModalBody>
         </ModalContent>
       </Modal>
     </Flex>

@@ -518,7 +518,21 @@ export default function BuilderPage() {
                               Let's get your Intercom demo started
                             </Heading>
                           </VStack>
-                          <VStack align="stretch" spacing="0" w="100%">
+                          <VStack align="stretch" spacing="0" w="100%" maxH="400px" overflowY="auto" sx={{
+                            '&::-webkit-scrollbar': {
+                              width: '6px',
+                            },
+                            '&::-webkit-scrollbar-track': {
+                              bg: 'transparent',
+                            },
+                            '&::-webkit-scrollbar-thumb': {
+                              bg: 'rgba(0, 0, 0, 0.1)',
+                              borderRadius: '3px',
+                              '&:hover': {
+                                bg: 'rgba(0, 0, 0, 0.2)',
+                              },
+                            },
+                          }}>
                             <HStack w="100%" h="32px" align="center" spacing="8px" mb="12px">
                               <Box h="1px" flex={1} bg="customGray.200" />
                               <Button

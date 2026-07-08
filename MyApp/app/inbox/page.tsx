@@ -33,7 +33,7 @@ import {
   useDisclosure,
   Textarea,
 } from "@chakra-ui/react";
-import { DeleteIcon, SettingsIcon, LogOutIcon } from "@chakra-ui/icons";
+import { DeleteIcon, SettingsIcon } from "@chakra-ui/icons";
 
 interface Message {
   id: number;

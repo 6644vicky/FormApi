@@ -30,6 +30,7 @@
     "uuid": "^11.0.0"
   },
   "devDependencies": {
+    "@types/crypto-js": "^4.2.2",
     "@types/node": "26.0.1",
     "@types/react": "19.2.17",
     "typescript": "6.0.3"

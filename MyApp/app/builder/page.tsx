@@ -498,22 +498,29 @@ export default function BuilderPage() {
               </TabList>
               <TabPanels flex={1} overflow="hidden">
                 <TabPanel h="100%" p="0" overflow="hidden">
-                  <HStack align="flex-start" spacing="0" h="100%" p="0" m="0" overflowY="auto" overflowX="hidden" sx={{
-                    '&::-webkit-scrollbar': {
-                      width: '6px',
-                    },
-                    '&::-webkit-scrollbar-track': {
-                      bg: 'transparent',
-                    },
-                    '&::-webkit-scrollbar-thumb': {
-                      bg: 'rgba(0, 0, 0, 0.1)',
-                      borderRadius: '3px',
-                      '&:hover': {
-                        bg: 'rgba(0, 0, 0, 0.2)',
-                      },
-                    },
-                  }}>
-                    <VStack align="center" justify="flex-start" flex={1} p="54px" bg="customDark.2" spacing={0} minH="100%">
+                  <HStack align="stretch" spacing="0" h="100%" p="0" m="0" overflow="hidden">
+                    <Box
+                      flex={1}
+                      overflowY="auto"
+                      overflowX="hidden"
+                      bg="customDark.2"
+                      sx={{
+                        '&::-webkit-scrollbar': {
+                          width: '8px',
+                        },
+                        '&::-webkit-scrollbar-track': {
+                          bg: 'transparent',
+                        },
+                        '&::-webkit-scrollbar-thumb': {
+                          bg: 'rgba(0, 0, 0, 0.15)',
+                          borderRadius: '4px',
+                          '&:hover': {
+                            bg: 'rgba(0, 0, 0, 0.25)',
+                          },
+                        },
+                      }}
+                    >
+                      <VStack align="center" justify="flex-start" pt="54px" pb="54px" px="54px" spacing={0} minH="fit-content" w="100%">
                       <Box
                         bg="white"
                         border="1px solid"
@@ -711,6 +718,7 @@ export default function BuilderPage() {
                         </HStack>
                       </VStack>
                     </VStack>
+                    </Box>
                   </HStack>
                 </TabPanel>
                 <TabPanel h="100%" overflow="auto">

@@ -503,21 +503,7 @@ export default function BuilderPage() {
               <TabPanels flex={1} overflow="hidden">
                 <TabPanel h="100%" p="0" overflow="hidden" display="flex" flexDirection="row">
                   <HStack align="flex-start" spacing="0" h="100%" w="100%" p="0" m="0" overflow="hidden">
-                    <VStack align="center" justify="flex-start" flex={1} p="54px" bg="customDark.2" spacing={0} w="100%" sx={{
-                      '&::-webkit-scrollbar': {
-                        width: '6px',
-                      },
-                      '&::-webkit-scrollbar-track': {
-                        bg: 'transparent',
-                      },
-                      '&::-webkit-scrollbar-thumb': {
-                        bg: 'rgba(0, 0, 0, 0.1)',
-                        borderRadius: '3px',
-                        '&:hover': {
-                          bg: 'rgba(0, 0, 0, 0.2)',
-                        },
-                      },
-                    }}>
+                    <VStack align="center" justify="flex-start" flex={1} p="54px" bg="customDark.2" spacing={0} w="100%">
                       <Box
                         bg="white"
                         border="1px solid"

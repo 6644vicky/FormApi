@@ -40,7 +40,6 @@ import {
   MenuList,
   MenuItem,
 } from "@chakra-ui/react";
-import { BuilderSkeleton } from "@/app/components/SkeletonLoader";
 
 const slideUpFade = keyframes`
   from {
@@ -365,21 +364,16 @@ export default function BuilderPage() {
         isLoading={!hydrated}
       />
 
-      {!hydrated ? (
-        <Box flex={1} overflow="hidden">
-          <BuilderSkeleton />
-        </Box>
-      ) : (
-        <VStack
-          flex={1}
-          bg="customGray.100"
-          spacing={0}
-          align="stretch"
-          overflow="hidden"
-          pt="12px"
-          pr="12px"
-          pb="12px"
-        >
+      <VStack
+        flex={1}
+        bg="customGray.100"
+        spacing={0}
+        align="stretch"
+        overflow="hidden"
+        pt="12px"
+        pr="12px"
+        pb="12px"
+      >
 
         <HStack flex={1} align="stretch" spacing={0} bg="white" borderRadius="12px" border="1px solid" borderColor="customGray.200" overflow="hidden">
           <VStack w={isWorkspaceListCollapsed ? "0px" : "255px"} h="100%" align="stretch" spacing={0} borderRight={isWorkspaceListCollapsed ? "none" : "1px solid"} borderColor="customGray.200" overflow="hidden" transition="all 0.3s ease">
@@ -523,7 +517,21 @@ export default function BuilderPage() {
                       },
                     },
                   }}>
-                    <VStack align="center" justify="flex-start" flex={1} p="54px" bg="customDark.2" spacing={0} minH="100%">
+                    <VStack align="center" justify="flex-start" flex={1} p="54px" bg="customDark.2" spacing={0} minH="100%" overflowY="auto" sx={{
+                      '&::-webkit-scrollbar': {
+                        width: '6px',
+                      },
+                      '&::-webkit-scrollbar-track': {
+                        bg: 'transparent',
+                      },
+                      '&::-webkit-scrollbar-thumb': {
+                        bg: 'rgba(0, 0, 0, 0.1)',
+                        borderRadius: '3px',
+                        '&:hover': {
+                          bg: 'rgba(0, 0, 0, 0.2)',
+                        },
+                      },
+                    }}>
                       <Box
                         bg="white"
                         border="1px solid"
@@ -531,6 +539,7 @@ export default function BuilderPage() {
                         borderRadius="16px"
                         p="32px"
                         maxW="500px"
+                        w="100%"
                         boxShadow="0 4px 12px rgba(0, 0, 0, 0.1)"
                       >
                         <VStack align="stretch" spacing="24px" w="100%">
@@ -735,7 +744,6 @@ export default function BuilderPage() {
           </VStack>
         </HStack>
       </VStack>
-      )}
 
       <Modal
         isOpen={isFeedbackOpen}

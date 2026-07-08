@@ -403,11 +403,13 @@ export default function BuilderPage() {
               pb="16px"
               overflowY="auto"
               sx={{
-                '&::-webkit-scrollbar': {
-                  display: 'none',
-                },
-                msOverflowStyle: 'none',
-                scrollbarWidth: 'none',
+                '&::-webkit-scrollbar': { width: '6px' },
+                '&::-webkit-scrollbar-track': { bg: 'transparent' },
+                '&::-webkit-scrollbar-thumb': {
+                  bg: 'rgba(0, 0, 0, 0.1)',
+                  borderRadius: '3px',
+                  '&:hover': { bg: 'rgba(0, 0, 0, 0.2)' }
+                }
               }}
             >
               {agents.map((agentObj, index) => (

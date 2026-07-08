@@ -68,6 +68,7 @@ export default function BuilderPage() {
     { id: "3", name: "Mail id", type: "email" },
     { id: "4", name: "Message", type: "textarea" },
   ]);
+  const [insertAtIndex, setInsertAtIndex] = useState<number>(0);
 
   useEffect(() => {
     const cached = localStorage.getItem("user_avatar");
@@ -482,66 +483,100 @@ export default function BuilderPage() {
                               Let's get your Intercom demo started
                             </Heading>
                           </VStack>
-                          <VStack align="stretch" spacing="12px" w="100%">
-                            {formFields.map((field) => (
-                              <HStack key={field.id} align="center" spacing="8px" w="100%">
-                                <Box flex={1}>
-                                  {field.type === "textarea" ? (
-                                    <Textarea
-                                      placeholder={field.name}
-                                      isDisabled
-                                      fontSize="sm"
-                                      border="1px solid"
-                                      borderColor="customGray.200"
-                                      color="customGray.800"
-                                      _placeholder={{ color: "customGray.400" }}
-                                      borderRadius="base"
-                                      minH="80px"
-                                      resize="none"
-                                    />
-                                  ) : (
-                                    <Input
-                                      placeholder={field.name}
-                                      isDisabled
-                                      fontSize="sm"
-                                      border="1px solid"
-                                      borderColor="customGray.200"
-                                      color="customGray.800"
-                                      _placeholder={{ color: "customGray.400" }}
-                                      borderRadius="base"
-                                      h="40px"
-                                    />
-                                  )}
-                                </Box>
-                                <Button
-                                  size="sm"
-                                  variant="ghost"
-                                  p="4px"
-                                  minW="auto"
-                                  color="customGray.500"
-                                  _hover={{ color: "customGray.800", bg: "customGray.100" }}
-                                  onClick={() => {
-                                    setFormFields(formFields.filter(f => f.id !== field.id));
-                                  }}
-                                >
-                                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                                    <path d="M3 6h18M8 6V4c0-1.1.9-2 2-2h4c1.1 0 2 .9 2 2v2m3 0v14c0 1.1-.9 2-2 2H7c-1.1 0-2-.9-2-2V6h12zM10 11v6M14 11v6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-                                  </svg>
-                                </Button>
-                              </HStack>
+                          <VStack align="stretch" spacing="0" w="100%">
+                            <HStack w="100%" h="32px" align="center" spacing="8px" mb="12px">
+                              <Box h="1px" flex={1} bg="customGray.200" />
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                borderColor="customGray.300"
+                                color="customGray.800"
+                                p="4px"
+                                minW="auto"
+                                h="24px"
+                                w="24px"
+                                fontSize="16px"
+                                onClick={() => {
+                                  setInsertAtIndex(0);
+                                  onAddFieldOpen();
+                                }}
+                                _hover={{ bg: "customGray.50" }}
+                              >
+                                +
+                              </Button>
+                              <Box h="1px" flex={1} bg="customGray.200" />
+                            </HStack>
+                            {formFields.map((field, index) => (
+                              <Box key={field.id} w="100%">
+                                <HStack align="center" spacing="8px" w="100%" mb="12px">
+                                  <Box flex={1}>
+                                    {field.type === "textarea" ? (
+                                      <Textarea
+                                        placeholder={field.name}
+                                        isDisabled
+                                        fontSize="sm"
+                                        border="1px solid"
+                                        borderColor="customGray.200"
+                                        color="customGray.800"
+                                        _placeholder={{ color: "customGray.400" }}
+                                        borderRadius="base"
+                                        minH="80px"
+                                        resize="none"
+                                      />
+                                    ) : (
+                                      <Input
+                                        placeholder={field.name}
+                                        isDisabled
+                                        fontSize="sm"
+                                        border="1px solid"
+                                        borderColor="customGray.200"
+                                        color="customGray.800"
+                                        _placeholder={{ color: "customGray.400" }}
+                                        borderRadius="base"
+                                        h="40px"
+                                      />
+                                    )}
+                                  </Box>
+                                  <Button
+                                    size="sm"
+                                    variant="ghost"
+                                    p="4px"
+                                    minW="auto"
+                                    color="customGray.500"
+                                    _hover={{ color: "customGray.800", bg: "customGray.100" }}
+                                    onClick={() => {
+                                      setFormFields(formFields.filter(f => f.id !== field.id));
+                                    }}
+                                  >
+                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                      <path d="M3 6h18M8 6V4c0-1.1.9-2 2-2h4c1.1 0 2 .9 2 2v2m3 0v14c0 1.1-.9 2-2 2H7c-1.1 0-2-.9-2-2V6h12zM10 11v6M14 11v6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                                    </svg>
+                                  </Button>
+                                </HStack>
+                                <HStack w="100%" h="32px" align="center" spacing="8px" mb={index === formFields.length - 1 ? "0" : "12px"}>
+                                  <Box h="1px" flex={1} bg="customGray.200" />
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    borderColor="customGray.300"
+                                    color="customGray.800"
+                                    p="4px"
+                                    minW="auto"
+                                    h="24px"
+                                    w="24px"
+                                    fontSize="16px"
+                                    onClick={() => {
+                                      setInsertAtIndex(index + 1);
+                                      onAddFieldOpen();
+                                    }}
+                                    _hover={{ bg: "customGray.50" }}
+                                  >
+                                    +
+                                  </Button>
+                                  <Box h="1px" flex={1} bg="customGray.200" />
+                                </HStack>
+                              </Box>
                             ))}
-                            <Button
-                              w="100%"
-                              variant="outline"
-                              borderColor="customGray.300"
-                              color="customGray.800"
-                              fontSize="sm"
-                              h="40px"
-                              onClick={onAddFieldOpen}
-                              _hover={{ bg: "customGray.50" }}
-                            >
-                              + Add Field
-                            </Button>
                           </VStack>
                           <Button
                             w="100%"
@@ -1037,7 +1072,9 @@ export default function BuilderPage() {
                       name: fieldOption.label,
                       type: fieldOption.type,
                     };
-                    setFormFields([...formFields, newField]);
+                    const newFields = [...formFields];
+                    newFields.splice(insertAtIndex, 0, newField);
+                    setFormFields(newFields);
                     onAddFieldClose();
                   }}
                 >

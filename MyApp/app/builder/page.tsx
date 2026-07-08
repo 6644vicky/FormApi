@@ -2,8 +2,9 @@
 
 export const dynamic = 'force-dynamic';
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
+import { keyframes } from "@emotion/react";
 import { supabase } from "@/lib/supabase";
 import { deleteUserAccount } from "@/app/actions/deleteUser";
 import { getAgents, createAgent } from "@/app/actions/agentActions";
@@ -40,6 +41,17 @@ import {
   MenuItem,
 } from "@chakra-ui/react";
 
+const slideUpFade = keyframes`
+  from {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+`;
+
 export default function BuilderPage() {
   const toast = useToast();
   const router = useRouter();
@@ -69,6 +81,8 @@ export default function BuilderPage() {
     { id: "4", name: "Message", type: "textarea" },
   ]);
   const [insertAtIndex, setInsertAtIndex] = useState<number>(0);
+  const [visibleFields, setVisibleFields] = useState<Set<string>>(new Set());
+  const fieldRefs = useRef<{ [key: string]: HTMLDivElement | null }>({});
 
   useEffect(() => {
     const cached = localStorage.getItem("user_avatar");
@@ -124,6 +138,27 @@ export default function BuilderPage() {
   useEffect(() => {
     localStorage.setItem("workspace_agents", JSON.stringify(agents));
   }, [agents]);
+
+  useEffect(() => {
+    const observerOptions = {
+      threshold: 0.1,
+      rootMargin: "0px 0px -50px 0px",
+    };
+
+    const observer = new IntersectionObserver((entries) => {
+      entries.forEach((entry) => {
+        if (entry.isIntersecting) {
+          setVisibleFields((prev) => new Set([...prev, entry.target.id]));
+        }
+      });
+    }, observerOptions);
+
+    Object.values(fieldRefs.current).forEach((ref) => {
+      if (ref) observer.observe(ref);
+    });
+
+    return () => observer.disconnect();
+  }, [formFields]);
 
   useEffect(() => {
     const checkAuth = async () => {
@@ -507,7 +542,15 @@ export default function BuilderPage() {
                               <Box h="1px" flex={1} bg="customGray.200" />
                             </HStack>
                             {formFields.map((field, index) => (
-                              <Box key={field.id} w="100%">
+                              <Box
+                                key={field.id}
+                                w="100%"
+                                id={field.id}
+                                ref={(el) => {
+                                  if (el) fieldRefs.current[field.id] = el;
+                                }}
+                                animation={visibleFields.has(field.id) ? `${slideUpFade} 0.6s ease-out forwards` : "none"}
+                              >
                                 <HStack align="center" spacing="8px" w="100%" mb="12px">
                                   <Box flex={1}>
                                     {field.type === "textarea" ? (

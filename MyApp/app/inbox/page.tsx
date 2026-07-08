@@ -34,7 +34,6 @@ import {
   Textarea,
 } from "@chakra-ui/react";
 import { DeleteIcon, SettingsIcon } from "@chakra-ui/icons";
-import { InboxSkeleton } from "@/app/components/SkeletonLoader";
 
 interface Message {
   id: number;

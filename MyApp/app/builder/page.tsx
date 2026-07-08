@@ -676,7 +676,7 @@ export default function BuilderPage() {
                         </VStack>
                       </Box>
                     </VStack>
-                    <VStack align="stretch" spacing="16px" w="340px" p="24px" bg="white" border="1px solid" borderColor="customGray.200" overflowY="auto" borderRadius="8px">
+                    <VStack align="stretch" spacing="16px" w="340px" h="100%" p="24px" bg="white" border="1px solid" borderColor="customGray.200" overflowY="auto">
                       <VStack align="start" spacing="8px" w="100%" p="0">
                         <Text fontSize="sm" fontWeight="medium" color="customGray.800">
                           Title

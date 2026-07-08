@@ -500,9 +500,9 @@ export default function BuilderPage() {
                   Calendar
                 </Tab>
               </TabList>
-              <TabPanels flex={1} overflow="hidden">
+              <TabPanels flex={1} overflow="hidden" h="100%">
                 <TabPanel h="100%" p="0" overflow="hidden">
-                  <HStack align="flex-start" spacing="0" h="100%" p="0" m="0">
+                  <HStack align="flex-start" spacing="0" h="100%" w="100%" p="0" m="0" overflow="hidden">
                     <VStack align="center" justify="flex-start" flex={1} p="54px" bg="customDark.2" spacing={0} h="100%" overflowY="auto" sx={{
                       '&::-webkit-scrollbar': {
                         width: '6px',
@@ -661,7 +661,21 @@ export default function BuilderPage() {
                         </VStack>
                       </Box>
                     </VStack>
-                    <VStack align="stretch" spacing="16px" w="340px" h="100%" p="24px" bg="white" borderLeft="1px solid" borderLeftColor="customGray.200" overflow="hidden">
+                    <VStack align="stretch" spacing="16px" w="340px" h="100%" p="24px" bg="white" borderLeft="1px solid" borderLeftColor="customGray.200" overflowY="auto" sx={{
+                      '&::-webkit-scrollbar': {
+                        width: '6px',
+                      },
+                      '&::-webkit-scrollbar-track': {
+                        bg: 'transparent',
+                      },
+                      '&::-webkit-scrollbar-thumb': {
+                        bg: 'rgba(0, 0, 0, 0.1)',
+                        borderRadius: '3px',
+                        '&:hover': {
+                          bg: 'rgba(0, 0, 0, 0.2)',
+                        },
+                      },
+                    }}>
                       <VStack align="start" spacing="8px" w="100%" p="0">
                         <Text fontSize="sm" fontWeight="medium" color="customGray.800">
                           Title

@@ -497,8 +497,22 @@ export default function BuilderPage() {
                 </Tab>
               </TabList>
               <TabPanels flex={1} overflow="hidden">
-                <TabPanel h="100%" overflow="auto" p="0">
-                  <HStack align="stretch" spacing="0" h="100%" p="0" m="0">
+                <TabPanel h="100%" p="0">
+                  <HStack align="stretch" spacing="0" h="100%" p="0" m="0" overflowY="auto" sx={{
+                    '&::-webkit-scrollbar': {
+                      width: '6px',
+                    },
+                    '&::-webkit-scrollbar-track': {
+                      bg: 'transparent',
+                    },
+                    '&::-webkit-scrollbar-thumb': {
+                      bg: 'rgba(0, 0, 0, 0.1)',
+                      borderRadius: '3px',
+                      '&:hover': {
+                        bg: 'rgba(0, 0, 0, 0.2)',
+                      },
+                    },
+                  }}>
                     <VStack align="center" justify="center" flex={1} p="54px" bg="customDark.2" spacing={0}>
                       <Box
                         bg="white"
@@ -518,21 +532,7 @@ export default function BuilderPage() {
                               Let's get your Intercom demo started
                             </Heading>
                           </VStack>
-                          <VStack align="stretch" spacing="0" w="100%" maxH="400px" overflowY="auto" sx={{
-                            '&::-webkit-scrollbar': {
-                              width: '6px',
-                            },
-                            '&::-webkit-scrollbar-track': {
-                              bg: 'transparent',
-                            },
-                            '&::-webkit-scrollbar-thumb': {
-                              bg: 'rgba(0, 0, 0, 0.1)',
-                              borderRadius: '3px',
-                              '&:hover': {
-                                bg: 'rgba(0, 0, 0, 0.2)',
-                              },
-                            },
-                          }}>
+                          <VStack align="stretch" spacing="0" w="100%">
                             <HStack w="100%" h="32px" align="center" spacing="8px" mb="12px">
                               <Box h="1px" flex={1} bg="customGray.200" />
                               <Button

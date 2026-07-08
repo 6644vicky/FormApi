@@ -34,6 +34,7 @@ import {
   Textarea,
 } from "@chakra-ui/react";
 import { DeleteIcon, SettingsIcon } from "@chakra-ui/icons";
+import { InboxSkeleton } from "@/app/components/SkeletonLoader";
 
 interface Message {
   id: number;
@@ -256,15 +257,20 @@ export default function InboxPage() {
         isLoading={!hydrated}
       />
 
-      {/* Main Content */}
-      <VStack
-        flex={1}
-        bg="white"
-        spacing={0}
-        align="stretch"
-        overflow="hidden"
-        pt="12px"
-      >
+      {/* Show Skeleton Loader While Loading */}
+      {!hydrated ? (
+        <Box flex={1} bg="white" overflow="hidden">
+          <InboxSkeleton />
+        </Box>
+      ) : (
+        <VStack
+          flex={1}
+          bg="white"
+          spacing={0}
+          align="stretch"
+          overflow="hidden"
+          pt="12px"
+        >
         {/* Header */}
         <HStack
           h="80px"
@@ -370,6 +376,7 @@ export default function InboxPage() {
           ))}
         </VStack>
       </VStack>
+      )}
 
       {/* Feedback Modal */}
       <Modal

@@ -500,9 +500,9 @@ export default function BuilderPage() {
                   Calendar
                 </Tab>
               </TabList>
-              <TabPanels flex={1} overflow="auto">
-                <TabPanel h="100%" p="0" overflow="auto">
-                  <HStack align="flex-start" spacing="0" h="auto" minH="100%" p="0" m="0" overflowY="auto" overflowX="hidden" sx={{
+              <TabPanels flex={1} overflow="hidden">
+                <TabPanel h="100%" p="0" overflow="hidden" display="flex" flexDirection="row">
+                  <HStack align="flex-start" spacing="0" h="100%" w="100%" p="0" m="0" overflowY="auto" overflowX="hidden" sx={{
                     '&::-webkit-scrollbar': {
                       width: '6px',
                     },
@@ -517,7 +517,7 @@ export default function BuilderPage() {
                       },
                     },
                   }}>
-                    <VStack align="center" justify="flex-start" flex={1} p="54px" bg="customDark.2" spacing={0} minH="auto" sx={{
+                    <VStack align="center" justify="flex-start" flex={1} p="54px" bg="customDark.2" spacing={0} w="100%" sx={{
                       '&::-webkit-scrollbar': {
                         width: '6px',
                       },

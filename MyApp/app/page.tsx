@@ -18,6 +18,14 @@ import {
 } from "@chakra-ui/react";
 import { useState } from "react";
 import { supabase } from "@/lib/supabase";
+import { useAuthCallback } from "@/lib/useAuthCallback";
+
+const getCallbackUrl = () => {
+  if (typeof window !== "undefined") {
+    return `${window.location.origin}`;
+  }
+  return "/";
+};
 
 export default function Home() {
   const [email, setEmail] = useState("");
@@ -27,6 +35,9 @@ export default function Home() {
   const [passwordError, setPasswordError] = useState("");
   const router = useRouter();
   const toast = useToast();
+
+  // Handle OAuth callback
+  useAuthCallback();
 
   return (
     <Flex h="100vh" bg="white">
@@ -60,22 +71,33 @@ export default function Home() {
               _focus={{ bg: "customGray.50", borderColor: "customGray.500" }}
               onClick={async () => {
                 setIsLoading(true);
-                const { error } = await supabase.auth.signInWithOAuth({
-                  provider: "google",
-                  options: {
-                    redirectTo: `http://localhost:3000/api/auth/callback`,
-                  },
-                });
-                if (error) {
+                try {
+                  const { error } = await supabase.auth.signInWithOAuth({
+                    provider: "google",
+                    options: {
+                      redirectTo: getCallbackUrl(),
+                    },
+                  });
+                  if (error) {
+                    toast({
+                      title: "Sign in failed",
+                      description: error.message,
+                      status: "error",
+                      duration: 4000,
+                      isClosable: true,
+                    });
+                    setIsLoading(false);
+                  }
+                } catch (err) {
                   toast({
                     title: "Sign in failed",
-                    description: error.message,
+                    description: "An unexpected error occurred",
                     status: "error",
                     duration: 4000,
                     isClosable: true,
                   });
+                  setIsLoading(false);
                 }
-                setIsLoading(false);
               }}
               leftIcon={
                 <Box w={5} h={5} as="img" src="/assets/google-icon.svg" alt="Google" />
@@ -215,24 +237,44 @@ export default function Home() {
                 if (hasError) return;
 
                 setIsLoading(true);
-                const { error } = await supabase.auth.signInWithPassword({
-                  email,
-                  password,
-                });
+                try {
+                  const { data, error } = await supabase.auth.signInWithPassword({
+                    email,
+                    password,
+                  });
 
-                if (error) {
-                  setEmailError("Invalid user or password");
-                  setPasswordError("Invalid user or password");
+                  if (error) {
+                    setEmailError("Invalid email or password");
+                    setPasswordError("Invalid email or password");
+                    toast({
+                      title: "Sign in failed",
+                      description: error.message || "Invalid email or password",
+                      status: "error",
+                      duration: 4000,
+                      isClosable: true,
+                    });
+                    setIsLoading(false);
+                  } else if (data?.session) {
+                    router.push("/inbox");
+                  } else {
+                    toast({
+                      title: "Sign in failed",
+                      description: "No session created",
+                      status: "error",
+                      duration: 4000,
+                      isClosable: true,
+                    });
+                    setIsLoading(false);
+                  }
+                } catch (err) {
                   toast({
                     title: "Sign in failed",
-                    description: "Invalid user or password",
+                    description: "An unexpected error occurred",
                     status: "error",
                     duration: 4000,
                     isClosable: true,
                   });
                   setIsLoading(false);
-                } else {
-                  router.push("/inbox");
                 }
               }}
             >

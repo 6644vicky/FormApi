@@ -497,8 +497,8 @@ export default function BuilderPage() {
                 </Tab>
               </TabList>
               <TabPanels flex={1} overflow="hidden">
-                <TabPanel h="100%" p="0">
-                  <HStack align="stretch" spacing="0" h="100%" p="0" m="0" overflowY="auto" sx={{
+                <TabPanel h="100%" p="0" overflow="hidden">
+                  <HStack align="flex-start" spacing="0" h="100%" p="0" m="0" overflowY="auto" overflowX="hidden" sx={{
                     '&::-webkit-scrollbar': {
                       width: '6px',
                     },
@@ -513,7 +513,7 @@ export default function BuilderPage() {
                       },
                     },
                   }}>
-                    <VStack align="center" justify="center" flex={1} p="54px" bg="customDark.2" spacing={0}>
+                    <VStack align="center" justify="flex-start" flex={1} p="54px" bg="customDark.2" spacing={0} minH="100%">
                       <Box
                         bg="white"
                         border="1px solid"

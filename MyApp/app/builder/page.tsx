@@ -366,6 +366,7 @@ export default function BuilderPage() {
 
       <VStack
         flex={1}
+        h="100vh"
         bg="customGray.100"
         spacing={0}
         align="stretch"
@@ -375,7 +376,7 @@ export default function BuilderPage() {
         pb="12px"
       >
 
-        <HStack flex={1} align="stretch" spacing={0} bg="white" borderRadius="12px" border="1px solid" borderColor="customGray.200" overflow="hidden">
+        <HStack flex={1} h="100%" align="stretch" spacing={0} bg="white" borderRadius="12px" border="1px solid" borderColor="customGray.200" overflow="hidden">
           <VStack w={isWorkspaceListCollapsed ? "0px" : "255px"} h="100%" align="stretch" spacing={0} borderRight={isWorkspaceListCollapsed ? "none" : "1px solid"} borderColor="customGray.200" overflow="hidden" transition="all 0.3s ease">
             <HStack h="64px" align="center" justify="space-between" pl="20px" pr="16px" pt="14px" pb="16px">
               <Text fontSize="base" fontWeight="medium" color="customGray.800">
@@ -489,7 +490,7 @@ export default function BuilderPage() {
                 </Button>
               </HStack>
             </HStack>
-            <Tabs flex={1} display="flex" flexDirection="column">
+            <Tabs flex={1} display="flex" flexDirection="column" overflow="hidden">
               <TabList pl="20px" borderBottom="1px solid" borderColor="customGray.200">
                 <Tab fontSize="sm" color="customGray.500" pb="12px" mb="-1px" borderBottom="2px solid transparent" _selected={{ color: "customGray.800", borderColor: "customGray.800", bg: "white" }} display="flex" alignItems="center" gap="6px">
                   <Box w="8px" h="8px" borderRadius="full" bg={selectedAgent && agents.find(a => a.name === selectedAgent)?.services.includes("form") ? "#60A5FA" : "customGray.300"} />
@@ -661,7 +662,7 @@ export default function BuilderPage() {
                         </VStack>
                       </Box>
                     </VStack>
-                    <VStack align="stretch" spacing="16px" w="340px" h="100%" p="24px" bg="white" borderLeft="1px solid" borderLeftColor="customGray.200" overflowY="auto" sx={{
+                    <VStack align="stretch" spacing="16px" w="340px" h="100%" p="24px" bg="white" borderLeft="1px solid" borderLeftColor="customGray.200" overflowY="auto" overflow="hidden" sx={{
                       '&::-webkit-scrollbar': {
                         width: '6px',
                       },
@@ -676,7 +677,7 @@ export default function BuilderPage() {
                         },
                       },
                     }}>
-                      <VStack align="start" spacing="8px" w="100%" p="0">
+                      <VStack align="start" spacing="8px" w="100%" p="0" flex="none">
                         <Text fontSize="sm" fontWeight="medium" color="customGray.800">
                           Title
                         </Text>
@@ -694,7 +695,7 @@ export default function BuilderPage() {
                           borderRadius="base"
                         />
                       </VStack>
-                      <VStack align="start" spacing="8px" w="100%" p="0">
+                      <VStack align="start" spacing="8px" w="100%" p="0" flex="none">
                         <Text fontSize="sm" fontWeight="medium" color="customGray.800">
                           Title align
                         </Text>
@@ -707,7 +708,7 @@ export default function BuilderPage() {
                           </Button>
                         </HStack>
                       </VStack>
-                      <VStack align="start" spacing="8px" w="100%" p="0">
+                      <VStack align="start" spacing="8px" w="100%" p="0" flex="none">
                         <Text fontSize="sm" fontWeight="medium" color="customGray.800">
                           Icon
                         </Text>
@@ -715,7 +716,7 @@ export default function BuilderPage() {
                           Upload
                         </Button>
                       </VStack>
-                      <VStack align="start" spacing="8px" w="100%" p="0">
+                      <VStack align="start" spacing="8px" w="100%" p="0" flex="none">
                         <Text fontSize="sm" fontWeight="medium" color="customGray.800">
                           Theme
                         </Text>
@@ -731,12 +732,31 @@ export default function BuilderPage() {
                     </VStack>
                   </HStack>
                 </TabPanel>
-                <TabPanel h="100%" overflow="auto">
-                  <VStack align="center" justify="center" h="100%">
-                    <Text fontSize="lg" color="customGray.800">
-                      Calendar
-                    </Text>
-                  </VStack>
+                <TabPanel h="100%" p="0" overflow="hidden">
+                  <HStack align="flex-start" spacing="0" h="100%" w="100%" overflow="hidden">
+                    <VStack align="center" justify="center" flex={1} h="100%" bg="customDark.2" p="54px">
+                      <Text fontSize="lg" color="customGray.800">
+                        Calendar
+                      </Text>
+                    </VStack>
+                    <VStack align="stretch" spacing="16px" w="340px" h="100%" p="24px" bg="white" borderLeft="1px solid" borderLeftColor="customGray.200" overflowY="auto" sx={{
+                      '&::-webkit-scrollbar': {
+                        width: '6px',
+                      },
+                      '&::-webkit-scrollbar-track': {
+                        bg: 'transparent',
+                      },
+                      '&::-webkit-scrollbar-thumb': {
+                        bg: 'rgba(0, 0, 0, 0.1)',
+                        borderRadius: '3px',
+                        '&:hover': {
+                          bg: 'rgba(0, 0, 0, 0.2)',
+                        },
+                      },
+                    }}>
+                      <Text fontSize="sm" color="customGray.500">Calendar settings would go here</Text>
+                    </VStack>
+                  </HStack>
                 </TabPanel>
               </TabPanels>
             </Tabs>

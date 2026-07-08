@@ -7,7 +7,7 @@ import { useRouter } from "next/navigation";
 import { keyframes } from "@emotion/react";
 import { supabase } from "@/lib/supabase";
 import { deleteUserAccount } from "@/app/actions/deleteUser";
-import { getAgents, createAgent } from "@/app/actions/agentActions";
+import { getAgents, createAgent, deleteAgent } from "@/app/actions/agentActions";
 import CryptoJS from "crypto-js";
 import Sidebar from "@/app/components/Sidebar";
 import {
@@ -366,6 +366,7 @@ export default function BuilderPage() {
 
       <VStack
         flex={1}
+        h="100vh"
         bg="customGray.100"
         spacing={0}
         align="stretch"
@@ -375,7 +376,7 @@ export default function BuilderPage() {
         pb="12px"
       >
 
-        <HStack flex={1} align="stretch" spacing={0} bg="white" borderRadius="12px" border="1px solid" borderColor="customGray.200" overflow="hidden">
+        <HStack flex={1} h="100%" align="stretch" spacing={0} bg="white" borderRadius="12px" border="1px solid" borderColor="customGray.200" overflow="hidden">
           <VStack w={isWorkspaceListCollapsed ? "0px" : "255px"} h="100%" align="stretch" spacing={0} borderRight={isWorkspaceListCollapsed ? "none" : "1px solid"} borderColor="customGray.200" overflow="hidden" transition="all 0.3s ease">
             <HStack h="64px" align="center" justify="space-between" pl="20px" pr="16px" pt="14px" pb="16px">
               <Text fontSize="base" fontWeight="medium" color="customGray.800">
@@ -489,7 +490,7 @@ export default function BuilderPage() {
                 </Button>
               </HStack>
             </HStack>
-            <Tabs flex={1} display="flex" flexDirection="column">
+            <Tabs flex={1} display="flex" flexDirection="column" overflow="hidden">
               <TabList pl="20px" borderBottom="1px solid" borderColor="customGray.200">
                 <Tab fontSize="sm" color="customGray.500" pb="12px" mb="-1px" borderBottom="2px solid transparent" _selected={{ color: "customGray.800", borderColor: "customGray.800", bg: "white" }} display="flex" alignItems="center" gap="6px">
                   <Box w="8px" h="8px" borderRadius="full" bg={selectedAgent && agents.find(a => a.name === selectedAgent)?.services.includes("form") ? "#60A5FA" : "customGray.300"} />
@@ -500,24 +501,24 @@ export default function BuilderPage() {
                   Calendar
                 </Tab>
               </TabList>
-              <TabPanels flex={1} overflow="hidden">
+              <TabPanels flex={1} overflow="hidden" h="100%">
                 <TabPanel h="100%" p="0" overflow="hidden">
-                  <HStack align="flex-start" spacing="0" h="100%" p="0" m="0" overflowY="auto" overflowX="hidden" sx={{
-                    '&::-webkit-scrollbar': {
-                      width: '6px',
-                    },
-                    '&::-webkit-scrollbar-track': {
-                      bg: 'transparent',
-                    },
-                    '&::-webkit-scrollbar-thumb': {
-                      bg: 'rgba(0, 0, 0, 0.1)',
-                      borderRadius: '3px',
-                      '&:hover': {
-                        bg: 'rgba(0, 0, 0, 0.2)',
+                  <HStack align="flex-start" spacing="0" h="100%" w="100%" p="0" m="0" overflow="hidden">
+                    <VStack align="center" justify="flex-start" flex={1} p="54px" bg="customDark.2" spacing={0} h="100%" overflowY="auto" sx={{
+                      '&::-webkit-scrollbar': {
+                        width: '6px',
                       },
-                    },
-                  }}>
-                    <VStack align="center" justify="flex-start" flex={1} p="54px" bg="customDark.2" spacing={0} minH="100%">
+                      '&::-webkit-scrollbar-track': {
+                        bg: 'transparent',
+                      },
+                      '&::-webkit-scrollbar-thumb': {
+                        bg: 'rgba(0, 0, 0, 0.1)',
+                        borderRadius: '3px',
+                        '&:hover': {
+                          bg: 'rgba(0, 0, 0, 0.2)',
+                        },
+                      },
+                    }}>
                       <Box
                         bg="white"
                         border="1px solid"
@@ -661,8 +662,22 @@ export default function BuilderPage() {
                         </VStack>
                       </Box>
                     </VStack>
-                    <VStack align="stretch" spacing="16px" w="340px" p="24px" bg="white" borderLeft="1px solid" borderLeftColor="customGray.200" overflowY="auto">
-                      <VStack align="start" spacing="8px" w="100%" p="0">
+                    <VStack align="stretch" spacing="16px" w="340px" h="100%" p="24px" bg="white" borderLeft="1px solid" borderLeftColor="customGray.200" overflowY="auto" overflow="hidden" sx={{
+                      '&::-webkit-scrollbar': {
+                        width: '6px',
+                      },
+                      '&::-webkit-scrollbar-track': {
+                        bg: 'transparent',
+                      },
+                      '&::-webkit-scrollbar-thumb': {
+                        bg: 'rgba(0, 0, 0, 0.1)',
+                        borderRadius: '3px',
+                        '&:hover': {
+                          bg: 'rgba(0, 0, 0, 0.2)',
+                        },
+                      },
+                    }}>
+                      <VStack align="start" spacing="8px" w="100%" p="0" flex="none">
                         <Text fontSize="sm" fontWeight="medium" color="customGray.800">
                           Title
                         </Text>
@@ -680,7 +695,7 @@ export default function BuilderPage() {
                           borderRadius="base"
                         />
                       </VStack>
-                      <VStack align="start" spacing="8px" w="100%" p="0">
+                      <VStack align="start" spacing="8px" w="100%" p="0" flex="none">
                         <Text fontSize="sm" fontWeight="medium" color="customGray.800">
                           Title align
                         </Text>
@@ -693,7 +708,7 @@ export default function BuilderPage() {
                           </Button>
                         </HStack>
                       </VStack>
-                      <VStack align="start" spacing="8px" w="100%" p="0">
+                      <VStack align="start" spacing="8px" w="100%" p="0" flex="none">
                         <Text fontSize="sm" fontWeight="medium" color="customGray.800">
                           Icon
                         </Text>
@@ -701,7 +716,7 @@ export default function BuilderPage() {
                           Upload
                         </Button>
                       </VStack>
-                      <VStack align="start" spacing="8px" w="100%" p="0">
+                      <VStack align="start" spacing="8px" w="100%" p="0" flex="none">
                         <Text fontSize="sm" fontWeight="medium" color="customGray.800">
                           Theme
                         </Text>
@@ -717,12 +732,31 @@ export default function BuilderPage() {
                     </VStack>
                   </HStack>
                 </TabPanel>
-                <TabPanel h="100%" overflow="auto">
-                  <VStack align="center" justify="center" h="100%">
-                    <Text fontSize="lg" color="customGray.800">
-                      Calendar
-                    </Text>
-                  </VStack>
+                <TabPanel h="100%" p="0" overflow="hidden">
+                  <HStack align="flex-start" spacing="0" h="100%" w="100%" overflow="hidden">
+                    <VStack align="center" justify="center" flex={1} h="100%" bg="customDark.2" p="54px">
+                      <Text fontSize="lg" color="customGray.800">
+                        Calendar
+                      </Text>
+                    </VStack>
+                    <VStack align="stretch" spacing="16px" w="340px" h="100%" p="24px" bg="white" borderLeft="1px solid" borderLeftColor="customGray.200" overflowY="auto" sx={{
+                      '&::-webkit-scrollbar': {
+                        width: '6px',
+                      },
+                      '&::-webkit-scrollbar-track': {
+                        bg: 'transparent',
+                      },
+                      '&::-webkit-scrollbar-thumb': {
+                        bg: 'rgba(0, 0, 0, 0.1)',
+                        borderRadius: '3px',
+                        '&:hover': {
+                          bg: 'rgba(0, 0, 0, 0.2)',
+                        },
+                      },
+                    }}>
+                      <Text fontSize="sm" color="customGray.500">Calendar settings would go here</Text>
+                    </VStack>
+                  </HStack>
                 </TabPanel>
               </TabPanels>
             </Tabs>
@@ -1059,8 +1093,36 @@ export default function BuilderPage() {
                   if (selectedAgent) {
                     setIsDeleting(true);
                     try {
-                      await new Promise(resolve => setTimeout(resolve, 1000));
+                      // Get current user session
+                      const { data: { session } } = await supabase.auth.getSession();
+                      const userId = session?.user?.id;
 
+                      if (!userId) {
+                        toast({
+                          title: "Error",
+                          description: "User session not found",
+                          status: "error",
+                          isClosable: true,
+                          position: "top",
+                        });
+                        return;
+                      }
+
+                      // Delete from Supabase first
+                      const success = await deleteAgent(userId, selectedAgent);
+
+                      if (!success) {
+                        toast({
+                          title: "Error",
+                          description: "Failed to delete workspace. Please try again.",
+                          status: "error",
+                          isClosable: true,
+                          position: "top",
+                        });
+                        return;
+                      }
+
+                      // Only update local state after successful Supabase deletion
                       const updatedAgents = agents.filter(a => a.name !== selectedAgent);
                       setAgents(updatedAgents);
                       localStorage.setItem("workspace_agents", JSON.stringify(updatedAgents));

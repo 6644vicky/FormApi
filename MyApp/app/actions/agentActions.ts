@@ -53,3 +53,23 @@ export async function createAgent(userId: string, agent: Agent): Promise<boolean
     return false;
   }
 }
+
+export async function deleteAgent(userId: string, agentName: string): Promise<boolean> {
+  try {
+    const { error } = await supabase
+      .from("workspace_agents")
+      .delete()
+      .eq("user_id", userId)
+      .eq("name", agentName);
+
+    if (error) {
+      console.error("Error deleting agent:", error);
+      return false;
+    }
+
+    return true;
+  } catch (error) {
+    console.error("Error deleting agent:", error);
+    return false;
+  }
+}

@@ -88,6 +88,8 @@ export default function BuilderPage() {
     const cached = localStorage.getItem("user_avatar");
     if (cached) {
       setAvatarUrl(cached);
+
+      
     }
 
     const loadAgents = async () => {

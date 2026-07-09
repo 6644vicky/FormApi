@@ -667,8 +667,8 @@ export default function BuilderPage() {
                             </Text>
                             <HStack justify="space-between" w="100%">
                               <Text fontSize="xs" fontWeight="medium" color="customGray.600">Full Width</Text>
-                              <Box w="44px" h="24px" bg="customGray.300" borderRadius="full" position="relative" cursor="pointer">
-                                <Box w="20px" h="20px" bg="white" borderRadius="full" position="absolute" top="2px" left="2px" />
+                              <Box w="36px" h="20px" bg="customGray.300" borderRadius="full" position="relative" cursor="pointer">
+                                <Box w="16px" h="16px" bg="white" borderRadius="full" position="absolute" top="2px" left="2px" />
                               </Box>
                             </HStack>
                           </VStack>

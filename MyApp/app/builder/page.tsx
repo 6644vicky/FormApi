@@ -661,7 +661,7 @@ export default function BuilderPage() {
                       <Box w="100%" flex="none">
                         <VStack align="start" spacing="0" w="calc(100% + 32px)" ml="-16px" mr="-16px" p="0" flex="none">
                           {/* Full Width Toggle */}
-                          <VStack align="start" spacing="6px" w="100%" pl="16px" pr="16px" pb="16px" flex="none" borderBottom="1px solid" borderBottomColor="customGray.200">
+                          <VStack align="start" spacing="18px" w="100%" pl="16px" pr="16px" pb="16px" flex="none" borderBottom="1px solid" borderBottomColor="customGray.200">
                             <Text fontSize="sm" fontWeight="medium" color="customGray.800" w="100%">
                               Form Properties
                             </Text>

@@ -114,7 +114,7 @@ export default function InboxPage() {
           const email = session.user.email || "";
           setUserEmail(email);
 
-          const googlePicture = session.user.user_metadata?.picture || session.user.user_metadata?.avatar_url;
+          const googlePicture = session.user.user_metadata?.picture || session.user.user_metadata?.avatar_url || session.user.identities?.[0]?.identity_data?.picture;
 
           if (googlePicture) {
             const cachedUrl = localStorage.getItem("user_avatar");
@@ -130,7 +130,7 @@ export default function InboxPage() {
           }
 
           const emailHash = hashEmail(email.toLowerCase().trim());
-          const gravatarUrl = `https://www.gravatar.com/avatar/${emailHash}?d=404&s=128`;
+          const gravatarUrl = `https://www.gravatar.com/avatar/${emailHash}?d=identicon&s=128`;
 
           const cachedUrl = localStorage.getItem("user_avatar");
           if (cachedUrl === gravatarUrl) {
@@ -145,6 +145,9 @@ export default function InboxPage() {
             if (response.ok) {
               setAvatarUrl(gravatarUrl);
               localStorage.setItem("user_avatar", gravatarUrl);
+            } else {
+              const initials = email.charAt(0).toUpperCase();
+              setAvatarUrl("");
             }
           } catch (error) {
             console.error("Error fetching Gravatar:", error);

@@ -438,8 +438,8 @@ export default function BuilderPage() {
               ))}
             </VStack>
           </VStack>
-          <VStack flex={1} h="100%" align="center" spacing="16px" pt="16px" px="16px" bg="customDark.2" overflow="hidden">
-            <HStack w="100%" maxW="1200px" h="auto" align="center" justify="space-between" bg="white" px="20px" py="12px" borderRadius="12px" border="1px solid" borderColor="customGray.200" boxShadow="0 2px 8px rgba(0, 0, 0, 0.06)">
+          <VStack flex={1} h="100%" align="stretch" spacing={0} overflow="hidden">
+            <HStack h="64px" align="center" justify="space-between" pl="20px" pr="16px" pt="14px" pb="18px">
               <HStack spacing="12px" align="center">
                 <Tooltip label={isWorkspaceListCollapsed ? "Expand" : "Collapse"} placement="bottom">
                   <Button
@@ -456,21 +456,55 @@ export default function BuilderPage() {
                     </svg>
                   </Button>
                 </Tooltip>
-                <Text fontSize="sm" fontWeight="medium" color="customGray.800">
+                <Text fontSize="lg" fontWeight="medium" color="customGray.800">
                   {selectedAgent || "Builder"}
                 </Text>
               </HStack>
               <HStack spacing="8px">
-                <Button size="sm" variant="outline" borderColor="customGray.200" color="customGray.800" _hover={{ bg: "customGray.50" }} borderRadius="8px" fontSize="sm" fontWeight="medium">
-                  Form
-                </Button>
-                <Button size="sm" variant="outline" borderColor="customGray.200" color="customGray.500" _hover={{ bg: "customGray.50" }} borderRadius="8px" fontSize="sm" fontWeight="medium">
-                  Calendar
+                <Menu>
+                  <MenuButton
+                    as={Button}
+                    size="sm"
+                    variant="ghost"
+                    color="customGray.800"
+                    bg="customGray.100"
+                    _hover={{ bg: "customGray.200" }}
+                    p="6px"
+                    minW="auto"
+                    borderRadius="8px"
+                  >
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                      <path d="M12 5v2m0 6v2m0 6v2" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                      <circle cx="12" cy="6" r="1" fill="currentColor"/>
+                      <circle cx="12" cy="13" r="1" fill="currentColor"/>
+                      <circle cx="12" cy="20" r="1" fill="currentColor"/>
+                    </svg>
+                  </MenuButton>
+                  <MenuList>
+                    <MenuItem fontSize="sm" color="customGray.800">
+                      Archive
+                    </MenuItem>
+                    <MenuItem fontSize="sm" color="#FF6B6B" onClick={onDeleteOpen}>
+                      Delete
+                    </MenuItem>
+                  </MenuList>
+                </Menu>
+                <Button size="sm" bg="customGray.800" color="white" _hover={{ bg: "customGray.700" }}>
+                  Save changes
                 </Button>
               </HStack>
             </HStack>
             <Tabs flex={1} display="flex" flexDirection="column" overflow="hidden">
-              <TabList display="none"></TabList>
+              <TabList pl="20px" borderBottom="1px solid" borderColor="customGray.200">
+                <Tab fontSize="sm" color="customGray.500" pb="12px" mb="-1px" borderBottom="2px solid transparent" _selected={{ color: "customGray.800", borderColor: "customGray.800", bg: "white" }} display="flex" alignItems="center" gap="6px">
+                  <Box w="8px" h="8px" borderRadius="full" bg={selectedAgent && agents.find(a => a.name === selectedAgent)?.services.includes("form") ? "#60A5FA" : "customGray.300"} />
+                  Form
+                </Tab>
+                <Tab fontSize="sm" color="customGray.500" pb="12px" mb="-1px" borderBottom="2px solid transparent" _selected={{ color: "customGray.800", borderColor: "customGray.800", bg: "white" }} display="flex" alignItems="center" gap="6px">
+                  <Box w="8px" h="8px" borderRadius="full" bg={selectedAgent && agents.find(a => a.name === selectedAgent)?.services.includes("calendar") ? "#F472B6" : "customGray.300"} />
+                  Calendar
+                </Tab>
+              </TabList>
               <TabPanels flex={1} overflow="hidden" h="100%">
                 <TabPanel h="100%" p="0" overflow="hidden">
                   <HStack align="flex-start" spacing="0" h="100%" w="100%" p="0" m="0" overflow="hidden">

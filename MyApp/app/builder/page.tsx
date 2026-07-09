@@ -675,11 +675,11 @@ export default function BuilderPage() {
                             <HStack spacing="12px" w="100%">
                               <HStack flex={1} spacing="8px">
                                 <Text fontSize="xs" color="customGray.600" minW="fit-content">Width</Text>
-                                <Input placeholder="16px" fontSize="xs" border="1px solid" borderColor="customGray.300" h="28px" w="78px" px="8px" py="6px" borderRadius="base" />
+                                <Input placeholder="16px" fontSize="xs" border="1px solid" borderColor="customGray.300" h="28px" w="78px" px="8px" py="6px" borderRadius="base" onChange={(e) => { e.target.value = e.target.value.replace(/[^0-9px]/gi, ''); }} />
                               </HStack>
                               <HStack flex={1} spacing="8px">
                                 <Text fontSize="xs" color="customGray.600" minW="fit-content">Height</Text>
-                                <Input placeholder="16px" fontSize="xs" border="1px solid" borderColor="customGray.300" h="28px" w="78px" px="8px" py="6px" borderRadius="base" />
+                                <Input placeholder="16px" fontSize="xs" border="1px solid" borderColor="customGray.300" h="28px" w="78px" px="8px" py="6px" borderRadius="base" onChange={(e) => { e.target.value = e.target.value.replace(/[^0-9px]/gi, ''); }} />
                               </HStack>
                             </HStack>
                           </VStack>
@@ -687,7 +687,7 @@ export default function BuilderPage() {
                           {/* Form Padding */}
                           <VStack align="start" spacing="8px" w="100%" pl="16px" pr="16px" pt="16px" pb="16px" flex="none" borderBottom="1px solid" borderBottomColor="customGray.200">
                             <Text fontSize="xs" fontWeight="medium" color="customGray.600">Form padding</Text>
-                            <Input placeholder="16px" fontSize="sm" border="1px solid" borderColor="customGray.300" h="32px" borderRadius="base" />
+                            <Input placeholder="16px" fontSize="sm" border="1px solid" borderColor="customGray.300" h="32px" borderRadius="base" onChange={(e) => { e.target.value = e.target.value.replace(/[^0-9px]/gi, ''); }} />
                           </VStack>
 
                           {/* Form Colour */}
@@ -708,7 +708,7 @@ export default function BuilderPage() {
                           {/* Border Radius */}
                           <VStack align="start" spacing="8px" w="100%" pl="16px" pr="16px" pt="16px" pb="16px" flex="none" borderBottom="1px solid" borderBottomColor="customGray.200">
                             <Text fontSize="xs" fontWeight="medium" color="customGray.600">Border Radius</Text>
-                            <Input placeholder="16px" fontSize="sm" border="1px solid" borderColor="customGray.300" h="32px" borderRadius="base" />
+                            <Input placeholder="16px" fontSize="sm" border="1px solid" borderColor="customGray.300" h="32px" borderRadius="base" onChange={(e) => { e.target.value = e.target.value.replace(/[^0-9px]/gi, ''); }} />
                           </VStack>
 
                           {/* Border Colour */}

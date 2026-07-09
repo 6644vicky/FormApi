@@ -644,7 +644,7 @@ export default function BuilderPage() {
                         </VStack>
                       </Box>
                     </VStack>
-                    <VStack align="stretch" spacing="16px" w="300px" h="100%" p="24px" bg="white" borderLeft="1px solid" borderLeftColor="customGray.200" overflowY="auto" overflowX="hidden" sx={{
+                    <VStack align="stretch" spacing="16px" w="300px" h="100%" pl="0" pr="24px" pt="0" pb="24px" bg="white" borderLeft="1px solid" borderLeftColor="customGray.200" overflowY="auto" overflowX="hidden" sx={{
                       '&::-webkit-scrollbar': {
                         width: '0px',
                       },

@@ -669,7 +669,7 @@ export default function BuilderPage() {
                             </Text>
                             <HStack justify="space-between" w="100%">
                               <Text fontSize="xs" fontWeight="medium" color="customGray.600">Full Width</Text>
-                              <Box w="36px" h="20px" bg={isFormFullWidth ? "customGray.600" : "customGray.300"} borderRadius="full" position="relative" cursor="pointer" onClick={() => setIsFormFullWidth(!isFormFullWidth)}>
+                              <Box w="36px" h="20px" bg={isFormFullWidth ? "customGray.800" : "customGray.300"} borderRadius="full" position="relative" cursor="pointer" onClick={() => setIsFormFullWidth(!isFormFullWidth)}>
                                 <Box w="16px" h="16px" bg="white" borderRadius="full" position="absolute" top="2px" left={isFormFullWidth ? "18px" : "2px"} transition="all 0.2s" />
                               </Box>
                             </HStack>

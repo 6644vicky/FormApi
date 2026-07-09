@@ -679,11 +679,11 @@ export default function BuilderPage() {
                             <HStack spacing="8px" w="100%">
                               <VStack flex={1} align="start" spacing="4px">
                                 <Text fontSize="xs" color="customGray.600">Width</Text>
-                                <Input placeholder="12px" fontSize="xs" border="1px solid" borderColor="customGray.300" h="28px" borderRadius="base" />
+                                <Input placeholder="16px" fontSize="xs" border="1px solid" borderColor="customGray.300" h="28px" borderRadius="base" />
                               </VStack>
                               <VStack flex={1} align="start" spacing="4px">
                                 <Text fontSize="xs" color="customGray.600">Height</Text>
-                                <Input placeholder="12px" fontSize="xs" border="1px solid" borderColor="customGray.300" h="28px" borderRadius="base" />
+                                <Input placeholder="16px" fontSize="xs" border="1px solid" borderColor="customGray.300" h="28px" borderRadius="base" />
                               </VStack>
                             </HStack>
                           </VStack>
@@ -691,7 +691,7 @@ export default function BuilderPage() {
                           {/* Form Padding */}
                           <VStack align="start" spacing="8px" w="100%" px="24px" pt="16px" pb="16px" flex="none" borderBottom="1px solid" borderBottomColor="customGray.200">
                             <Text fontSize="sm" color="customGray.800">Form padding</Text>
-                            <Input placeholder="12px" fontSize="sm" border="1px solid" borderColor="customGray.300" h="32px" borderRadius="base" />
+                            <Input placeholder="16px" fontSize="sm" border="1px solid" borderColor="customGray.300" h="32px" borderRadius="base" />
                           </VStack>
 
                           {/* Form Colour */}
@@ -712,7 +712,7 @@ export default function BuilderPage() {
                           {/* Border Radius */}
                           <VStack align="start" spacing="8px" w="100%" px="24px" pt="16px" pb="16px" flex="none" borderBottom="1px solid" borderBottomColor="customGray.200">
                             <Text fontSize="sm" color="customGray.800">Border Radius</Text>
-                            <Input placeholder="12px" fontSize="sm" border="1px solid" borderColor="customGray.300" h="32px" borderRadius="base" />
+                            <Input placeholder="16px" fontSize="sm" border="1px solid" borderColor="customGray.300" h="32px" borderRadius="base" />
                           </VStack>
 
                           {/* Border Colour */}

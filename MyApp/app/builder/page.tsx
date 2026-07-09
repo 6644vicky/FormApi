@@ -439,27 +439,22 @@ export default function BuilderPage() {
             </VStack>
           </VStack>
           <VStack flex={1} h="100%" align="stretch" spacing={0} overflow="hidden">
-            <HStack h="64px" align="center" justify="space-between" pl="20px" pr="16px" pt="14px" pb="18px">
-              <HStack spacing="12px" align="center">
-                <Tooltip label={isWorkspaceListCollapsed ? "Expand" : "Collapse"} placement="bottom">
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    p="6px"
-                    minW="auto"
-                    color="customGray.800"
-                    _hover={{ bg: "customGray.50" }}
-                    onClick={() => setIsWorkspaceListCollapsed(!isWorkspaceListCollapsed)}
-                  >
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                      <path d="M3 6h18M3 12h18M3 18h18" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                    </svg>
-                  </Button>
-                </Tooltip>
-                <Text fontSize="lg" fontWeight="medium" color="customGray.800">
-                  {selectedAgent || "Builder"}
-                </Text>
-              </HStack>
+            <HStack h="auto" align="center" justify="space-between" pl="20px" pr="16px" pt="12px" pb="12px" borderBottom="1px solid" borderColor="customGray.200">
+              <Tooltip label={isWorkspaceListCollapsed ? "Expand" : "Collapse"} placement="bottom">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  p="6px"
+                  minW="auto"
+                  color="customGray.800"
+                  _hover={{ bg: "customGray.50" }}
+                  onClick={() => setIsWorkspaceListCollapsed(!isWorkspaceListCollapsed)}
+                >
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M3 6h18M3 12h18M3 18h18" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                  </svg>
+                </Button>
+              </Tooltip>
               <HStack spacing="8px">
                 <Menu>
                   <MenuButton
@@ -494,6 +489,11 @@ export default function BuilderPage() {
                 </Button>
               </HStack>
             </HStack>
+            <VStack align="stretch" spacing={0} pl="20px" pr="16px" py="12px">
+              <Text fontSize="lg" fontWeight="medium" color="customGray.800">
+                {selectedAgent || "Builder"}
+              </Text>
+            </VStack>
             <Tabs flex={1} display="flex" flexDirection="column" overflow="hidden">
               <TabList pl="20px" borderBottom="1px solid" borderColor="customGray.200">
                 <Tab fontSize="sm" color="customGray.500" pb="12px" mb="-1px" borderBottom="2px solid transparent" _selected={{ color: "customGray.800", borderColor: "customGray.800", bg: "white" }} display="flex" alignItems="center" gap="6px">

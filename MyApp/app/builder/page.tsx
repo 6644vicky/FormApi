@@ -83,6 +83,7 @@ export default function BuilderPage() {
   ]);
   const [insertAtIndex, setInsertAtIndex] = useState<number>(0);
   const [visibleFields, setVisibleFields] = useState<Set<string>>(new Set());
+  const [isFormFullWidth, setIsFormFullWidth] = useState(false);
   const fieldRefs = useRef<{ [key: string]: HTMLDivElement | null }>({});
 
   useEffect(() => {
@@ -524,12 +525,13 @@ export default function BuilderPage() {
                     }}>
                       <Box
                         bg="linear-gradient(135deg, #F9FAFB 0%, #FFFFFF 100%)"
-                        borderRadius="16px"
+                        borderRadius={isFormFullWidth ? "0px" : "16px"}
                         p="32px"
-                        maxW="500px"
-                        boxShadow="0 4px 12px rgba(0, 0, 0, 0.08)"
+                        maxW={isFormFullWidth ? "100%" : "500px"}
+                        w={isFormFullWidth ? "100%" : "auto"}
+                        boxShadow={isFormFullWidth ? "none" : "0 4px 12px rgba(0, 0, 0, 0.08)"}
                       >
-                        <VStack align="stretch" spacing="24px" w="100%">
+                        <VStack align={isFormFullWidth ? "center" : "stretch"} spacing="24px" w="100%">
                           <VStack align="center" spacing="8px" w="100%">
                             <Text fontSize="xs" fontWeight="medium" color="customGray.500">
                               Typeform
@@ -667,8 +669,8 @@ export default function BuilderPage() {
                             </Text>
                             <HStack justify="space-between" w="100%">
                               <Text fontSize="xs" fontWeight="medium" color="customGray.600">Full Width</Text>
-                              <Box w="36px" h="20px" bg="customGray.300" borderRadius="full" position="relative" cursor="pointer">
-                                <Box w="16px" h="16px" bg="white" borderRadius="full" position="absolute" top="2px" left="2px" />
+                              <Box w="36px" h="20px" bg={isFormFullWidth ? "customGray.600" : "customGray.300"} borderRadius="full" position="relative" cursor="pointer" onClick={() => setIsFormFullWidth(!isFormFullWidth)}>
+                                <Box w="16px" h="16px" bg="white" borderRadius="full" position="absolute" top="2px" left={isFormFullWidth ? "18px" : "2px"} transition="all 0.2s" />
                               </Box>
                             </HStack>
                             {/* Width and Height */}

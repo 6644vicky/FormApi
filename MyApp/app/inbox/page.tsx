@@ -124,13 +124,20 @@ export default function InboxPage() {
               }
               return;
             }
-            setAvatarUrl(googlePicture);
-            localStorage.setItem("user_avatar", googlePicture);
-            return;
+            try {
+              const response = await fetch(googlePicture, { mode: 'no-cors' });
+              if (response.ok || response.status === 0) {
+                setAvatarUrl(googlePicture);
+                localStorage.setItem("user_avatar", googlePicture);
+                return;
+              }
+            } catch (error) {
+              console.error("Error loading Google picture:", error);
+            }
           }
 
           const emailHash = hashEmail(email.toLowerCase().trim());
-          const gravatarUrl = `https://www.gravatar.com/avatar/${emailHash}?d=404&s=128`;
+          const gravatarUrl = `https://www.gravatar.com/avatar/${emailHash}?d=identicon&s=128`;
 
           const cachedUrl = localStorage.getItem("user_avatar");
           if (cachedUrl === gravatarUrl) {
@@ -145,6 +152,9 @@ export default function InboxPage() {
             if (response.ok) {
               setAvatarUrl(gravatarUrl);
               localStorage.setItem("user_avatar", gravatarUrl);
+            } else {
+              const initials = email.charAt(0).toUpperCase();
+              setAvatarUrl("");
             }
           } catch (error) {
             console.error("Error fetching Gravatar:", error);

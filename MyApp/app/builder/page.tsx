@@ -663,9 +663,9 @@ export default function BuilderPage() {
                           Form Properties
                         </Text>
 
-                        <VStack align="start" spacing="0" w="100%" p="0" flex="none">
+                        <VStack align="start" spacing="0" w="calc(100% + 48px)" ml="-24px" mr="-24px" p="0" flex="none">
                           {/* Full Width Toggle */}
-                          <VStack align="start" spacing="8px" w="100%" p="0" pb="12px" flex="none" borderBottom="1px solid" borderBottomColor="customGray.200">
+                          <VStack align="start" spacing="8px" w="100%" px="24px" pb="12px" flex="none" borderBottom="1px solid" borderBottomColor="customGray.200">
                             <HStack justify="space-between" w="100%">
                               <Text fontSize="sm" color="customGray.800">Full Width</Text>
                               <Box w="44px" h="24px" bg="customGray.300" borderRadius="full" position="relative" cursor="pointer">
@@ -675,7 +675,7 @@ export default function BuilderPage() {
                           </VStack>
 
                           {/* Width and Height */}
-                          <VStack align="start" spacing="8px" w="100%" p="0" pt="12px" pb="12px" flex="none" borderBottom="1px solid" borderBottomColor="customGray.200">
+                          <VStack align="start" spacing="8px" w="100%" px="24px" pt="12px" pb="12px" flex="none" borderBottom="1px solid" borderBottomColor="customGray.200">
                             <HStack spacing="8px" w="100%">
                               <VStack flex={1} align="start" spacing="4px">
                                 <Text fontSize="xs" color="customGray.600">Width</Text>
@@ -689,13 +689,13 @@ export default function BuilderPage() {
                           </VStack>
 
                           {/* Form Padding */}
-                          <VStack align="start" spacing="8px" w="100%" p="0" pt="12px" pb="12px" flex="none" borderBottom="1px solid" borderBottomColor="customGray.200">
+                          <VStack align="start" spacing="8px" w="100%" px="24px" pt="12px" pb="12px" flex="none" borderBottom="1px solid" borderBottomColor="customGray.200">
                             <Text fontSize="sm" color="customGray.800">Form padding</Text>
                             <Input placeholder="12px" fontSize="sm" border="1px solid" borderColor="customGray.300" h="32px" borderRadius="base" />
                           </VStack>
 
                           {/* Form Colour */}
-                          <VStack align="start" spacing="8px" w="100%" p="0" pt="12px" pb="12px" flex="none" borderBottom="1px solid" borderBottomColor="customGray.200">
+                          <VStack align="start" spacing="8px" w="100%" px="24px" pt="12px" pb="12px" flex="none" borderBottom="1px solid" borderBottomColor="customGray.200">
                             <Text fontSize="sm" color="customGray.800">Form Colour</Text>
                             <HStack spacing="8px" w="100%">
                               <HStack flex={1} border="1px solid" borderColor="customGray.300" borderRadius="base" px="8px" py="6px">
@@ -710,13 +710,13 @@ export default function BuilderPage() {
                           </VStack>
 
                           {/* Border Radius */}
-                          <VStack align="start" spacing="8px" w="100%" p="0" pt="12px" pb="12px" flex="none" borderBottom="1px solid" borderBottomColor="customGray.200">
+                          <VStack align="start" spacing="8px" w="100%" px="24px" pt="12px" pb="12px" flex="none" borderBottom="1px solid" borderBottomColor="customGray.200">
                             <Text fontSize="sm" color="customGray.800">Border Radius</Text>
                             <Input placeholder="12px" fontSize="sm" border="1px solid" borderColor="customGray.300" h="32px" borderRadius="base" />
                           </VStack>
 
                           {/* Border Colour */}
-                          <VStack align="start" spacing="8px" w="100%" p="0" pt="12px" flex="none">
+                          <VStack align="start" spacing="8px" w="100%" px="24px" pt="12px" flex="none">
                             <HStack justify="space-between" w="100%">
                               <HStack spacing="8px">
                                 <Box w="16px" h="16px" border="1px solid" borderColor="customGray.300" borderRadius="4px" />

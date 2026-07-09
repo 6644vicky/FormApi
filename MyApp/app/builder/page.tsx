@@ -672,15 +672,15 @@ export default function BuilderPage() {
                               </Box>
                             </HStack>
                             {/* Width and Height */}
-                            <HStack spacing="8px" w="100%">
-                              <VStack flex={1} align="start" spacing="4px">
-                                <Text fontSize="xs" color="customGray.600">Width</Text>
+                            <HStack spacing="12px" w="100%">
+                              <HStack flex={1} spacing="8px">
+                                <Text fontSize="xs" color="customGray.600" minW="fit-content">Width</Text>
                                 <Input placeholder="16px" fontSize="xs" border="1px solid" borderColor="customGray.300" h="28px" borderRadius="base" />
-                              </VStack>
-                              <VStack flex={1} align="start" spacing="4px">
-                                <Text fontSize="xs" color="customGray.600">Height</Text>
+                              </HStack>
+                              <HStack flex={1} spacing="8px">
+                                <Text fontSize="xs" color="customGray.600" minW="fit-content">Height</Text>
                                 <Input placeholder="16px" fontSize="xs" border="1px solid" borderColor="customGray.300" h="28px" borderRadius="base" />
-                              </VStack>
+                              </HStack>
                             </HStack>
                           </VStack>
 

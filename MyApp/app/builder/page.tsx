@@ -178,7 +178,7 @@ export default function BuilderPage() {
           const email = session.user.email || "";
           setUserEmail(email);
 
-          const googlePicture = session.user.user_metadata?.picture || session.user.user_metadata?.avatar_url;
+          const googlePicture = session.user.user_metadata?.picture || session.user.user_metadata?.avatar_url || session.user.identities?.[0]?.identity_data?.picture;
 
           if (googlePicture) {
             const cachedUrl = localStorage.getItem("user_avatar");
@@ -188,16 +188,9 @@ export default function BuilderPage() {
               }
               return;
             }
-            try {
-              const response = await fetch(googlePicture, { mode: 'no-cors' });
-              if (response.ok || response.status === 0) {
-                setAvatarUrl(googlePicture);
-                localStorage.setItem("user_avatar", googlePicture);
-                return;
-              }
-            } catch (error) {
-              console.error("Error loading Google picture:", error);
-            }
+            setAvatarUrl(googlePicture);
+            localStorage.setItem("user_avatar", googlePicture);
+            return;
           }
 
           const emailHash = hashEmail(email.toLowerCase().trim());

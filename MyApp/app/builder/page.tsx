@@ -671,10 +671,7 @@ export default function BuilderPage() {
                                 <Box w="16px" h="16px" bg="white" borderRadius="full" position="absolute" top="2px" left="2px" />
                               </Box>
                             </HStack>
-                          </VStack>
-
-                          {/* Width and Height */}
-                          <VStack align="start" spacing="8px" w="100%" pl="16px" pr="16px" pt="16px" pb="16px" flex="none" borderBottom="1px solid" borderBottomColor="customGray.200">
+                            {/* Width and Height */}
                             <HStack spacing="8px" w="100%">
                               <VStack flex={1} align="start" spacing="4px">
                                 <Text fontSize="xs" color="customGray.600">Width</Text>

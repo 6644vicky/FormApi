@@ -644,7 +644,7 @@ export default function BuilderPage() {
                         </VStack>
                       </Box>
                     </VStack>
-                    <VStack align="stretch" spacing="16px" w="300px" h="100%" pl="0" pr="24px" pt="0" pb="24px" bg="white" borderLeft="1px solid" borderLeftColor="customGray.200" overflowY="auto" overflowX="hidden" sx={{
+                    <VStack align="stretch" spacing="16px" w="300px" h="100%" pl="16px" pr="16px" pt="0" pb="24px" bg="white" borderLeft="1px solid" borderLeftColor="customGray.200" overflowY="auto" overflowX="hidden" sx={{
                       '&::-webkit-scrollbar': {
                         width: '0px',
                       },
@@ -659,7 +659,7 @@ export default function BuilderPage() {
                     }}>
                       {/* Form Properties Section */}
                       <Box w="100%" flex="none">
-                        <VStack align="start" spacing="0" w="calc(100% + 24px)" ml="0" mr="-24px" p="0" flex="none">
+                        <VStack align="start" spacing="0" w="calc(100% + 32px)" ml="-16px" mr="-16px" p="0" flex="none">
                           {/* Full Width Toggle */}
                           <VStack align="start" spacing="8px" w="100%" pr="24px" pb="16px" flex="none" borderBottom="1px solid" borderBottomColor="customGray.200">
                             <Text fontSize="sm" fontWeight="semibold" color="customGray.800" w="100%">

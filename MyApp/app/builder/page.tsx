@@ -88,11 +88,11 @@ export default function BuilderPage() {
   const fieldRefs = useRef<{ [key: string]: HTMLDivElement | null }>({});
 
   useEffect(() => {
+    if (typeof window === 'undefined') return;
+
     const cached = localStorage.getItem("user_avatar");
     if (cached) {
       setAvatarUrl(cached);
-
-      
     }
 
     const loadAgents = async () => {
@@ -141,6 +141,7 @@ export default function BuilderPage() {
   }, []);
 
   useEffect(() => {
+    if (typeof window === 'undefined') return;
     localStorage.setItem("workspace_agents", JSON.stringify(agents));
   }, [agents]);
 
@@ -166,6 +167,8 @@ export default function BuilderPage() {
   }, [formFields]);
 
   useEffect(() => {
+    if (typeof window === 'undefined') return;
+
     const checkAuth = async () => {
       try {
         await supabase.auth.refreshSession();

@@ -1297,7 +1297,7 @@ export default function BuilderPage() {
                 overflowY="auto"
                 wordBreak="break-all"
               >
-                {`<iframe src="YOUR_WEBSITE_URL/form" width="100%" height="600px" style="border: none; border-radius: 8px;"></iframe>`}
+                {`<iframe src="https://form-api-zeta.vercel.app/form" width="100%" height="600px" style="border: none; border-radius: 8px;"></iframe>`}
               </Box>
               <Button
                 size="sm"
@@ -1306,11 +1306,11 @@ export default function BuilderPage() {
                 _hover={{ bg: "customGray.700" }}
                 w="100%"
                 onClick={() => {
-                  const code = `<iframe src="YOUR_WEBSITE_URL/form" width="100%" height="600px" style="border: none; border-radius: 8px;"></iframe>`;
+                  const code = `<iframe src="https://form-api-zeta.vercel.app/form" width="100%" height="600px" style="border: none; border-radius: 8px;"></iframe>`;
                   navigator.clipboard.writeText(code).then(() => {
                     toast({
                       title: "Code copied!",
-                      description: "Replace YOUR_WEBSITE_URL with your domain",
+                      description: "Ready to embed on your website",
                       status: "success",
                       duration: 3000,
                       isClosable: true,
@@ -1322,7 +1322,7 @@ export default function BuilderPage() {
                 Copy Code
               </Button>
               <Text fontSize="xs" color="customGray.600" textAlign="center">
-                Replace <Text as="span" fontWeight="semibold">YOUR_WEBSITE_URL</Text> with your domain
+                Paste this code on your website to embed the form
               </Text>
             </VStack>
           </ModalBody>

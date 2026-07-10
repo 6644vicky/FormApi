@@ -93,6 +93,7 @@ export default function InboxPage() {
   const [feedbackError, setFeedbackError] = useState("");
 
   useEffect(() => {
+    if (typeof window === 'undefined') return;
     const cached = localStorage.getItem("user_avatar");
     if (cached) {
       setAvatarUrl(cached);
@@ -101,6 +102,8 @@ export default function InboxPage() {
   }, []);
 
   useEffect(() => {
+    if (typeof window === 'undefined') return;
+
     const checkAuth = async () => {
       try {
         await supabase.auth.refreshSession();

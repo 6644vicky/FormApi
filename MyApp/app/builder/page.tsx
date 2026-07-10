@@ -88,11 +88,11 @@ export default function BuilderPage() {
   const fieldRefs = useRef<{ [key: string]: HTMLDivElement | null }>({});
 
   useEffect(() => {
+    if (typeof window === 'undefined') return;
+
     const cached = localStorage.getItem("user_avatar");
     if (cached) {
       setAvatarUrl(cached);
-
-      
     }
 
     const loadAgents = async () => {
@@ -141,6 +141,7 @@ export default function BuilderPage() {
   }, []);
 
   useEffect(() => {
+    if (typeof window === 'undefined') return;
     localStorage.setItem("workspace_agents", JSON.stringify(agents));
   }, [agents]);
 
@@ -166,6 +167,8 @@ export default function BuilderPage() {
   }, [formFields]);
 
   useEffect(() => {
+    if (typeof window === 'undefined') return;
+
     const checkAuth = async () => {
       try {
         await supabase.auth.refreshSession();
@@ -310,6 +313,55 @@ export default function BuilderPage() {
         status: "error",
         isClosable: true,
       });
+    }
+  };
+
+  const handleDuplicate = async () => {
+    if (selectedAgent) {
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!session?.user?.id) {
+          toast({
+            title: "Error",
+            description: "User not authenticated",
+            status: "error",
+            duration: 3000,
+            isClosable: true,
+          });
+          return;
+        }
+
+        const agentToClone = agents.find(a => a.name === selectedAgent);
+        if (agentToClone) {
+          const newAgentName = `${selectedAgent} (Copy)`;
+          const success = await createAgent(session.user.id, {
+            name: newAgentName,
+            services: agentToClone.services,
+          });
+
+          if (success) {
+            const dbAgents = await getAgents(session.user.id);
+            setAgents(dbAgents);
+            setSelectedAgent(newAgentName);
+            localStorage.setItem("workspace_agents", JSON.stringify(dbAgents));
+            toast({
+              title: "Duplicated!",
+              description: `${selectedAgent} has been duplicated as "${newAgentName}"`,
+              status: "success",
+              duration: 3000,
+              isClosable: true,
+            });
+          }
+        }
+      } catch (error) {
+        toast({
+          title: "Error",
+          description: "Failed to duplicate workspace",
+          status: "error",
+          duration: 3000,
+          isClosable: true,
+        });
+      }
     }
   };
 
@@ -487,6 +539,9 @@ export default function BuilderPage() {
                   <MenuList>
                     <MenuItem fontSize="sm" color="customGray.800">
                       Archive
+                    </MenuItem>
+                    <MenuItem fontSize="sm" color="customGray.800" onClick={handleDuplicate}>
+                      Duplicate
                     </MenuItem>
                     <MenuItem fontSize="sm" color="#FF6B6B" onClick={onDeleteOpen}>
                       Delete
@@ -1294,7 +1349,7 @@ export default function BuilderPage() {
                 overflowY="auto"
                 wordBreak="break-all"
               >
-                {`<iframe src="YOUR_WEBSITE_URL/form" width="100%" height="600px" style="border: none; border-radius: 8px;"></iframe>`}
+                {`<iframe src="https://form-api-zeta.vercel.app/form" width="100%" height="600px" style="border: none; border-radius: 8px;"></iframe>`}
               </Box>
               <Button
                 size="sm"
@@ -1303,11 +1358,11 @@ export default function BuilderPage() {
                 _hover={{ bg: "customGray.700" }}
                 w="100%"
                 onClick={() => {
-                  const code = `<iframe src="YOUR_WEBSITE_URL/form" width="100%" height="600px" style="border: none; border-radius: 8px;"></iframe>`;
+                  const code = `<iframe src="https://form-api-zeta.vercel.app/form" width="100%" height="600px" style="border: none; border-radius: 8px;"></iframe>`;
                   navigator.clipboard.writeText(code).then(() => {
                     toast({
                       title: "Code copied!",
-                      description: "Replace YOUR_WEBSITE_URL with your domain",
+                      description: "Ready to embed on your website",
                       status: "success",
                       duration: 3000,
                       isClosable: true,
@@ -1319,7 +1374,7 @@ export default function BuilderPage() {
                 Copy Code
               </Button>
               <Text fontSize="xs" color="customGray.600" textAlign="center">
-                Replace <Text as="span" fontWeight="semibold">YOUR_WEBSITE_URL</Text> with your domain
+                Paste this code on your website to embed the form
               </Text>
             </VStack>
           </ModalBody>

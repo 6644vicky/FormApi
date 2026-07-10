@@ -22,9 +22,9 @@ import { useAuthCallback } from "@/lib/useAuthCallback";
 
 const getCallbackUrl = () => {
   if (typeof window !== "undefined") {
-    return `${window.location.origin}`;
+    return `${window.location.origin}/api/auth/callback`;
   }
-  return "/";
+  return "/api/auth/callback";
 };
 
 export default function Home() {

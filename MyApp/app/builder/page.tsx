@@ -316,6 +316,55 @@ export default function BuilderPage() {
     }
   };
 
+  const handleDuplicate = async () => {
+    if (selectedAgent) {
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!session?.user?.id) {
+          toast({
+            title: "Error",
+            description: "User not authenticated",
+            status: "error",
+            duration: 3000,
+            isClosable: true,
+          });
+          return;
+        }
+
+        const agentToClone = agents.find(a => a.name === selectedAgent);
+        if (agentToClone) {
+          const newAgentName = `${selectedAgent} (Copy)`;
+          const success = await createAgent(session.user.id, {
+            name: newAgentName,
+            services: agentToClone.services,
+          });
+
+          if (success) {
+            const dbAgents = await getAgents(session.user.id);
+            setAgents(dbAgents);
+            setSelectedAgent(newAgentName);
+            localStorage.setItem("workspace_agents", JSON.stringify(dbAgents));
+            toast({
+              title: "Duplicated!",
+              description: `${selectedAgent} has been duplicated as "${newAgentName}"`,
+              status: "success",
+              duration: 3000,
+              isClosable: true,
+            });
+          }
+        }
+      } catch (error) {
+        toast({
+          title: "Error",
+          description: "Failed to duplicate workspace",
+          status: "error",
+          duration: 3000,
+          isClosable: true,
+        });
+      }
+    }
+  };
+
   const colors = ["#EA8C55", "#7C3AED", "#10B981", "#F59E0B", "#EF4444", "#06B6D4", "#8B5CF6", "#EC4899"];
 
   const serviceColors: { [key: string]: string } = {
@@ -490,6 +539,9 @@ export default function BuilderPage() {
                   <MenuList>
                     <MenuItem fontSize="sm" color="customGray.800">
                       Archive
+                    </MenuItem>
+                    <MenuItem fontSize="sm" color="customGray.800" onClick={handleDuplicate}>
+                      Duplicate
                     </MenuItem>
                     <MenuItem fontSize="sm" color="#FF6B6B" onClick={onDeleteOpen}>
                       Delete

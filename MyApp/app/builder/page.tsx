@@ -63,6 +63,7 @@ export default function BuilderPage() {
   const { isOpen: isFeedbackOpen, onOpen: onFeedbackOpen, onClose: onFeedbackClose } = useDisclosure();
   const { isOpen: isCreateOpen, onOpen: onCreateOpen, onClose: onCreateClose } = useDisclosure();
   const { isOpen: isDeleteOpen, onOpen: onDeleteOpen, onClose: onDeleteClose } = useDisclosure();
+  const { isOpen: isEmbedOpen, onOpen: onEmbedOpen, onClose: onEmbedClose } = useDisclosure();
   const [feedbackMessage, setFeedbackMessage] = useState("");
   const [isFeedbackSubmitting, setIsFeedbackSubmitting] = useState(false);
   const [feedbackError, setFeedbackError] = useState("");
@@ -83,7 +84,7 @@ export default function BuilderPage() {
   ]);
   const [insertAtIndex, setInsertAtIndex] = useState<number>(0);
   const [visibleFields, setVisibleFields] = useState<Set<string>>(new Set());
-  const [isFormFullWidth, setIsFormFullWidth] = useState(false);
+  const [isFormFullWidth, setIsFormFullWidth] = useState(true);
   const fieldRefs = useRef<{ [key: string]: HTMLDivElement | null }>({});
 
   useEffect(() => {
@@ -442,7 +443,7 @@ export default function BuilderPage() {
             </VStack>
           </VStack>
           <VStack flex={1} h="100%" align="stretch" spacing={0} overflow="hidden">
-            <HStack h="64px" align="center" justify="space-between" pl="20px" pr="16px" pt="14px" pb="18px">
+            <HStack h="64px" align="center" justify="space-between" pl="20px" pr="16px" pt="14px" pb="18px" w="100%">
               <HStack spacing="12px" align="center">
                 <Tooltip label={isWorkspaceListCollapsed ? "Expand" : "Collapse"} placement="bottom">
                   <Button
@@ -460,7 +461,7 @@ export default function BuilderPage() {
                   </Button>
                 </Tooltip>
                 <Text fontSize="lg" fontWeight="medium" color="customGray.800">
-                  {selectedAgent || "Builder"}
+                  form dev
                 </Text>
               </HStack>
               <HStack spacing="8px">
@@ -492,12 +493,30 @@ export default function BuilderPage() {
                     </MenuItem>
                   </MenuList>
                 </Menu>
+                <Button
+                  size="sm"
+                  bg="customGray.100"
+                  color="customGray.800"
+                  _hover={{ bg: "customGray.200" }}
+                  p="6px"
+                  minW="auto"
+                  borderRadius="8px"
+                  display="flex"
+                  alignItems="center"
+                  justifyContent="center"
+                  onClick={onEmbedOpen}
+                >
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M9 12h6M9 16h4M9 8h6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                    <rect x="4" y="3" width="16" height="18" rx="2" stroke="currentColor" strokeWidth="2"/>
+                  </svg>
+                </Button>
                 <Button size="sm" bg="customGray.800" color="white" _hover={{ bg: "customGray.700" }}>
                   Save changes
                 </Button>
               </HStack>
             </HStack>
-            <Tabs flex={1} display="flex" flexDirection="column" overflow="hidden">
+            <Tabs flex={1} display="flex" flexDirection="column" overflow="hidden" w="100%">
               <TabList pl="20px" borderBottom="1px solid" borderColor="customGray.200">
                 <Tab fontSize="sm" color="customGray.500" pb="12px" mb="-1px" borderBottom="2px solid transparent" _selected={{ color: "customGray.800", borderColor: "customGray.800", bg: "white" }} display="flex" alignItems="center" gap="6px">
                   <Box w="8px" h="8px" borderRadius="full" bg={selectedAgent && agents.find(a => a.name === selectedAgent)?.services.includes("form") ? "#60A5FA" : "customGray.300"} />
@@ -510,8 +529,8 @@ export default function BuilderPage() {
               </TabList>
               <TabPanels flex={1} overflow="hidden" h="100%">
                 <TabPanel h="100%" p="0" overflow="hidden">
-                  <HStack align="flex-start" spacing="0" h="100%" w="100%" p="0" m="0" overflow="hidden">
-                    <VStack align="center" justify="flex-start" flex={1} pt="64px" pb="64px" px="54px" bg="customDark.2" spacing={0} h="100%" overflowY="auto" sx={{
+                  <HStack align="stretch" spacing="0" h="100%" w="100%" p="0" m="0" overflow="hidden">
+                    <VStack align="center" justify="flex-start" flex={1} p={isFormFullWidth ? "0px" : "64px"} bg={isFormFullWidth ? "customDark.2" : "rgba(36, 39, 42, 0.02)"} spacing={0} h="100%" overflowY="auto" transition="padding 0.4s ease-in-out" sx={{
                       '&::-webkit-scrollbar': {
                         width: '6px',
                       },
@@ -527,14 +546,24 @@ export default function BuilderPage() {
                       },
                     }}>
                       <Box
-                        bg="linear-gradient(135deg, #F9FAFB 0%, #FFFFFF 100%)"
+                        bg="white"
                         borderRadius={isFormFullWidth ? "0px" : "16px"}
-                        p="32px"
-                        maxW={isFormFullWidth ? "100%" : "500px"}
-                        w={isFormFullWidth ? "100%" : "auto"}
-                        boxShadow={isFormFullWidth ? "none" : "0 4px 12px rgba(0, 0, 0, 0.08)"}
+                        w="100%"
+                        maxW={isFormFullWidth ? "100%" : "427px"}
+                        h={isFormFullWidth ? "calc(100vh - 24px)" : "auto"}
+                        boxShadow={isFormFullWidth ? "none" : "lg"}
+                        transition="max-width 0.4s ease-in-out, border-radius 0.4s ease-in-out, padding 0.4s ease-in-out"
+                        display="flex"
+                        flexDirection="column"
+                        alignItems="center"
+                        justifyContent="flex-start"
+                        pt={isFormFullWidth ? "64px" : "32px"}
+                        pb="32px"
+                        px="32px"
+                        overflow="hidden"
+                        style={{ willChange: "max-width, padding" }}
                       >
-                        <VStack align={isFormFullWidth ? "center" : "stretch"} spacing="24px" w="100%">
+                        <VStack align="center" spacing="24px" w="100%" maxW={isFormFullWidth ? "100%" : "427px"} style={{ willChange: "max-width" }}>
                           <VStack align="center" spacing="8px" w="100%">
                             <Text fontSize="xs" fontWeight="medium" color="customGray.500">
                               Typeform
@@ -543,9 +572,9 @@ export default function BuilderPage() {
                               Let's get your Intercom demo started
                             </Heading>
                           </VStack>
-                          <VStack align="stretch" spacing="12px" w="100%" role="group">
+                          <VStack align={isFormFullWidth ? "center" : "stretch"} spacing="12px" w="100%" role="group">
                             {formFields.map((field, index) => (
-                              <Box key={field.id} w="100%">
+                              <Box key={field.id} w={isFormFullWidth ? "100%" : "100%"} maxW={isFormFullWidth ? "500px" : "100%"}>
                                 {/* Inline add field button - appears on hover between fields */}
                                 {index > 0 && (
                                   <HStack
@@ -590,7 +619,8 @@ export default function BuilderPage() {
 
                                 {/* Form field */}
                                 <Box
-                                  w="100%"
+                                  w={isFormFullWidth ? "100%" : "100%"}
+                                  maxW={isFormFullWidth ? "500px" : "100%"}
                                   id={field.id}
                                   ref={(el) => {
                                     if (el) fieldRefs.current[field.id] = el;
@@ -629,6 +659,7 @@ export default function BuilderPage() {
                           </VStack>
                           <Button
                             w="100%"
+                            maxW="427px"
                             bg="customGray.800"
                             color="white"
                             _hover={{ bg: "customGray.700" }}
@@ -649,114 +680,139 @@ export default function BuilderPage() {
                         </VStack>
                       </Box>
                     </VStack>
-                    <VStack align="stretch" spacing="16px" w="300px" h="100%" pl="16px" pr="16px" pt="0" pb="24px" bg="white" borderLeft="1px solid" borderLeftColor="customGray.200" overflowY="auto" overflowX="hidden" sx={{
-                      '&::-webkit-scrollbar': {
-                        width: '0px',
-                      },
-                      '&::-webkit-scrollbar-track': {
-                        bg: 'transparent',
-                      },
-                      '&::-webkit-scrollbar-thumb': {
-                        bg: 'transparent',
-                      },
-                      msOverflowStyle: 'none',
-                      scrollbarWidth: 'none',
-                    }}>
-                      {/* Form Properties Section */}
-                      <Box w="100%" flex="none">
-                        <VStack align="start" spacing="0" w="calc(100% + 32px)" ml="-16px" mr="-16px" p="0" flex="none">
-                          {/* Full Width Toggle */}
-                          <VStack align="start" spacing="18px" w="100%" pl="16px" pr="16px" pt="16px" pb="16px" flex="none" borderBottom="1px solid" borderBottomColor="customGray.200">
-                            <Text fontSize="sm" fontWeight="medium" color="customGray.800" w="100%">
-                              Form Properties
-                            </Text>
-                            <HStack justify="space-between" w="100%">
-                              <Text fontSize="xs" fontWeight="medium" color="customGray.600">Full Width</Text>
-                              <Box w="36px" h="20px" bg={isFormFullWidth ? "customGray.800" : "customGray.300"} borderRadius="full" position="relative" cursor="pointer" onClick={() => setIsFormFullWidth(!isFormFullWidth)}>
-                                <Box w="16px" h="16px" bg="white" borderRadius="full" position="absolute" top="2px" left={isFormFullWidth ? "18px" : "2px"} transition="all 0.2s" />
-                              </Box>
-                            </HStack>
-                            {/* Width and Height */}
-                            <HStack spacing="12px" w="100%">
-                              <HStack flex={1} spacing="8px">
-                                <Text fontSize="xs" color="customGray.600" minW="fit-content">Width</Text>
-                                <Input placeholder="16px" fontSize="xs" border="1px solid" borderColor="customGray.300" h="28px" w="78px" px="8px" py="6px" borderRadius="base" onChange={(e) => { e.target.value = e.target.value.replace(/[^0-9px]/gi, ''); }} />
-                              </HStack>
-                              <HStack flex={1} spacing="8px">
-                                <Text fontSize="xs" color="customGray.600" minW="fit-content">Height</Text>
-                                <Input placeholder="16px" fontSize="xs" border="1px solid" borderColor="customGray.300" h="28px" w="78px" px="8px" py="6px" borderRadius="base" onChange={(e) => { e.target.value = e.target.value.replace(/[^0-9px]/gi, ''); }} />
-                              </HStack>
-                            </HStack>
-                          </VStack>
+                    <VStack
+                      w="300px"
+                      h="100%"
+                      bg="white"
+                      borderLeft="1px solid"
+                      borderLeftColor="customGray.200"
+                      spacing={0}
+                      flexShrink={0}
+                      align="stretch"
+                      overflow="hidden"
+                    >
+                      <VStack
+                        w="100%"
+                        flex={1}
+                        overflowY="auto"
+                        overflowX="hidden"
+                        align="stretch"
+                        spacing={0}
+                        pb="24px"
+                        sx={{
+                          '&::-webkit-scrollbar': { width: '4px' },
+                          '&::-webkit-scrollbar-track': { bg: 'transparent' },
+                          '&::-webkit-scrollbar-thumb': { bg: 'customGray.200', borderRadius: '2px' },
+                          '&::-webkit-scrollbar-thumb:hover': { bg: 'customGray.400' },
+                        }}
+                      >
+                        <Box p="16px" borderBottom="1px solid" borderBottomColor="customGray.200">
+                          <Text fontSize="sm" fontWeight="semibold" color="customGray.800">
+                            Form Properties
+                          </Text>
+                        </Box>
 
-                          {/* Form Padding */}
-                          <VStack align="start" spacing="8px" w="100%" pl="16px" pr="16px" pt="16px" pb="16px" flex="none" borderBottom="1px solid" borderBottomColor="customGray.200">
-                            <Text fontSize="xs" fontWeight="medium" color="customGray.600">Form padding</Text>
-                            <Input placeholder="16px" fontSize="sm" border="1px solid" borderColor="customGray.300" h="32px" borderRadius="base" onChange={(e) => { e.target.value = e.target.value.replace(/[^0-9px]/gi, ''); }} />
-                          </VStack>
+                        <HStack p="16px" borderBottom="1px solid" borderBottomColor="customGray.200" justify="space-between" w="100%">
+                          <Text fontSize="xs" fontWeight="medium" color="customGray.600">Full Width</Text>
+                          <Box w="36px" h="20px" bg={isFormFullWidth ? "customGray.800" : "customGray.300"} borderRadius="full" position="relative" cursor="pointer" onClick={() => setIsFormFullWidth(!isFormFullWidth)}>
+                            <Box w="16px" h="16px" bg="white" borderRadius="full" position="absolute" top="2px" left={isFormFullWidth ? "18px" : "2px"} transition="all 0.2s" />
+                          </Box>
+                        </HStack>
 
-                          {/* Form Colour */}
-                          <VStack align="start" spacing="8px" w="100%" pl="16px" pr="16px" pt="16px" pb="16px" flex="none" borderBottom="1px solid" borderBottomColor="customGray.200">
-                            <Text fontSize="xs" fontWeight="medium" color="customGray.600">Form Colour</Text>
-                            <HStack spacing="8px" w="100%">
-                              <HStack flex={1} border="1px solid" borderColor="customGray.300" borderRadius="base" px="8px" py="6px">
-                                <Box w="16px" h="16px" borderRadius="4px" bg="#E85C5C" />
-                                <Text fontSize="sm" color="customGray.600">E85C5C</Text>
-                              </HStack>
-                              <Box w="32px" h="32px" borderRadius="6px" bg="#EC4899" cursor="pointer" />
-                              <Box w="32px" h="32px" borderRadius="6px" bg="#A855F7" cursor="pointer" />
-                              <Box w="32px" h="32px" borderRadius="6px" bg="#06B6D4" cursor="pointer" />
-                              <Button size="sm" variant="outline" borderColor="customGray.300" p="6px" minW="auto" h="32px" w="32px">+</Button>
-                            </HStack>
-                          </VStack>
-
-                          {/* Border Radius */}
-                          <VStack align="start" spacing="8px" w="100%" pl="16px" pr="16px" pt="16px" pb="16px" flex="none" borderBottom="1px solid" borderBottomColor="customGray.200">
-                            <Text fontSize="xs" fontWeight="medium" color="customGray.600">Border Radius</Text>
-                            <Input placeholder="16px" fontSize="sm" border="1px solid" borderColor="customGray.300" h="32px" borderRadius="base" onChange={(e) => { e.target.value = e.target.value.replace(/[^0-9px]/gi, ''); }} />
-                          </VStack>
-
-                          {/* Border Colour */}
-                          <VStack align="start" spacing="8px" w="100%" px="24px" pt="16px" flex="none">
-                            <HStack justify="space-between" w="100%">
-                              <HStack spacing="8px">
-                                <Box w="16px" h="16px" border="1px solid" borderColor="customGray.300" borderRadius="4px" />
-                                <Text fontSize="xs" fontWeight="medium" color="customGray.600">Border colour</Text>
-                              </HStack>
-                              <HStack border="1px solid" borderColor="customGray.300" borderRadius="base" px="8px" py="4px">
-                                <Box w="12px" h="12px" borderRadius="3px" bg="#E85C5C" />
-                                <Text fontSize="sm" color="customGray.600">E85C5C</Text>
-                              </HStack>
-                            </HStack>
-                          </VStack>
+                        <VStack align="start" spacing="8px" w="100%" p="16px" borderBottom="1px solid" borderBottomColor="customGray.200">
+                          <HStack spacing="12px" w="100%">
+                            <VStack align="start" flex={1} spacing="4px">
+                              <Text fontSize="xs" fontWeight="medium" color="customGray.600">Width</Text>
+                              <Input placeholder="16px" fontSize="xs" border="1px solid" borderColor="customGray.300" h="28px" borderRadius="base" onChange={(e) => { e.target.value = e.target.value.replace(/[^0-9px]/gi, ''); }} />
+                            </VStack>
+                            <VStack align="start" flex={1} spacing="4px">
+                              <Text fontSize="xs" fontWeight="medium" color="customGray.600">Height</Text>
+                              <Input placeholder="16px" fontSize="xs" border="1px solid" borderColor="customGray.300" h="28px" borderRadius="base" onChange={(e) => { e.target.value = e.target.value.replace(/[^0-9px]/gi, ''); }} />
+                            </VStack>
+                          </HStack>
                         </VStack>
-                      </Box>
+
+                        <VStack align="start" spacing="8px" w="100%" p="16px" borderBottom="1px solid" borderBottomColor="customGray.200">
+                          <Text fontSize="xs" fontWeight="medium" color="customGray.600">Form padding</Text>
+                          <Input placeholder="16px" fontSize="sm" border="1px solid" borderColor="customGray.300" h="32px" borderRadius="base" onChange={(e) => { e.target.value = e.target.value.replace(/[^0-9px]/gi, ''); }} />
+                        </VStack>
+
+                        <VStack align="start" spacing="8px" w="100%" p="16px" borderBottom="1px solid" borderBottomColor="customGray.200">
+                          <Text fontSize="xs" fontWeight="medium" color="customGray.600">Form Colour</Text>
+                          <HStack spacing="8px" w="100%">
+                            <HStack flex={1} border="1px solid" borderColor="customGray.300" borderRadius="base" px="8px" py="6px">
+                              <Box w="16px" h="16px" borderRadius="4px" bg="#E85C5C" />
+                              <Text fontSize="xs" color="customGray.600">E85C5C</Text>
+                            </HStack>
+                            <Box w="28px" h="28px" borderRadius="4px" bg="#EC4899" cursor="pointer" />
+                            <Box w="28px" h="28px" borderRadius="4px" bg="#A855F7" cursor="pointer" />
+                            <Box w="28px" h="28px" borderRadius="4px" bg="#06B6D4" cursor="pointer" />
+                          </HStack>
+                        </VStack>
+
+                        <VStack align="start" spacing="8px" w="100%" p="16px" borderBottom="1px solid" borderBottomColor="customGray.200">
+                          <Text fontSize="xs" fontWeight="medium" color="customGray.600">Border Radius</Text>
+                          <Input placeholder="16px" fontSize="sm" border="1px solid" borderColor="customGray.300" h="32px" borderRadius="base" onChange={(e) => { e.target.value = e.target.value.replace(/[^0-9px]/gi, ''); }} />
+                        </VStack>
+
+                        <VStack align="start" spacing="8px" w="100%" p="16px">
+                          <HStack justify="space-between" w="100%">
+                            <HStack spacing="8px">
+                              <Box w="16px" h="16px" border="1px solid" borderColor="customGray.300" borderRadius="4px" />
+                              <Text fontSize="xs" fontWeight="medium" color="customGray.600">Border colour</Text>
+                            </HStack>
+                            <HStack border="1px solid" borderColor="customGray.300" borderRadius="base" px="8px" py="4px">
+                              <Box w="12px" h="12px" borderRadius="3px" bg="#E85C5C" />
+                              <Text fontSize="xs" color="customGray.600">E85C5C</Text>
+                            </HStack>
+                          </HStack>
+                        </VStack>
+                      </VStack>
                     </VStack>
                   </HStack>
                 </TabPanel>
                 <TabPanel h="100%" p="0" overflow="hidden">
-                  <HStack align="flex-start" spacing="0" h="100%" w="100%" overflow="hidden">
+                  <HStack align="stretch" spacing="0" h="100%" w="100%" overflow="hidden">
                     <VStack align="center" justify="center" flex={1} h="100%" bg="customDark.2" pt="64px" pb="64px" px="54px">
                       <Text fontSize="lg" color="customGray.800">
                         Calendar
                       </Text>
                     </VStack>
-                    <VStack align="stretch" spacing="16px" w="300px" h="100%" p="24px" bg="white" borderLeft="1px solid" borderLeftColor="customGray.200" overflowY="auto" sx={{
-                      '&::-webkit-scrollbar': {
-                        width: '6px',
-                      },
-                      '&::-webkit-scrollbar-track': {
-                        bg: 'transparent',
-                      },
-                      '&::-webkit-scrollbar-thumb': {
-                        bg: 'rgba(0, 0, 0, 0.1)',
-                        borderRadius: '3px',
-                        '&:hover': {
-                          bg: 'rgba(0, 0, 0, 0.2)',
-                        },
-                      },
-                    }}>
-                      <Text fontSize="sm" color="customGray.500">Calendar settings would go here</Text>
+                    <VStack
+                      w="300px"
+                      h="100%"
+                      bg="white"
+                      borderLeft="1px solid"
+                      borderLeftColor="customGray.200"
+                      spacing={0}
+                      flexShrink={0}
+                      align="stretch"
+                      overflow="hidden"
+                    >
+                      <VStack
+                        w="100%"
+                        flex={1}
+                        overflowY="auto"
+                        overflowX="hidden"
+                        align="stretch"
+                        spacing={0}
+                        pb="24px"
+                        sx={{
+                          '&::-webkit-scrollbar': { width: '4px' },
+                          '&::-webkit-scrollbar-track': { bg: 'transparent' },
+                          '&::-webkit-scrollbar-thumb': { bg: 'customGray.200', borderRadius: '2px' },
+                          '&::-webkit-scrollbar-thumb:hover': { bg: 'customGray.400' },
+                        }}
+                      >
+                        <Box p="16px" borderBottom="1px solid" borderBottomColor="customGray.200">
+                          <Text fontSize="sm" fontWeight="semibold" color="customGray.800">
+                            Calendar Settings
+                          </Text>
+                        </Box>
+                        <Box p="16px">
+                          <Text fontSize="sm" color="customGray.500">Calendar settings would go here</Text>
+                        </Box>
+                      </VStack>
                     </VStack>
                   </HStack>
                 </TabPanel>
@@ -1211,6 +1267,60 @@ export default function BuilderPage() {
                   </HStack>
                 </Button>
               ))}
+            </VStack>
+          </ModalBody>
+        </ModalContent>
+      </Modal>
+
+      {/* Embed Modal */}
+      <Modal isOpen={isEmbedOpen} onClose={onEmbedClose} isCentered>
+        <ModalOverlay bg="rgba(0, 0, 0, 0.5)" />
+        <ModalContent bg="white" borderRadius="lg" maxW="500px" boxShadow="0 10px 40px rgba(0, 0, 0, 0.1)">
+          <ModalHeader fontSize="sm" fontWeight="semibold" color="customGray.800" px="16px" pt="16px" pb="0px">
+            Embed Code
+          </ModalHeader>
+          <ModalBody py="16px" px="16px">
+            <VStack align="stretch" spacing="12px">
+              <Box
+                bg="customGray.50"
+                border="1px solid"
+                borderColor="customGray.200"
+                borderRadius="base"
+                p="12px"
+                fontSize="xs"
+                color="customGray.800"
+                fontFamily="monospace"
+                maxH="100px"
+                overflowY="auto"
+                wordBreak="break-all"
+              >
+                {`<iframe src="YOUR_WEBSITE_URL/form" width="100%" height="600px" style="border: none; border-radius: 8px;"></iframe>`}
+              </Box>
+              <Button
+                size="sm"
+                bg="customGray.800"
+                color="white"
+                _hover={{ bg: "customGray.700" }}
+                w="100%"
+                onClick={() => {
+                  const code = `<iframe src="YOUR_WEBSITE_URL/form" width="100%" height="600px" style="border: none; border-radius: 8px;"></iframe>`;
+                  navigator.clipboard.writeText(code).then(() => {
+                    toast({
+                      title: "Code copied!",
+                      description: "Replace YOUR_WEBSITE_URL with your domain",
+                      status: "success",
+                      duration: 3000,
+                      isClosable: true,
+                    });
+                    onEmbedClose();
+                  });
+                }}
+              >
+                Copy Code
+              </Button>
+              <Text fontSize="xs" color="customGray.600" textAlign="center">
+                Replace <Text as="span" fontWeight="semibold">YOUR_WEBSITE_URL</Text> with your domain
+              </Text>
             </VStack>
           </ModalBody>
         </ModalContent>

@@ -98,12 +98,16 @@
     <button id="form-widget-btn">💬 Chat with us</button>
     <div id="form-widget-overlay"></div>
     <div id="form-widget-modal">
-      <iframe src="https://form-api-zeta.vercel.app/form"></iframe>
+      <iframe id="form-widget-iframe"></iframe>
     </div>
   `;
 
   container.innerHTML = buttonHTML;
   document.body.appendChild(container);
+
+  // Set iframe src dynamically
+  const iframe = document.getElementById('form-widget-iframe');
+  iframe.src = window.location.origin + '/form';
 
   // Get elements
   const btn = document.getElementById('form-widget-btn');

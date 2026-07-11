@@ -1,134 +1,82 @@
 (function() {
-  // Create container for widget
-  const container = document.createElement('div');
-  container.id = 'form-widget-container';
-
-  const buttonHTML = `
-    <style>
-      #form-widget-btn {
-        position: fixed;
-        bottom: 24px;
-        right: 24px;
-        background: #272727;
-        color: white;
-        padding: 14px 24px;
-        border-radius: 50px;
-        cursor: pointer;
-        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-        font-size: 14px;
-        font-weight: 500;
-        border: none;
-        z-index: 9999;
-        transition: all 0.3s ease;
-        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  // Styles for the button and iframe
+  const style = document.createElement('style');
+  style.innerHTML = `
+    #form-widget-btn {
+      position: fixed;
+      bottom: 20px;
+      right: 20px;
+      z-index: 9999;
+      background: #000;
+      color: #fff;
+      padding: 15px 25px;
+      border-radius: 30px;
+      cursor: pointer;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+      font-weight: 500;
+      border: none;
+      font-size: 14px;
+      transition: all 0.3s ease;
+    }
+    #form-widget-btn:hover {
+      background: #333;
+      box-shadow: 0 6px 16px rgba(0,0,0,0.3);
+    }
+    #form-widget-iframe {
+      display: none;
+      position: fixed;
+      bottom: 80px;
+      right: 20px;
+      z-index: 9999;
+      width: 400px;
+      height: 500px;
+      border-radius: 16px;
+      overflow: hidden;
+      box-shadow: 0 10px 25px rgba(0,0,0,0.3);
+      border: none;
+      animation: slideUp 0.3s ease;
+    }
+    @keyframes slideUp {
+      from {
+        opacity: 0;
+        transform: translateY(20px);
       }
-
-      #form-widget-btn:hover {
-        background: #1a1a1a;
-        transform: translateY(-2px);
-        box-shadow: 0 6px 16px rgba(0, 0, 0, 0.2);
+      to {
+        opacity: 1;
+        transform: translateY(0);
       }
-
-      #form-widget-overlay {
-        display: none;
-        position: fixed;
-        bottom: 0;
-        right: 0;
-        top: 0;
-        left: 0;
-        background: rgba(0, 0, 0, 0.4);
-        z-index: 9998;
-        animation: fadeIn 0.3s ease;
-      }
-
-      #form-widget-modal {
-        display: none;
-        position: fixed;
-        bottom: 24px;
-        right: 24px;
-        width: 420px;
-        max-width: 90vw;
-        height: 600px;
-        max-height: 80vh;
-        border-radius: 16px;
-        overflow: hidden;
-        box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
-        z-index: 9999;
-        animation: slideUp 0.3s ease;
-        background: white;
-      }
-
-      #form-widget-modal iframe {
-        width: 100%;
-        height: 100%;
-        border: none;
-      }
-
-      @keyframes fadeIn {
-        from { opacity: 0; }
-        to { opacity: 1; }
-      }
-
-      @keyframes slideUp {
-        from {
-          opacity: 0;
-          transform: translateY(20px);
-        }
-        to {
-          opacity: 1;
-          transform: translateY(0);
-        }
-      }
-
-      @media (max-width: 640px) {
-        #form-widget-modal {
-          bottom: 0;
-          right: 0;
-          left: 0;
-          top: 0;
-          width: 100%;
-          height: 100%;
-          max-width: 100%;
-          max-height: 100%;
-          border-radius: 0;
-        }
-      }
-    </style>
-
-    <button id="form-widget-btn">💬 Chat with us</button>
-    <div id="form-widget-overlay"></div>
-    <div id="form-widget-modal">
-      <iframe id="form-widget-iframe"></iframe>
-    </div>
+    }
   `;
+  document.head.appendChild(style);
 
-  container.innerHTML = buttonHTML;
-  document.body.appendChild(container);
+  // Creating elements
+  const btn = document.createElement('div');
+  btn.id = 'form-widget-btn';
+  btn.innerText = 'Contact Us';
 
-  // Set iframe src dynamically
-  const iframe = document.getElementById('form-widget-iframe');
-  iframe.src = window.location.origin + '/form';
+  const iframe = document.createElement('iframe');
+  iframe.id = 'form-widget-iframe';
 
-  // Get elements
-  const btn = document.getElementById('form-widget-btn');
-  const overlay = document.getElementById('form-widget-overlay');
-  const modal = document.getElementById('form-widget-modal');
-
-  // Toggle modal
-  function toggleModal() {
-    const isHidden = modal.style.display === 'none';
-    modal.style.display = isHidden ? 'block' : 'none';
-    overlay.style.display = isHidden ? 'block' : 'none';
+  // Set iframe src dynamically based on current origin
+  if (typeof window !== 'undefined') {
+    const origin = window.location.origin;
+    iframe.src = origin.includes('localhost') ?
+      origin + '/form' :
+      'https://form-api-zeta.vercel.app/form';
   }
 
-  // Event listeners
-  btn.addEventListener('click', toggleModal);
-  overlay.addEventListener('click', toggleModal);
+  document.body.appendChild(btn);
+  document.body.appendChild(iframe);
 
-  // Close on escape
+  // Toggle logic
+  btn.onclick = () => {
+    iframe.style.display = iframe.style.display === 'block' ? 'none' : 'block';
+  };
+
+  // Close on Escape key
   document.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape' && modal.style.display === 'block') {
-      toggleModal();
+    if (e.key === 'Escape' && iframe.style.display === 'block') {
+      iframe.style.display = 'none';
     }
   });
 })();

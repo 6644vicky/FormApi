@@ -1349,7 +1349,7 @@ export default function BuilderPage() {
                 overflowY="auto"
                 wordBreak="break-all"
               >
-                {`<iframe src="https://form-api-zeta.vercel.app/form" width="100%" height="600px" style="border: none; border-radius: 8px;"></iframe>`}
+                {`<script src="https://form-api-zeta.vercel.app/widget.js"><\/script>`}
               </Box>
               <Button
                 size="sm"
@@ -1358,11 +1358,11 @@ export default function BuilderPage() {
                 _hover={{ bg: "customGray.700" }}
                 w="100%"
                 onClick={() => {
-                  const code = `<iframe src="https://form-api-zeta.vercel.app/form" width="100%" height="600px" style="border: none; border-radius: 8px;"></iframe>`;
+                  const code = `<script src="https://form-api-zeta.vercel.app/widget.js"><\/script>`;
                   navigator.clipboard.writeText(code).then(() => {
                     toast({
                       title: "Code copied!",
-                      description: "Ready to embed on your website",
+                      description: "Paste this into your website",
                       status: "success",
                       duration: 3000,
                       isClosable: true,
@@ -1374,7 +1374,7 @@ export default function BuilderPage() {
                 Copy Code
               </Button>
               <Text fontSize="xs" color="customGray.600" textAlign="center">
-                Paste this code on your website to embed the form
+                Paste this one line before your closing &lt;/body&gt; tag
               </Text>
             </VStack>
           </ModalBody>

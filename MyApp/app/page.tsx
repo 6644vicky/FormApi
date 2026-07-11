@@ -22,7 +22,12 @@ import { useAuthCallback } from "@/lib/useAuthCallback";
 
 const getCallbackUrl = () => {
   if (typeof window !== "undefined") {
-    return `${window.location.origin}/api/auth/callback`;
+    const origin = window.location.origin;
+    // Use localhost for development, Vercel for production
+    if (origin.includes("localhost")) {
+      return `${origin}/api/auth/callback`;
+    }
+    return `https://form-api-zeta.vercel.app/api/auth/callback`;
   }
   return "/api/auth/callback";
 };

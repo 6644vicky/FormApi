@@ -40,7 +40,12 @@ import {
   MenuList,
   MenuItem,
   Tooltip,
+  IconButton,
+  InputGroup,
+  InputLeftElement,
+  useOutsideClick,
 } from "@chakra-ui/react";
+import { SearchIcon, ChevronDownIcon, HamburgerIcon } from "@chakra-ui/icons";
 
 const slideUpFade = keyframes`
   from {
@@ -64,6 +69,7 @@ export default function BuilderPage() {
   const { isOpen: isCreateOpen, onOpen: onCreateOpen, onClose: onCreateClose } = useDisclosure();
   const { isOpen: isDeleteOpen, onOpen: onDeleteOpen, onClose: onDeleteClose } = useDisclosure();
   const { isOpen: isEmbedOpen, onOpen: onEmbedOpen, onClose: onEmbedClose } = useDisclosure();
+  const { isOpen: isCustomColourOpen, onOpen: onCustomColourOpen, onClose: onCustomColourClose } = useDisclosure();
   const [feedbackMessage, setFeedbackMessage] = useState("");
   const [isFeedbackSubmitting, setIsFeedbackSubmitting] = useState(false);
   const [feedbackError, setFeedbackError] = useState("");
@@ -84,7 +90,31 @@ export default function BuilderPage() {
   ]);
   const [insertAtIndex, setInsertAtIndex] = useState<number>(0);
   const [visibleFields, setVisibleFields] = useState<Set<string>>(new Set());
-  const [isFormFullWidth, setIsFormFullWidth] = useState(true);
+  const [activeTabIndex, setActiveTabIndex] = useState(0);
+  const [isSearchExpanded, setIsSearchExpanded] = useState(false);
+  const searchRef = useRef<HTMLDivElement>(null);
+  const [isFormFullWidth, setIsFormFullWidth] = useState(false);
+
+  useOutsideClick({
+    ref: searchRef,
+    handler: () => setIsSearchExpanded(false),
+  });
+  const [formWidth, setFormWidth] = useState("427px");
+  const [formHeight, setFormHeight] = useState("auto");
+  const [formPadding, setFormPadding] = useState("24px");
+  const [borderRadius, setBorderRadius] = useState("16px");
+  const [selectedElementId, setSelectedElementId] = useState<string | null>(null);
+  const [selectedColorPreset, setSelectedColorPreset] = useState<"dark" | "green">("green");
+  const [colorScheme, setColorScheme] = useState({
+    formBg: "#ffffff",
+    inputBg: "#ffffff",
+    inputBorder: "#bbf7d0",
+    inputBorderActive: "#22c55e",
+    buttonBg: "#16a34a",
+    buttonBgHover: "#15803d",
+    buttonBgDisabled: "#bbf7d0",
+    errorColor: "#ef4444",
+  });
   const fieldRefs = useRef<{ [key: string]: HTMLDivElement | null }>({});
 
   useEffect(() => {
@@ -365,6 +395,47 @@ export default function BuilderPage() {
     }
   };
 
+  const handleDeleteField = () => {
+    if (selectedElementId) {
+      setFormFields((prev) => prev.filter((field) => field.id !== selectedElementId));
+      setSelectedElementId(null);
+      toast({
+        title: "Field deleted",
+        status: "success",
+        duration: 2000,
+        isClosable: true,
+      });
+    }
+  };
+
+  const colorPresets = {
+    dark: {
+      formBg: "#1f2937",
+      inputBg: "#111827",
+      inputBorder: "#374151",
+      inputBorderActive: "#60a5fa",
+      buttonBg: "#3b82f6",
+      buttonBgHover: "#2563eb",
+      buttonBgDisabled: "#6b7280",
+      errorColor: "#f87171",
+    },
+    green: {
+      formBg: "#ffffff",
+      inputBg: "#ffffff",
+      inputBorder: "#bbf7d0",
+      inputBorderActive: "#22c55e",
+      buttonBg: "#16a34a",
+      buttonBgHover: "#15803d",
+      buttonBgDisabled: "#bbf7d0",
+      errorColor: "#ef4444",
+    },
+  };
+
+  const applyColorPreset = (preset: "dark" | "green") => {
+    setSelectedColorPreset(preset);
+    setColorScheme(colorPresets[preset]);
+  };
+
   const colors = ["#EA8C55", "#7C3AED", "#10B981", "#F59E0B", "#EF4444", "#06B6D4", "#8B5CF6", "#EC4899"];
 
   const serviceColors: { [key: string]: string } = {
@@ -434,24 +505,26 @@ export default function BuilderPage() {
         pb="12px"
       >
 
-        <HStack flex={1} h="100%" align="stretch" spacing={0} bg="white" borderRadius="12px" border="1px solid" borderColor="customGray.200" overflow="hidden">
+        <HStack flex={1} h="100%" align="stretch" spacing={0} bg="white" borderRadius="8px" border="1px solid" borderColor="customGray.200" overflow="hidden">
           <VStack w={isWorkspaceListCollapsed ? "0px" : "255px"} h="100%" align="stretch" spacing={0} borderRight={isWorkspaceListCollapsed ? "none" : "1px solid"} borderColor="customGray.200" overflow="hidden" transition="all 0.3s ease">
             <HStack h="64px" align="center" justify="space-between" pl="20px" pr="16px" pt="14px" pb="16px">
               <Text fontSize="base" fontWeight="medium" color="customGray.800">
                 Workspace
               </Text>
-              <Button
-                variant="ghost"
-                size="sm"
-                p="6px"
-                minW="auto"
-                _hover={{ bg: "customGray.100" }}
-                onClick={onCreateOpen}
-              >
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                  <path d="M12 5v14M5 12h14" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                </svg>
-              </Button>
+              <Tooltip label="Create workspace" placement="bottom">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  p="6px"
+                  minW="auto"
+                  _hover={{ bg: "customGray.100" }}
+                  onClick={onCreateOpen}
+                >
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M12 5v14M5 12h14" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                  </svg>
+                </Button>
+              </Tooltip>
             </HStack>
             <VStack
               flex={1}
@@ -472,10 +545,10 @@ export default function BuilderPage() {
               {agents.map((agentObj, index) => (
                 <Box
                   key={index}
-                  h="32px"
-                  bg={selectedAgent === agentObj.name ? "customGray.100" : "white"}
+                  h="28px"
+                  bg={selectedAgent === agentObj.name ? "customGray.100" : "transparent"}
                   borderRadius="8px"
-                  px="12px"
+                  px="8px"
                   py="8px"
                   display="flex"
                   alignItems="center"
@@ -484,7 +557,7 @@ export default function BuilderPage() {
                   onClick={() => setSelectedAgent(agentObj.name)}
                   onMouseEnter={() => setHoveredAgent(agentObj.name)}
                   onMouseLeave={() => setHoveredAgent(null)}
-                  _hover={{ bg: selectedAgent === agentObj.name ? "customGray.100" : "customGray.50" }}
+                  _hover={{ bg: selectedAgent === agentObj.name ? "customGray.100" : "customGray.100" }}
                   transition="all 0.2s"
                 >
                   <Text fontSize="sm" fontWeight={selectedAgent === agentObj.name ? "medium" : "normal"} color={selectedAgent === agentObj.name ? "customGray.800" : "customGray.500"} noOfLines={1} overflow="hidden" textOverflow="ellipsis" minW={0}>
@@ -496,7 +569,7 @@ export default function BuilderPage() {
           </VStack>
           <VStack flex={1} h="100%" align="stretch" spacing={0} overflow="hidden">
             <HStack h="64px" align="center" justify="space-between" pl="20px" pr="16px" pt="14px" pb="18px" w="100%">
-              <HStack spacing="12px" align="center">
+              <HStack spacing="4px" align="center">
                 <Tooltip label={isWorkspaceListCollapsed ? "Expand" : "Collapse"} placement="bottom">
                   <Button
                     variant="ghost"
@@ -507,78 +580,39 @@ export default function BuilderPage() {
                     _hover={{ bg: "customGray.50" }}
                     onClick={() => setIsWorkspaceListCollapsed(!isWorkspaceListCollapsed)}
                   >
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                      <path d="M3 6h18M3 12h18M3 18h18" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                    <svg width="20" height="20" viewBox="0 0 18 18" fill="none" xmlns="http://www.w3.org/2000/svg">
+                      <path d="M14.25 2.25H3.75C2.92157 2.25 2.25 2.92157 2.25 3.75V14.25C2.25 15.0784 2.92157 15.75 3.75 15.75H14.25C15.0784 15.75 15.75 15.0784 15.75 14.25V3.75C15.75 2.92157 15.0784 2.25 14.25 2.25Z" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                      <path d="M8 13.25L8 4.75C8 4.33579 7.66421 4 7.25 4L4.75 4C4.33579 4 4 4.33579 4 4.75L4 13.25C4 13.6642 4.33579 14 4.75 14L7.25 14C7.66421 14 8 13.6642 8 13.25Z" fill="currentColor"/>
                     </svg>
                   </Button>
                 </Tooltip>
                 <Text fontSize="lg" fontWeight="medium" color="customGray.800">
-                  form dev
+                  {selectedAgent || "form dev"}
                 </Text>
               </HStack>
               <HStack spacing="8px">
-                <Menu>
-                  <MenuButton
-                    as={Button}
-                    size="sm"
-                    variant="ghost"
-                    color="customGray.800"
-                    bg="customGray.100"
-                    _hover={{ bg: "customGray.200" }}
-                    p="6px"
-                    minW="auto"
-                    borderRadius="8px"
-                  >
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                      <path d="M12 5v2m0 6v2m0 6v2" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                      <circle cx="12" cy="6" r="1" fill="currentColor"/>
-                      <circle cx="12" cy="13" r="1" fill="currentColor"/>
-                      <circle cx="12" cy="20" r="1" fill="currentColor"/>
+                <Button size="sm" bg="customGray.800" color="white" _hover={{ bg: "customGray.700" }} display="flex" alignItems="center" gap="8px" onClick={() => activeTabIndex === 1 && router.push("/calendar-builder")}>
+                  <Box display="flex" alignItems="center" justifyContent="center" w="16px" h="16px">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                      <path d="M12 5v14M5 12h14" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
                     </svg>
-                  </MenuButton>
-                  <MenuList>
-                    <MenuItem fontSize="sm" color="customGray.800">
-                      Archive
-                    </MenuItem>
-                    <MenuItem fontSize="sm" color="customGray.800" onClick={handleDuplicate}>
-                      Duplicate
-                    </MenuItem>
-                    <MenuItem fontSize="sm" color="#FF6B6B" onClick={onDeleteOpen}>
-                      Delete
-                    </MenuItem>
-                  </MenuList>
-                </Menu>
-                <Button
-                  size="sm"
-                  bg="customGray.100"
-                  color="customGray.800"
-                  _hover={{ bg: "customGray.200" }}
-                  p="6px"
-                  minW="auto"
-                  borderRadius="8px"
-                  display="flex"
-                  alignItems="center"
-                  justifyContent="center"
-                  onClick={onEmbedOpen}
-                >
-                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                    <path d="M9 12h6M9 16h4M9 8h6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                    <rect x="4" y="3" width="16" height="18" rx="2" stroke="currentColor" strokeWidth="2"/>
-                  </svg>
-                </Button>
-                <Button size="sm" bg="customGray.800" color="white" _hover={{ bg: "customGray.700" }}>
-                  Save changes
+                  </Box>
+                  {activeTabIndex === 0 ? "Create form" : "Create event"}
                 </Button>
               </HStack>
             </HStack>
-            <Tabs flex={1} display="flex" flexDirection="column" overflow="hidden" w="100%">
-              <TabList pl="20px" borderBottom="1px solid" borderColor="customGray.200">
-                <Tab fontSize="sm" color="customGray.500" pb="12px" mb="-1px" borderBottom="2px solid transparent" _selected={{ color: "customGray.800", borderColor: "customGray.800", bg: "white" }} display="flex" alignItems="center" gap="6px">
-                  <Box w="8px" h="8px" borderRadius="full" bg={selectedAgent && agents.find(a => a.name === selectedAgent)?.services.includes("form") ? "#60A5FA" : "customGray.300"} />
+            <Tabs flex={1} display="flex" flexDirection="column" overflow="hidden" w="100%" index={activeTabIndex} onChange={setActiveTabIndex}>
+              <TabList pl="24px" borderBottom="1px solid" borderColor="customGray.200">
+                <Tab fontSize="sm" color="customGray.500" pb="12px" mb="-1px" borderBottom="2px solid transparent" _selected={{ color: "customGray.800", borderColor: "customGray.800", bg: "white" }} display="flex" alignItems="center" gap="6px" pl="0px">
+                  <svg width="16" height="16" viewBox="0 0 18 18" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M10.5 1.5V4.5C10.5 4.89782 10.658 5.27936 10.9393 5.56066C11.2206 5.84196 11.6022 6 12 6H15M7.5 6.75H6M12 9.75H6M12 12.75H6M11.25 1.5H4.5C4.10218 1.5 3.72064 1.65804 3.43934 1.93934C3.15804 2.22064 3 2.60218 3 3V15C3 15.3978 3.15804 15.7794 3.43934 16.0607C3.72064 16.342 4.10218 16.5 4.5 16.5H13.5C13.8978 16.5 14.2794 16.342 14.5607 16.0607C14.842 15.7794 15 15.3978 15 15V5.25L11.25 1.5Z" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                  </svg>
                   Form
                 </Tab>
                 <Tab fontSize="sm" color="customGray.500" pb="12px" mb="-1px" borderBottom="2px solid transparent" _selected={{ color: "customGray.800", borderColor: "customGray.800", bg: "white" }} display="flex" alignItems="center" gap="6px">
-                  <Box w="8px" h="8px" borderRadius="full" bg={selectedAgent && agents.find(a => a.name === selectedAgent)?.services.includes("calendar") ? "#F472B6" : "customGray.300"} />
+                  <svg width="16" height="16" viewBox="0 0 18 18" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M6 1.5V4.5M12 1.5V4.5M2.25 7.5H15.75M3.75 3H14.25C15.0784 3 15.75 3.67157 15.75 4.5V15C15.75 15.8284 15.0784 16.5 14.25 16.5H3.75C2.92157 16.5 2.25 15.8284 2.25 15V4.5C2.25 3.67157 2.92157 3 3.75 3Z" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                  </svg>
                   Calendar
                 </Tab>
               </TabList>
@@ -601,25 +635,26 @@ export default function BuilderPage() {
                       },
                     }}>
                       <Box
-                        bg="white"
-                        borderRadius={isFormFullWidth ? "0px" : "16px"}
+                        bg={colorScheme.formBg}
+                        borderRadius={isFormFullWidth ? "0px" : borderRadius}
                         w="100%"
-                        maxW={isFormFullWidth ? "100%" : "427px"}
+                        maxW={isFormFullWidth ? "100%" : formWidth}
                         h={isFormFullWidth ? "calc(100vh - 24px)" : "auto"}
+                        minH={isFormFullWidth ? "calc(100vh - 24px)" : formHeight}
                         boxShadow={isFormFullWidth ? "none" : "lg"}
                         transition="max-width 0.4s ease-in-out, border-radius 0.4s ease-in-out, padding 0.4s ease-in-out"
                         display="flex"
                         flexDirection="column"
                         alignItems="center"
                         justifyContent="flex-start"
-                        pt={isFormFullWidth ? "64px" : "32px"}
-                        pb="32px"
+                        pt={isFormFullWidth ? "64px" : formPadding}
+                        pb={formPadding}
                         px="32px"
-                        overflow="hidden"
+                        overflow="visible"
                         style={{ willChange: "max-width, padding" }}
                       >
-                        <VStack align="center" spacing="24px" w="100%" maxW={isFormFullWidth ? "100%" : "427px"} style={{ willChange: "max-width" }}>
-                          <VStack align="center" spacing="8px" w="100%">
+                        <VStack align="center" spacing={formPadding} w="100%" maxW={isFormFullWidth ? "100%" : formWidth} h="auto" style={{ willChange: "max-width" }}>
+                          <VStack align="center" spacing={formPadding} w="100%">
                             <Text fontSize="xs" fontWeight="medium" color="customGray.500">
                               Typeform
                             </Text>
@@ -627,37 +662,45 @@ export default function BuilderPage() {
                               Let's get your Intercom demo started
                             </Heading>
                           </VStack>
-                          <VStack align={isFormFullWidth ? "center" : "stretch"} spacing="12px" w="100%" role="group">
+                          <VStack align={isFormFullWidth ? "center" : "stretch"} spacing={formPadding} w="100%">
                             {formFields.map((field, index) => (
-                              <Box key={field.id} w={isFormFullWidth ? "100%" : "100%"} maxW={isFormFullWidth ? "500px" : "100%"}>
-                                {/* Inline add field button - appears on hover between fields */}
+                              <Box key={field.id} w={isFormFullWidth ? "100%" : "100%"} maxW={isFormFullWidth ? "500px" : "100%"} position="relative" role="group">
+                                {/* Insertion bar - absolutely positioned between fields */}
                                 {index > 0 && (
-                                  <HStack
+                                  <Box
+                                    position="absolute"
+                                    top={`calc(-${formPadding} / 2 - 12px)`}
+                                    left="0"
                                     w="100%"
-                                    h="0"
-                                    align="center"
-                                    spacing="8px"
-                                    mt="-6px"
-                                    mb="-6px"
+                                    h="24px"
+                                    display="flex"
+                                    alignItems="center"
+                                    justifyContent="flex-start"
                                     opacity="0"
                                     _groupHover={{ opacity: 1 }}
-                                    transition="opacity 0.2s"
+                                    transition="opacity 0.2s ease-in-out"
                                     pointerEvents="auto"
+                                    zIndex={10}
+                                    px="0"
+                                    gap="4px"
                                   >
-                                    <Box h="1px" flex={1} bg="#06B6D4" />
                                     <Menu>
                                       <MenuButton
                                         as={Button}
                                         size="sm"
                                         bg="#06B6D4"
                                         color="white"
-                                        p="4px"
+                                        p="0"
                                         minW="auto"
-                                        h="24px"
-                                        w="24px"
-                                        fontSize="16px"
+                                        h="20px"
+                                        w="20px"
+                                        fontSize="14px"
                                         _hover={{ bg: "#0891B2" }}
                                         borderRadius="full"
+                                        display="flex"
+                                        alignItems="center"
+                                        justifyContent="center"
+                                        flexShrink={0}
                                       >
                                         +
                                       </MenuButton>
@@ -668,14 +711,13 @@ export default function BuilderPage() {
                                         <MenuItem fontSize="sm" color="customGray.800" onClick={() => { const newField = { id: Date.now().toString(), name: "Phone", type: "text" }; const newFields = [...formFields]; newFields.splice(index, 0, newField); setFormFields(newFields); }}>☎ Phone</MenuItem>
                                       </MenuList>
                                     </Menu>
-                                    <Box h="1px" flex={1} bg="#06B6D4" />
-                                  </HStack>
+                                    <Box h="1px" flex={1} bg="#06B6D4" m="0" p="0" />
+                                  </Box>
                                 )}
 
                                 {/* Form field */}
                                 <Box
-                                  w={isFormFullWidth ? "100%" : "100%"}
-                                  maxW={isFormFullWidth ? "500px" : "100%"}
+                                  w="100%"
                                   id={field.id}
                                   ref={(el) => {
                                     if (el) fieldRefs.current[field.id] = el;
@@ -685,7 +727,6 @@ export default function BuilderPage() {
                                   {field.type === "textarea" ? (
                                     <Textarea
                                       placeholder={field.name}
-                                      isDisabled
                                       fontSize="sm"
                                       border="1px solid"
                                       borderColor="customGray.200"
@@ -698,7 +739,6 @@ export default function BuilderPage() {
                                   ) : (
                                     <Input
                                       placeholder={field.name}
-                                      isDisabled
                                       fontSize="sm"
                                       border="1px solid"
                                       borderColor="customGray.200"
@@ -761,115 +801,233 @@ export default function BuilderPage() {
                           '&::-webkit-scrollbar-thumb:hover': { bg: 'customGray.400' },
                         }}
                       >
-                        <Box p="16px" borderBottom="1px solid" borderBottomColor="customGray.200">
-                          <Text fontSize="sm" fontWeight="semibold" color="customGray.800">
-                            Form Properties
-                          </Text>
-                        </Box>
+                        <VStack align="start" spacing="18px" w="100%" p="16px" borderBottom="1px solid" borderBottomColor="customGray.200">
+                          <Text fontSize="sm" fontWeight={500} color="customGray.800">Form Properties</Text>
+                          <HStack justify="space-between" w="100%">
+                            <Text fontSize="xs" fontWeight="medium" color="customGray.600">Full Width</Text>
+                            <Box w="36px" h="20px" bg={isFormFullWidth ? "customGray.800" : "customGray.300"} borderRadius="full" position="relative" cursor="pointer" onClick={() => setIsFormFullWidth(!isFormFullWidth)}>
+                              <Box w="16px" h="16px" bg="white" borderRadius="full" position="absolute" top="2px" left={isFormFullWidth ? "18px" : "2px"} transition="all 0.2s" />
+                            </Box>
+                          </HStack>
+                          <HStack spacing="14px" w="100%" opacity={isFormFullWidth ? 0.6 : 1} transition="opacity 0.2s">
+                            <HStack align="center" flex={1} spacing="8px">
+                              <Text fontSize="xs" fontWeight="medium" color="customGray.600" minW="fit-content">Width</Text>
+                              <Input isDisabled={isFormFullWidth} value={formWidth} placeholder="427px" fontSize="xs" border="1px solid" borderColor={isFormFullWidth ? "customGray.300" : "customGray.300"} h="28px" borderRadius="base" w="100%" px="8px" bg="customDark.5" color={isFormFullWidth ? "customGray.400" : "customGray.800"} _placeholder={{ color: isFormFullWidth ? "customGray.400" : "customGray.500" }} _disabled={{ cursor: "not-allowed", color: "customGray.400" }} _hover={!isFormFullWidth ? { borderColor: "customGray.400" } : {}} _focus={!isFormFullWidth ? { borderColor: "customGray.800", boxShadow: "0 0 0 1px customGray.800" } : {}} onChange={(e) => { setFormWidth(e.target.value.replace(/[^0-9px]/gi, '')); }} />
+                            </HStack>
+                            <HStack align="center" flex={1} spacing="8px">
+                              <Text fontSize="xs" fontWeight="medium" color="customGray.600" minW="fit-content">Height</Text>
+                              <Input isDisabled={true} value={formHeight} placeholder="auto" fontSize="xs" border="1px solid" borderColor="customGray.300" h="28px" borderRadius="base" w="100%" px="8px" bg="customDark.5" color="customGray.400" _placeholder={{ color: "customGray.400" }} _disabled={{ cursor: "not-allowed", color: "customGray.400" }} onChange={(e) => { setFormHeight(e.target.value.replace(/[^0-9pxauto]/gi, '')); }} />
+                            </HStack>
+                          </HStack>
+                        </VStack>
 
-                        <HStack p="16px" borderBottom="1px solid" borderBottomColor="customGray.200" justify="space-between" w="100%">
-                          <Text fontSize="xs" fontWeight="medium" color="customGray.600">Full Width</Text>
-                          <Box w="36px" h="20px" bg={isFormFullWidth ? "customGray.800" : "customGray.300"} borderRadius="full" position="relative" cursor="pointer" onClick={() => setIsFormFullWidth(!isFormFullWidth)}>
-                            <Box w="16px" h="16px" bg="white" borderRadius="full" position="absolute" top="2px" left={isFormFullWidth ? "18px" : "2px"} transition="all 0.2s" />
-                          </Box>
+                        <HStack align="center" justify="space-between" w="100%" p="16px" borderBottom="1px solid" borderBottomColor="customGray.200">
+                          <Text fontSize="xs" fontWeight="medium" color="customGray.600">Form padding</Text>
+                          <Input value={formPadding} placeholder="24px" fontSize="xs" border="1px solid" borderColor="customGray.300" h="28px" borderRadius="base" px="8px" bg="customDark.5" w="80px" onChange={(e) => { setFormPadding(e.target.value.replace(/[^0-9px]/gi, '')); }} />
                         </HStack>
 
-                        <VStack align="start" spacing="8px" w="100%" p="16px" borderBottom="1px solid" borderBottomColor="customGray.200">
-                          <HStack spacing="12px" w="100%">
-                            <VStack align="start" flex={1} spacing="4px">
-                              <Text fontSize="xs" fontWeight="medium" color="customGray.600">Width</Text>
-                              <Input placeholder="16px" fontSize="xs" border="1px solid" borderColor="customGray.300" h="28px" borderRadius="base" onChange={(e) => { e.target.value = e.target.value.replace(/[^0-9px]/gi, ''); }} />
-                            </VStack>
-                            <VStack align="start" flex={1} spacing="4px">
-                              <Text fontSize="xs" fontWeight="medium" color="customGray.600">Height</Text>
-                              <Input placeholder="16px" fontSize="xs" border="1px solid" borderColor="customGray.300" h="28px" borderRadius="base" onChange={(e) => { e.target.value = e.target.value.replace(/[^0-9px]/gi, ''); }} />
-                            </VStack>
-                          </HStack>
-                        </VStack>
-
-                        <VStack align="start" spacing="8px" w="100%" p="16px" borderBottom="1px solid" borderBottomColor="customGray.200">
-                          <Text fontSize="xs" fontWeight="medium" color="customGray.600">Form padding</Text>
-                          <Input placeholder="16px" fontSize="sm" border="1px solid" borderColor="customGray.300" h="32px" borderRadius="base" onChange={(e) => { e.target.value = e.target.value.replace(/[^0-9px]/gi, ''); }} />
-                        </VStack>
-
-                        <VStack align="start" spacing="8px" w="100%" p="16px" borderBottom="1px solid" borderBottomColor="customGray.200">
+                        <VStack align="start" spacing="12px" w="100%" p="16px" borderBottom="1px solid" borderBottomColor="customGray.200">
                           <Text fontSize="xs" fontWeight="medium" color="customGray.600">Form Colour</Text>
+
+                          {/* Color Presets */}
                           <HStack spacing="8px" w="100%">
-                            <HStack flex={1} border="1px solid" borderColor="customGray.300" borderRadius="base" px="8px" py="6px">
-                              <Box w="16px" h="16px" borderRadius="4px" bg="#E85C5C" />
-                              <Text fontSize="xs" color="customGray.600">E85C5C</Text>
+                            {/* White Preset */}
+                            <HStack
+                              flex={1}
+                              h="28px"
+                              px="6px"
+                              borderRadius="8px"
+                              border="1px solid"
+                              borderColor={selectedColorPreset === "green" ? "customGray.800" : "customGray.300"}
+                              cursor="pointer"
+                              bg={selectedColorPreset === "green" ? "customGray.100" : "white"}
+                              onClick={() => applyColorPreset("green")}
+                              _hover={{ bg: "customGray.50" }}
+                              transition="all 0.2s"
+                              align="center"
+                            >
+                              <Box w="16px" h="16px" bg="#ffffff" borderRadius="3px" flexShrink={0} border="1px solid" borderColor="customGray.300" />
+                              <Text fontSize="sm" fontWeight="medium" color="customGray.800" flex={1}>
+                                White
+                              </Text>
                             </HStack>
-                            <Box w="28px" h="28px" borderRadius="4px" bg="#EC4899" cursor="pointer" />
-                            <Box w="28px" h="28px" borderRadius="4px" bg="#A855F7" cursor="pointer" />
-                            <Box w="28px" h="28px" borderRadius="4px" bg="#06B6D4" cursor="pointer" />
+
+                            {/* Black Preset */}
+                            <HStack
+                              flex={1}
+                              h="28px"
+                              px="6px"
+                              borderRadius="8px"
+                              border="1px solid"
+                              borderColor={selectedColorPreset === "dark" ? "customGray.800" : "customGray.300"}
+                              cursor="pointer"
+                              bg={selectedColorPreset === "dark" ? "customGray.100" : "white"}
+                              onClick={() => applyColorPreset("dark")}
+                              _hover={{ bg: "customGray.50" }}
+                              transition="all 0.2s"
+                              align="center"
+                            >
+                              <Box w="16px" h="16px" bg="#1f2937" borderRadius="3px" flexShrink={0} />
+                              <Text fontSize="sm" fontWeight="medium" color="customGray.800" flex={1}>
+                                Black
+                              </Text>
+                            </HStack>
+                          </HStack>
+
+                          {/* Custom Colour Button */}
+                          <HStack spacing="4px" cursor="pointer" onClick={onCustomColourOpen}>
+                            <IconButton
+                              icon={
+                                <svg width="14" height="14" viewBox="0 0 14 14" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                  <path d="M2.91675 7H11.0834M7.00008 2.91667V11.0833" stroke="currentColor" strokeWidth="1.16667" strokeLinecap="round" strokeLinejoin="round"/>
+                                </svg>
+                              }
+                              variant="unstyled"
+                              size="sm"
+                              minW="auto"
+                              h="auto"
+                              p="0"
+                              color="customGray.600"
+                              _hover={{ color: "customGray.800" }}
+                              aria-label="Custom colour"
+                            />
+                            <Text fontSize="xs" fontWeight="medium" color="customGray.600" _hover={{ color: "customGray.800" }}>
+                              Custom colour
+                            </Text>
                           </HStack>
                         </VStack>
 
-                        <VStack align="start" spacing="8px" w="100%" p="16px" borderBottom="1px solid" borderBottomColor="customGray.200">
+                        <HStack align="center" justify="space-between" w="100%" p="16px" borderBottom="1px solid" borderBottomColor="customGray.200" opacity={isFormFullWidth ? 0.6 : 1} transition="opacity 0.2s">
                           <Text fontSize="xs" fontWeight="medium" color="customGray.600">Border Radius</Text>
-                          <Input placeholder="16px" fontSize="sm" border="1px solid" borderColor="customGray.300" h="32px" borderRadius="base" onChange={(e) => { e.target.value = e.target.value.replace(/[^0-9px]/gi, ''); }} />
-                        </VStack>
-
-                        <VStack align="start" spacing="8px" w="100%" p="16px">
-                          <HStack justify="space-between" w="100%">
-                            <HStack spacing="8px">
-                              <Box w="16px" h="16px" border="1px solid" borderColor="customGray.300" borderRadius="4px" />
-                              <Text fontSize="xs" fontWeight="medium" color="customGray.600">Border colour</Text>
-                            </HStack>
-                            <HStack border="1px solid" borderColor="customGray.300" borderRadius="base" px="8px" py="4px">
-                              <Box w="12px" h="12px" borderRadius="3px" bg="#E85C5C" />
-                              <Text fontSize="xs" color="customGray.600">E85C5C</Text>
-                            </HStack>
-                          </HStack>
-                        </VStack>
+                          <Input isDisabled={isFormFullWidth} value={borderRadius} placeholder="16px" fontSize="xs" border="1px solid" borderColor={isFormFullWidth ? "customGray.300" : "customGray.300"} h="28px" borderRadius="base" px="8px" bg="customDark.5" w="80px" color={isFormFullWidth ? "customGray.400" : "customGray.800"} _placeholder={{ color: isFormFullWidth ? "customGray.400" : "customGray.500" }} _disabled={{ cursor: "not-allowed", color: "customGray.400" }} _hover={!isFormFullWidth ? { borderColor: "customGray.400" } : {}} _focus={!isFormFullWidth ? { borderColor: "customGray.800", boxShadow: "0 0 0 1px customGray.800" } : {}} onChange={(e) => { setBorderRadius(e.target.value.replace(/[^0-9px]/gi, '')); }} />
+                        </HStack>
                       </VStack>
                     </VStack>
                   </HStack>
                 </TabPanel>
                 <TabPanel h="100%" p="0" overflow="hidden">
-                  <HStack align="stretch" spacing="0" h="100%" w="100%" overflow="hidden">
-                    <VStack align="center" justify="center" flex={1} h="100%" bg="customDark.2" pt="64px" pb="64px" px="54px">
-                      <Text fontSize="lg" color="customGray.800">
-                        Calendar
-                      </Text>
-                    </VStack>
-                    <VStack
-                      w="300px"
-                      h="100%"
-                      bg="white"
-                      borderLeft="1px solid"
-                      borderLeftColor="customGray.200"
-                      spacing={0}
-                      flexShrink={0}
-                      align="stretch"
-                      overflow="hidden"
-                    >
-                      <VStack
-                        w="100%"
-                        flex={1}
-                        overflowY="auto"
-                        overflowX="hidden"
-                        align="stretch"
-                        spacing={0}
-                        pb="24px"
-                        sx={{
-                          '&::-webkit-scrollbar': { width: '4px' },
-                          '&::-webkit-scrollbar-track': { bg: 'transparent' },
-                          '&::-webkit-scrollbar-thumb': { bg: 'customGray.200', borderRadius: '2px' },
-                          '&::-webkit-scrollbar-thumb:hover': { bg: 'customGray.400' },
-                        }}
-                      >
-                        <Box p="16px" borderBottom="1px solid" borderBottomColor="customGray.200">
-                          <Text fontSize="sm" fontWeight="semibold" color="customGray.800">
-                            Calendar Settings
-                          </Text>
+                  <VStack w="100%" align="stretch" spacing={0}>
+                    <Box w="100%" px="24px" py="12px" h="50px" display="flex" alignItems="center" justifyContent="flex-end" bg="white" borderBottom="1px solid" borderBottomColor="customGray.200">
+                      <HStack spacing="12px">
+                        <HStack ref={searchRef} spacing="0" bg={isSearchExpanded ? "white" : "transparent"} borderRadius="6px" border="1px solid" borderColor={isSearchExpanded ? "customGray.300" : "transparent"} transition="all 0.3s ease" overflow="hidden" h="32px">
+                          <IconButton aria-label="Search" icon={<SearchIcon w="16px" h="16px" />} size="sm" variant="ghost" color="customGray.600" _hover={{ bg: "customGray.50" }} onClick={() => setIsSearchExpanded(!isSearchExpanded)} />
+                          <Input placeholder="Search..." variant="unstyled" w={isSearchExpanded ? "160px" : "0px"} opacity={isSearchExpanded ? 1 : 0} transition="all 0.3s ease" px={isSearchExpanded ? "8px" : "0px"} fontSize="sm" color="customGray.800" _placeholder={{ color: "customGray.400" }} onBlur={() => setIsSearchExpanded(false)} autoFocus={isSearchExpanded} />
+                        </HStack>
+                        <IconButton aria-label="Filter" icon={<svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M3 6H21M5 12H19M7 18H17" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>} size="sm" variant="ghost" color="customGray.600" _hover={{ bg: "customGray.50" }} />
+                        <Button size="sm" variant="outline" leftIcon={<Box w="8px" h="8px" display="flex" alignItems="center" justifyContent="center"><svg width="8" height="8" viewBox="0 0 8 8" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M0 4C0 1.79086 1.79086 0 4 0V0C6.20914 0 8 1.79086 8 4V4C8 6.20914 6.20914 8 4 8V8C1.79086 8 0 6.20914 0 4V4Z" fill="#16A34A"/></svg></Box>} rightIcon={<ChevronDownIcon w="16px" h="16px" />} borderRadius="full" border="1px solid" borderColor="customGray.300" bg="white" color="customGray.600" fontSize="sm" fontWeight="medium" _hover={{ bg: "customGray.50" }} iconSpacing="4px">
+                          Online
+                        </Button>
+                      </HStack>
+                    </Box>
+                    <Box w="100%" bg="customGray.50" borderBottom="1px solid" borderBottomColor="customGray.200">
+                      <Flex w="100%" h="50px" pl="24px" pr="24px" align="center" gap="12px">
+                        <Box w="300px" display="flex" alignItems="center">
+                          <Text fontSize="sm" fontWeight="medium" color="customGray.600">Event Name</Text>
                         </Box>
-                        <Box p="16px">
-                          <Text fontSize="sm" color="customGray.500">Calendar settings would go here</Text>
+                        <Box w="256px" display="flex" alignItems="center">
+                          <Text fontSize="sm" fontWeight="medium" color="customGray.600">Booking Link</Text>
                         </Box>
-                      </VStack>
-                    </VStack>
-                  </HStack>
+                        <Box w="132px" display="flex" alignItems="center">
+                          <Text fontSize="sm" fontWeight="medium" color="customGray.600">Status</Text>
+                        </Box>
+                        <Box w="132px" display="flex" alignItems="center">
+                          <Text fontSize="sm" fontWeight="medium" color="customGray.600">Bookings</Text>
+                        </Box>
+                        <Box flex={1} display="flex" alignItems="center">
+                          <Text fontSize="sm" fontWeight="medium" color="customGray.600">Last Updated</Text>
+                        </Box>
+                        <Box display="flex" alignItems="center" justifyContent="center" w="32px" h="32px" ml="12px">
+                        </Box>
+                      </Flex>
+                    </Box>
+                    <Box w="100%" cursor="pointer">
+                      <Flex w="100%" h="50px" pl="24px" pr="24px" bg="white" borderBottom="1px solid" borderBottomColor="customGray.200" align="center" gap="12px" _hover={{ bg: "customGray.50" }} transition="background-color 0.2s">
+                        <Box w="300px" display="flex" alignItems="center" gap="8px">
+                          <Box w="24px" h="24px" bg="#7C3AED" borderRadius="full" display="flex" alignItems="center" justifyContent="center" flexShrink={0}>
+                            <Text fontSize="xs" fontWeight="medium" color="white">D</Text>
+                          </Box>
+                          <Text fontSize="sm" color="customGray.800">Demo Event</Text>
+                        </Box>
+                        <Box w="256px" display="flex" alignItems="center">
+                          <Text fontSize="sm" color="customGray.600" textDecoration="underline">example.com/booking</Text>
+                        </Box>
+                        <Box w="132px" display="flex" alignItems="center">
+                          <Text fontSize="sm" color="customGray.600">Active</Text>
+                        </Box>
+                        <Box w="132px" display="flex" alignItems="center">
+                          <Text fontSize="sm" color="customGray.600">12</Text>
+                        </Box>
+                        <Box flex={1} display="flex" alignItems="center">
+                          <Text fontSize="sm" color="customGray.600">Jul 18, 2026</Text>
+                        </Box>
+                        <Box display="flex" alignItems="center" justifyContent="center" w="32px" h="32px" ml="12px">
+                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                            <circle cx="12" cy="5" r="2" fill="currentColor" />
+                            <circle cx="12" cy="12" r="2" fill="currentColor" />
+                            <circle cx="12" cy="19" r="2" fill="currentColor" />
+                          </svg>
+                        </Box>
+                      </Flex>
+                    </Box>
+                    <Box w="100%" cursor="pointer">
+                      <Flex w="100%" h="50px" pl="24px" pr="24px" bg="white" borderBottom="1px solid" borderBottomColor="customGray.200" align="center" gap="12px" _hover={{ bg: "customGray.50" }} transition="background-color 0.2s">
+                        <Box w="300px" display="flex" alignItems="center" gap="8px">
+                          <Box w="24px" h="24px" bg="#EC4899" borderRadius="full" display="flex" alignItems="center" justifyContent="center" flexShrink={0}>
+                            <Text fontSize="xs" fontWeight="medium" color="white">P</Text>
+                          </Box>
+                          <Text fontSize="sm" color="customGray.800">Product Launch</Text>
+                        </Box>
+                        <Box w="256px" display="flex" alignItems="center">
+                          <Text fontSize="sm" color="customGray.600" textDecoration="underline">launch.mysite.com</Text>
+                        </Box>
+                        <Box w="132px" display="flex" alignItems="center">
+                          <Text fontSize="sm" color="customGray.600">Pending</Text>
+                        </Box>
+                        <Box w="132px" display="flex" alignItems="center">
+                          <Text fontSize="sm" color="customGray.600">8</Text>
+                        </Box>
+                        <Box flex={1} display="flex" alignItems="center">
+                          <Text fontSize="sm" color="customGray.600">Jul 20, 2026</Text>
+                        </Box>
+                        <Box display="flex" alignItems="center" justifyContent="center" w="32px" h="32px" ml="12px">
+                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                            <circle cx="12" cy="5" r="2" fill="currentColor" />
+                            <circle cx="12" cy="12" r="2" fill="currentColor" />
+                            <circle cx="12" cy="19" r="2" fill="currentColor" />
+                          </svg>
+                        </Box>
+                      </Flex>
+                    </Box>
+                    <Box w="100%" cursor="pointer">
+                      <Flex w="100%" h="50px" pl="24px" pr="24px" bg="white" borderBottom="1px solid" borderBottomColor="customGray.200" align="center" gap="12px" _hover={{ bg: "customGray.50" }} transition="background-color 0.2s">
+                        <Box w="300px" display="flex" alignItems="center" gap="8px">
+                          <Box w="24px" h="24px" bg="#0EA5E9" borderRadius="full" display="flex" alignItems="center" justifyContent="center" flexShrink={0}>
+                            <Text fontSize="xs" fontWeight="medium" color="white">T</Text>
+                          </Box>
+                          <Text fontSize="sm" color="customGray.800">Team Meeting</Text>
+                        </Box>
+                        <Box w="256px" display="flex" alignItems="center">
+                          <Text fontSize="sm" color="customGray.600" textDecoration="underline">meet.company.com</Text>
+                        </Box>
+                        <Box w="132px" display="flex" alignItems="center">
+                          <Text fontSize="sm" color="customGray.600">Active</Text>
+                        </Box>
+                        <Box w="132px" display="flex" alignItems="center">
+                          <Text fontSize="sm" color="customGray.600">25</Text>
+                        </Box>
+                        <Box flex={1} display="flex" alignItems="center">
+                          <Text fontSize="sm" color="customGray.600">Jul 19, 2026</Text>
+                        </Box>
+                        <Box display="flex" alignItems="center" justifyContent="center" w="32px" h="32px" ml="12px">
+                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                            <circle cx="12" cy="5" r="2" fill="currentColor" />
+                            <circle cx="12" cy="12" r="2" fill="currentColor" />
+                            <circle cx="12" cy="19" r="2" fill="currentColor" />
+                          </svg>
+                        </Box>
+                      </Flex>
+                    </Box>
+                  </VStack>
                 </TabPanel>
               </TabPanels>
             </Tabs>
@@ -1014,7 +1172,7 @@ export default function BuilderPage() {
                 <HStack spacing="8px">
                   <Tag
                     h="36px"
-                    px="12px"
+                    px="8px"
                     py="6px"
                     bg={selectedServices.includes("form") ? "customGray.50" : "white"}
                     border="1px solid"
@@ -1047,7 +1205,7 @@ export default function BuilderPage() {
                   </Tag>
                   <Tag
                     h="36px"
-                    px="12px"
+                    px="8px"
                     py="6px"
                     bg={selectedServices.includes("review") ? "customGray.50" : "white"}
                     border="1px solid"
@@ -1080,7 +1238,7 @@ export default function BuilderPage() {
                   </Tag>
                   <Tag
                     h="36px"
-                    px="12px"
+                    px="8px"
                     py="6px"
                     bg={selectedServices.includes("calendar") ? "customGray.50" : "white"}
                     border="1px solid"
@@ -1378,6 +1536,54 @@ export default function BuilderPage() {
               </Text>
             </VStack>
           </ModalBody>
+        </ModalContent>
+      </Modal>
+
+      {/* Custom Colour Modal */}
+      <Modal isOpen={isCustomColourOpen} onClose={onCustomColourClose} isCentered>
+        <ModalOverlay bg="rgba(0, 0, 0, 0.5)" />
+        <ModalContent bg="white" borderRadius="lg" maxW="400px" boxShadow="0 10px 40px rgba(0, 0, 0, 0.1)">
+          <ModalHeader fontSize="sm" fontWeight="semibold" color="customGray.800" px="16px" pt="16px" pb="0px">
+            Custom Colour
+          </ModalHeader>
+          <ModalBody py="16px" px="16px">
+            <VStack align="stretch" spacing="16px">
+              <Text fontSize="sm" color="customGray.600">
+                Choose a custom color for your form
+              </Text>
+              <Input
+                type="color"
+                h="48px"
+                borderRadius="base"
+                border="1px solid"
+                borderColor="customGray.200"
+                cursor="pointer"
+              />
+            </VStack>
+          </ModalBody>
+          <ModalFooter pt="16px" px="16px" pb="16px">
+            <HStack spacing="md">
+              <Button
+                size="sm"
+                variant="outline"
+                borderColor="customGray.300"
+                color="customGray.800"
+                _hover={{ bg: "customGray.50" }}
+                onClick={onCustomColourClose}
+              >
+                Cancel
+              </Button>
+              <Button
+                size="sm"
+                bg="customGray.800"
+                color="white"
+                _hover={{ bg: "customGray.700" }}
+                onClick={onCustomColourClose}
+              >
+                Apply
+              </Button>
+            </HStack>
+          </ModalFooter>
         </ModalContent>
       </Modal>
     </Flex>

@@ -10,31 +10,57 @@ export function useAuthCallback() {
   useEffect(() => {
     const handleOAuthCallback = async () => {
       try {
-        // Get the hash from the URL
         const hash = window.location.hash;
+        const params = new URLSearchParams(window.location.search);
+        const error = params.get("error");
 
-        // Check if this is an OAuth callback (has access_token in hash)
-        if (hash && hash.includes("access_token")) {
-          console.log("OAuth callback detected, waiting for session...");
+        console.log("Checking for OAuth response...");
+        console.log("Hash present:", !!hash);
+        console.log("Error param:", error);
 
-          // Wait for Supabase to process the OAuth response
-          await new Promise((resolve) => setTimeout(resolve, 500));
+        // Check if this is an OAuth callback response
+        if (hash.includes("access_token") || error === "no_code") {
+          console.log("OAuth response detected!");
 
-          // Get the current session
-          const { data: { session }, error } = await supabase.auth.getSession();
+          // Parse the hash to extract tokens
+          const hashParams = new URLSearchParams(hash.substring(1)); // Remove '#'
+          const accessToken = hashParams.get("access_token");
+          const refreshToken = hashParams.get("refresh_token");
+          const expiresIn = hashParams.get("expires_in");
 
-          if (error) {
-            console.error("Session error:", error);
-            router.push("/?error=session");
-            return;
-          }
+          console.log("Extracted tokens:", {
+            hasAccessToken: !!accessToken,
+            hasRefreshToken: !!refreshToken,
+            expiresIn,
+          });
 
-          if (session) {
-            console.log("Session established:", session.user.email);
-            // Clear the hash from the URL
+          if (accessToken) {
+            // Use the Supabase client to set the session with the access token
+            const { data, error: sessionError } = await supabase.auth.setSession({
+              access_token: accessToken,
+              refresh_token: refreshToken || "",
+            });
+
+            console.log("setSession result:", { success: !!data, error: sessionError });
+
+            if (sessionError) {
+              console.error("Error setting session:", sessionError);
+              window.history.replaceState({}, document.title, window.location.pathname);
+              return;
+            }
+
+            if (data?.session) {
+              console.log("✓ Session established for:", data.session.user.email);
+              // Clear the hash and error from the URL
+              window.history.replaceState({}, document.title, window.location.pathname);
+              // Redirect to builder
+              setTimeout(() => {
+                router.push("/builder");
+              }, 500);
+            }
+          } else {
+            console.warn("No access token found in hash");
             window.history.replaceState({}, document.title, window.location.pathname);
-            // Redirect to inbox
-            router.push("/inbox");
           }
         }
       } catch (error) {

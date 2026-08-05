@@ -1176,10 +1176,9 @@ export default function BuilderPage() {
               justify="center"
               spacing="24px"
               w="100%"
-              bg="white"
-              borderRadius="16px"
-              boxShadow="lg"
-              maxW="427px"
+              bg="customGray.50"
+              borderRadius="0px"
+              boxShadow="none"
             >
               <Box display="flex" alignItems="center" justifyContent="center">
                 <Box

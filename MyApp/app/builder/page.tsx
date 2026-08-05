@@ -2,7 +2,7 @@
 
 export const dynamic = 'force-dynamic';
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useLayoutEffect } from "react";
 import { useRouter } from "next/navigation";
 import { keyframes } from "@emotion/react";
 import { supabase } from "@/lib/supabase";
@@ -132,7 +132,10 @@ export default function BuilderPage() {
   const [calendarEvents, setCalendarEvents] = useState<Array<{ id: number; title: string; meeting_link: string; updated_at: string }>>([]);
 
   useEffect(() => {
-    setHasMounted(true);
+    const timer = setTimeout(() => {
+      setHasMounted(true);
+    }, 0);
+    return () => clearTimeout(timer);
   }, []);
 
   useEffect(() => {

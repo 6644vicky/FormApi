@@ -34,7 +34,7 @@ export default function CalendarBuilderPage() {
   const [availablePages, setAvailablePages] = useState<string[]>(["Main page", "Form page", "Success page"]);
   const [isGoogleConnected, setIsGoogleConnected] = useState(false);
   const [isZoomConnected, setIsZoomConnected] = useState(false);
-  const [isLoading, setIsLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState(false);
   const [currentEventId, setCurrentEventId] = useState<number | null>(null);
 
   useEffect(() => {

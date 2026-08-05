@@ -92,7 +92,7 @@ export default function BuilderPage() {
   const [isWorkspaceListCollapsed, setIsWorkspaceListCollapsed] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [isCreatingWorkspace, setIsCreatingWorkspace] = useState(false);
-  const [isLoadingWorkspaces, setIsLoadingWorkspaces] = useState(true);
+  const [isLoadingWorkspaces, setIsLoadingWorkspaces] = useState(false);
   const { isOpen: isAddFieldOpen, onOpen: onAddFieldOpen, onClose: onAddFieldClose } = useDisclosure();
   const [formFields, setFormFields] = useState<Array<{ id: string; name: string; type: string }>>([
     { id: "1", name: "First name", type: "text" },
@@ -114,7 +114,7 @@ export default function BuilderPage() {
   const [formWidth, setFormWidth] = useState("427px");
   const [formHeight, setFormHeight] = useState("auto");
   const [formPadding, setFormPadding] = useState("24px");
-  const [borderRadius, setBorderRadius] = useState("178px");
+  const [borderRadius, setBorderRadius] = useState("16px");
   const [selectedElementId, setSelectedElementId] = useState<string | null>(null);
   const [selectedColorPreset, setSelectedColorPreset] = useState<"dark" | "green">("green");
   const [colorScheme, setColorScheme] = useState({

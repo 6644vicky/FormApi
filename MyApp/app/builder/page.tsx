@@ -88,7 +88,7 @@ export default function BuilderPage() {
   const [isWorkspaceListCollapsed, setIsWorkspaceListCollapsed] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [isCreatingWorkspace, setIsCreatingWorkspace] = useState(false);
-  const [isLoadingWorkspaces, setIsLoadingWorkspaces] = useState(true);
+  const [isLoadingWorkspaces, setIsLoadingWorkspaces] = useState(false);
   const [enableSidebarTransition, setEnableSidebarTransition] = useState(false);
   const isMountedRef = useRef(false);
   const [activeTabIndex, setActiveTabIndex] = useState(0);
@@ -151,11 +151,8 @@ export default function BuilderPage() {
             console.error("Error loading agents from localStorage:", error);
           }
         }
-      } finally {
-        setTimeout(() => {
-          setIsLoadingWorkspaces(false);
-        }, 30000);
       }
+    };
     };
 
     loadAgents();

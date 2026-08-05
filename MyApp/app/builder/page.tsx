@@ -10,7 +10,6 @@ import { deleteUserAccount } from "@/app/actions/deleteUser";
 import { getAgents, createAgent, deleteAgent } from "@/app/actions/agentActions";
 import CryptoJS from "crypto-js";
 import Sidebar from "@/app/components/Sidebar";
-import FullScreenLoader from "@/components/FullScreenLoader";
 import {
   Box,
   Flex,
@@ -45,6 +44,7 @@ import {
   InputGroup,
   InputLeftElement,
   useOutsideClick,
+  Progress,
 } from "@chakra-ui/react";
 import { SearchIcon, ChevronDownIcon, HamburgerIcon } from "@chakra-ui/icons";
 
@@ -56,6 +56,15 @@ const slideUpFade = keyframes`
   to {
     opacity: 1;
     transform: translateY(0);
+  }
+`;
+
+const spin = keyframes`
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
   }
 `;
 
@@ -540,9 +549,7 @@ export default function BuilderPage() {
   };
 
   return (
-    <>
-      {isLoadingWorkspaces && <FullScreenLoader />}
-      <Flex h="100vh" w="100vw" bg="dark.bg" overflow="hidden" position="fixed" top={0} left={0}>
+    <Flex h="100vh" w="100vw" bg="dark.bg" overflow="hidden" position="fixed" top={0} left={0}>
       <Sidebar
         selectedNav={selectedNav}
         onNavClick={setSelectedNav}
@@ -1162,6 +1169,30 @@ export default function BuilderPage() {
                 </TabPanel>
               </TabPanels>
             </Tabs>
+            ) : isLoadingWorkspaces ? (
+            <VStack
+              data-area="workspace-container"
+              flex={1}
+              align="center"
+              justify="center"
+              spacing="24px"
+              w="100%"
+              bg="customGray.50"
+              borderRadius="0px"
+              boxShadow="none"
+            >
+              <Progress
+                isIndeterminate
+                size="xs"
+                width="200px"
+                colorScheme="teal"
+                trackColor="transparent"
+                borderRadius="full"
+              />
+              <Text fontSize="sm" color="customGray.600" fontWeight="medium">
+                Loading workspace...
+              </Text>
+            </VStack>
             ) : (
             <VStack flex={1} align="center" justify="center" spacing="24px" w="100%">
               <VStack align="center" spacing="12px">
@@ -1758,7 +1789,6 @@ export default function BuilderPage() {
         </ModalContent>
       </Modal>
     </Flex>
-    </>
   );
 }
 

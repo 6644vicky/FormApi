@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { Box, VStack, HStack, Text, Button, Heading, IconButton, Input, Textarea, useToast, Tabs, TabList, Tab, Avatar, Menu, MenuButton, MenuList, MenuItem, Modal, ModalOverlay, ModalContent, ModalHeader, ModalBody, ModalCloseButton, useDisclosure, Checkbox, Badge, Divider, Alert, AlertIcon, Tag, TagLabel, TagCloseButton, Progress } from "@chakra-ui/react";
+import { Box, VStack, HStack, Text, Button, Heading, IconButton, Input, Textarea, useToast, Tabs, TabList, Tab, Avatar, Menu, MenuButton, MenuList, MenuItem, Modal, ModalOverlay, ModalContent, ModalHeader, ModalBody, ModalCloseButton, useDisclosure, Checkbox, Badge, Divider, Alert, AlertIcon, Tag, TagLabel, TagCloseButton } from "@chakra-ui/react";
 import { ArrowBackIcon, DeleteIcon, AddIcon, ChevronDownIcon, DragHandleIcon, CloseIcon, ViewIcon } from "@chakra-ui/icons";
 import { useState, useEffect } from "react";
 import { CalendarPicker } from "@/components/CalendarPicker";
@@ -33,7 +33,6 @@ export default function CalendarBuilderPage() {
   const [availablePages, setAvailablePages] = useState<string[]>(["Main page", "Form page", "Success page"]);
   const [isGoogleConnected, setIsGoogleConnected] = useState(false);
   const [isZoomConnected, setIsZoomConnected] = useState(false);
-  const [isLoading, setIsLoading] = useState(true);
   const [currentEventId, setCurrentEventId] = useState<number | null>(null);
 
   useEffect(() => {
@@ -94,8 +93,6 @@ export default function CalendarBuilderPage() {
         }
       } catch (error) {
         console.error("Error loading user profile:", error);
-      } finally {
-        setIsLoading(false);
       }
     };
 
@@ -281,25 +278,6 @@ export default function CalendarBuilderPage() {
       });
     }
   };
-
-  if (isLoading) {
-    return (
-      <Box h="100dvh" w="100vw" bg="customGray.50" display="flex" alignItems="center" justifyContent="center">
-        <Progress
-          isIndeterminate
-          size="xs"
-          width="200px"
-          borderRadius="full"
-          sx={{
-            "& > div": {
-              backgroundColor: "#3F3F46 !important",
-              backgroundImage: "none",
-            },
-          }}
-        />
-      </Box>
-    );
-  }
 
   return (
     <>

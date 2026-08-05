@@ -463,6 +463,35 @@ export default function BuilderPage() {
     }
   };
 
+  if (isLoadingWorkspaces) {
+    return (
+      <Flex
+        h="100vh"
+        w="100vw"
+        bg="customGray.50"
+        align="center"
+        justify="center"
+        position="fixed"
+        top={0}
+        left={0}
+        zIndex={9999}
+      >
+        <Progress
+          isIndeterminate
+          size="xs"
+          width="200px"
+          bg="transparent"
+          borderRadius="full"
+          sx={{
+            "& > div": {
+              backgroundColor: "#3F3F46",
+            },
+          }}
+        />
+      </Flex>
+    );
+  }
+
   return (
     <Flex h="100vh" w="100vw" bg="dark.bg" overflow="hidden" position="fixed" top={0} left={0}>
       <Sidebar
@@ -819,33 +848,6 @@ export default function BuilderPage() {
                 </TabPanel>
               </TabPanels>
             </Tabs>
-            ) : isLoadingWorkspaces ? (
-            <VStack
-              data-area="workspace-container"
-              flex={1}
-              align="center"
-              justify="center"
-              spacing="24px"
-              w="100%"
-              bg="white"
-              borderRadius="12px"
-              border="1px solid"
-              borderColor="customGray.200"
-              boxShadow="none"
-            >
-              <Progress
-                isIndeterminate
-                size="sm"
-                width="240px"
-                trackColor="transparent"
-                borderRadius="full"
-                sx={{
-                  "& > div": {
-                    backgroundColor: "#3F3F46",
-                  },
-                }}
-              />
-            </VStack>
             ) : (
             <VStack flex={1} align="center" justify="center" spacing="24px" w="100%">
               <VStack align="center" spacing="12px">

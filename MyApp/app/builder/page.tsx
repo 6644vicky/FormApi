@@ -572,7 +572,7 @@ export default function BuilderPage() {
                     </svg>
                   </Button>
                 </Tooltip>
-                <Text fontSize="lg" fontWeight="medium" color="customGray.800">
+                <Text fontSize="16px" fontWeight="medium" color="customGray.800">
                   {selectedAgent || "form dev"}
                 </Text>
               </HStack>

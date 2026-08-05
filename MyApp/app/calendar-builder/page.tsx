@@ -3,14 +3,16 @@
 import { useRouter } from "next/navigation";
 import { Box, VStack, HStack, Text, Button, Heading, IconButton, Input, Textarea, useToast, Tabs, TabList, Tab, Avatar, Menu, MenuButton, MenuList, MenuItem, Modal, ModalOverlay, ModalContent, ModalHeader, ModalBody, ModalCloseButton, useDisclosure, Checkbox, Badge, Divider, Alert, AlertIcon, Tag, TagLabel, TagCloseButton, Progress } from "@chakra-ui/react";
 import { ArrowBackIcon, DeleteIcon, AddIcon, ChevronDownIcon, DragHandleIcon, CloseIcon, ViewIcon } from "@chakra-ui/icons";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { CalendarPicker } from "@/components/CalendarPicker";
 import { AddPage } from "@/components/AddPage";
 import { supabase } from "@/lib/supabase";
+import FullPageLoader from "@/app/components/FullPageLoader";
 
 export default function CalendarBuilderPage() {
   const router = useRouter();
-  const toast = useToast();
+  // Default every toast on this page to the top; individual calls can override.
+  const toast = useToast({ position: "top" });
   const { isOpen, onOpen, onClose } = useDisclosure();
   const [tabIndex, setTabIndex] = useState(0);
   const [selectedPage, setSelectedPage] = useState("Main page");
@@ -35,12 +37,28 @@ export default function CalendarBuilderPage() {
   const [isZoomConnected, setIsZoomConnected] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [currentEventId, setCurrentEventId] = useState<number | null>(null);
+  // Snapshot of the last-persisted field values. Stays null until the initial
+  // load settles, so hydrating the form never counts as a user edit.
+  const lastSavedSnapshotRef = useRef<string | null>(null);
+  // True while an insert is awaiting a response, to prevent duplicate rows.
+  const insertInFlightRef = useRef(false);
+  // Workspace this event belongs to. Comes from the ?workspace= param for a new
+  // event, or from the stored row when editing an existing one. Held in a ref so
+  // it never counts as an edit in the autosave snapshot.
+  const workspaceNameRef = useRef<string | null>(null);
+  // Synchronous mirror of currentEventId. saveEventToDatabase decides
+  // insert-vs-update from this, because setCurrentEventId is async and a
+  // second save firing before React re-renders would otherwise still see null
+  // and insert a duplicate row.
+  const currentEventIdRef = useRef<number | null>(null);
 
   useEffect(() => {
     const loadUserProfile = async () => {
       try {
         const params = new URLSearchParams(window.location.search);
         const idParam = params.get("id");
+        // Set for a brand-new event arriving from a workspace's "Create event".
+        workspaceNameRef.current = params.get("workspace") || null;
 
         const { data: { session } } = await supabase.auth.getSession();
         if (session?.user) {
@@ -76,7 +94,11 @@ export default function CalendarBuilderPage() {
               .single();
 
             if (eventData) {
+              currentEventIdRef.current = eventData.id;
               setCurrentEventId(eventData.id);
+              // Keep the event in the workspace it was created in, rather than
+              // whatever the URL happens to say.
+              workspaceNameRef.current = eventData.workspace_name ?? workspaceNameRef.current;
               setFormName(eventData.title || "");
               setInputValue(eventData.title || "");
               if (eventData.event_title) setTitle(eventData.event_title);
@@ -102,17 +124,41 @@ export default function CalendarBuilderPage() {
     loadUserProfile();
   }, []);
 
-  useEffect(() => {
-    // Only auto-save updates for an existing event. A brand-new event is
-    // saved as a draft when the user clicks the back button (handleBack).
-    if (currentEventId === null) return;
+  // Serialised view of every persisted field. The autosave effect and the back
+  // button both compare against lastSavedSnapshotRef using this, so they can't
+  // disagree about whether the user changed anything.
+  const buildSnapshot = () =>
+    JSON.stringify({
+      formName, title, description, ownerName,
+      meetingLink, meetingLinkUrl, durations, userAvatar,
+    });
 
+  useEffect(() => {
+    // Wait for the initial load to settle before watching for edits.
+    if (isLoading) return;
+
+    const snapshot = buildSnapshot();
+
+    // First pass after loading: record the baseline without saving, so simply
+    // opening the page never creates or touches an event.
+    if (lastSavedSnapshotRef.current === null) {
+      lastSavedSnapshotRef.current = snapshot;
+      return;
+    }
+
+    // Nothing the user did actually altered a persisted field.
+    if (lastSavedSnapshotRef.current === snapshot) return;
+
+    // A real edit. For an existing event this updates it; for a brand-new one
+    // saveEventToDatabase inserts a row and remembers its id, so it shows up
+    // in the calendar listing straight away.
     const saveTimer = setTimeout(() => {
+      lastSavedSnapshotRef.current = snapshot;
       saveEventToDatabase();
     }, 1000);
 
     return () => clearTimeout(saveTimer);
-  }, [formName, title, description, ownerName, meetingLink, meetingLinkUrl, durations, userAvatar, currentEventId]);
+  }, [formName, title, description, ownerName, meetingLink, meetingLinkUrl, durations, userAvatar, currentEventId, isLoading]);
 
   const handleTitleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const val = e.target.value;
@@ -124,7 +170,20 @@ export default function CalendarBuilderPage() {
   };
 
   const handleBack = async () => {
-    await saveEventToDatabase();
+    // Only persist if the user actually changed something. Opening "Create
+    // event" and going straight back must not create an empty event, and
+    // re-opening an existing one without editing must not bump updated_at
+    // (which would needlessly reorder the listing).
+    const snapshot = buildSnapshot();
+    const hasUnsavedChanges =
+      lastSavedSnapshotRef.current !== null &&
+      lastSavedSnapshotRef.current !== snapshot;
+
+    if (hasUnsavedChanges) {
+      lastSavedSnapshotRef.current = snapshot;
+      await saveEventToDatabase();
+    }
+
     const params = new URLSearchParams(window.location.search);
     const tab = params.get('tab') || 'calendar';
     router.push(`/builder?tab=${tab}`);
@@ -137,6 +196,7 @@ export default function CalendarBuilderPage() {
 
       const payload: Record<string, unknown> = {
         user_id: session.user.id,
+        workspace_name: workspaceNameRef.current,
         title: formName,
         event_title: title,
         description: description,
@@ -148,24 +208,50 @@ export default function CalendarBuilderPage() {
         updated_at: new Date().toISOString(),
       };
 
-      if (currentEventId) {
+      if (currentEventIdRef.current) {
         // Update the existing event
         const { error } = await supabase
           .from("calendar_events")
           .update(payload)
-          .eq("id", currentEventId);
-        if (error) console.error("Error updating event:", error);
-      } else {
-        // Insert a new event and remember its id for subsequent saves
-        const { data, error } = await supabase
-          .from("calendar_events")
-          .insert(payload)
-          .select("id")
-          .single();
+          .eq("id", currentEventIdRef.current);
         if (error) {
-          console.error("Error creating event:", error);
-        } else if (data) {
-          setCurrentEventId(data.id);
+          console.error("Error updating event:", error);
+          toast({
+            title: "Couldn't save changes",
+            description: error.message,
+            status: "error",
+            isClosable: true,
+          });
+        }
+      } else {
+        // No id yet, so this page session is a brand-new event: insert a fresh
+        // row rather than touching any previous event. The in-flight guard
+        // stops a concurrent caller (e.g. handleBack firing while the autosave
+        // insert is still running) creating a duplicate.
+        if (insertInFlightRef.current) return;
+        insertInFlightRef.current = true;
+        try {
+          const { data, error } = await supabase
+            .from("calendar_events")
+            .insert(payload)
+            .select("id")
+            .single();
+          if (error) {
+            console.error("Error creating event:", error);
+            toast({
+              title: "Couldn't create event",
+              description: error.message,
+              status: "error",
+              isClosable: true,
+            });
+          } else if (data) {
+            // Set the ref first so any save queued behind this one updates the
+            // row we just created instead of inserting another.
+            currentEventIdRef.current = data.id;
+            setCurrentEventId(data.id);
+          }
+        } finally {
+          insertInFlightRef.current = false;
         }
       }
     } catch (error) {
@@ -283,22 +369,7 @@ export default function CalendarBuilderPage() {
   };
 
   if (isLoading) {
-    return (
-      <Box h="100dvh" w="100vw" bg="customGray.50" display="flex" alignItems="center" justifyContent="center">
-        <Progress
-          isIndeterminate
-          size="xs"
-          width="200px"
-          borderRadius="full"
-          sx={{
-            "& > div": {
-              backgroundColor: "#3F3F46 !important",
-              backgroundImage: "none",
-            },
-          }}
-        />
-      </Box>
-    );
+    return <FullPageLoader />;
   }
 
   return (

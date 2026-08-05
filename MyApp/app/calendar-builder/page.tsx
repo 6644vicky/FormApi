@@ -973,7 +973,7 @@ export default function CalendarBuilderPage() {
                         </VStack>
                       </VStack>
 
-                      <VStack spacing="16px" align="stretch" w="100%" border="1px solid" borderColor="customGray.200" borderRadius="8px" p="20px" bg="customGray.50">
+                      <VStack spacing="16px" align="stretch" w="100%" border="1px solid" borderColor="customGray.200" borderRadius="12px" p="20px" bg="customGray.50">
                         <HStack spacing="32px" justify="flex-start">
                           <VStack spacing="4px" align="start">
                             <Text fontSize="14px" fontWeight="600" color="customGray.800">What</Text>

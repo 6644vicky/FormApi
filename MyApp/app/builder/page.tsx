@@ -177,7 +177,9 @@ export default function BuilderPage() {
           }
         }
       } finally {
-        setIsLoadingWorkspaces(false);
+        setTimeout(() => {
+          setIsLoadingWorkspaces(false);
+        }, 5000);
       }
     };
 

@@ -152,9 +152,7 @@ export default function BuilderPage() {
           }
         }
       } finally {
-        setTimeout(() => {
-          setIsLoadingWorkspaces(false);
-        }, 3000);
+        setIsLoadingWorkspaces(false);
       }
     };
 
@@ -468,13 +466,13 @@ export default function BuilderPage() {
       <Flex
         h="100vh"
         w="100vw"
-        bg="#ffffff"
         align="center"
         justify="center"
         position="fixed"
         top={0}
         left={0}
         zIndex={9999}
+        sx={{ backgroundColor: "#ffffff !important" }}
       >
         <Progress
           isIndeterminate

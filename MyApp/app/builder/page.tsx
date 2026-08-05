@@ -30,19 +30,12 @@ import {
   Input,
   Tag,
   TagLabel,
-  Tabs,
-  TabList,
-  Tab,
-  TabPanels,
-  TabPanel,
   Menu,
   MenuButton,
   MenuList,
   MenuItem,
   Tooltip,
   IconButton,
-  InputGroup,
-  InputLeftElement,
   useOutsideClick,
   Progress,
 } from "@chakra-ui/react";
@@ -78,8 +71,6 @@ export default function BuilderPage() {
   const { isOpen: isFeedbackOpen, onOpen: onFeedbackOpen, onClose: onFeedbackClose } = useDisclosure();
   const { isOpen: isCreateOpen, onOpen: onCreateOpen, onClose: onCreateClose } = useDisclosure();
   const { isOpen: isDeleteOpen, onOpen: onDeleteOpen, onClose: onDeleteClose } = useDisclosure();
-  const { isOpen: isEmbedOpen, onOpen: onEmbedOpen, onClose: onEmbedClose } = useDisclosure();
-  const { isOpen: isCustomColourOpen, onOpen: onCustomColourOpen, onClose: onCustomColourClose } = useDisclosure();
   const [feedbackMessage, setFeedbackMessage] = useState("");
   const [isFeedbackSubmitting, setIsFeedbackSubmitting] = useState(false);
   const [feedbackError, setFeedbackError] = useState("");
@@ -95,41 +86,13 @@ export default function BuilderPage() {
   const [isLoadingWorkspaces, setIsLoadingWorkspaces] = useState(true);
   const [enableSidebarTransition, setEnableSidebarTransition] = useState(false);
   const isMountedRef = useRef(false);
-  const { isOpen: isAddFieldOpen, onOpen: onAddFieldOpen, onClose: onAddFieldClose } = useDisclosure();
-  const [formFields, setFormFields] = useState<Array<{ id: string; name: string; type: string }>>([
-    { id: "1", name: "First name", type: "text" },
-    { id: "2", name: "Last name", type: "text" },
-    { id: "3", name: "Mail id", type: "email" },
-    { id: "4", name: "Message", type: "textarea" },
-  ]);
-  const [insertAtIndex, setInsertAtIndex] = useState<number>(0);
-  const [visibleFields, setVisibleFields] = useState<Set<string>>(new Set());
-  const [activeTabIndex, setActiveTabIndex] = useState(0);
   const [isSearchExpanded, setIsSearchExpanded] = useState(false);
   const searchRef = useRef<HTMLDivElement>(null);
-  const [isFormFullWidth, setIsFormFullWidth] = useState(false);
 
   useOutsideClick({
     ref: searchRef,
     handler: () => setIsSearchExpanded(false),
   });
-  const [formWidth, setFormWidth] = useState("427px");
-  const [formHeight, setFormHeight] = useState("auto");
-  const [formPadding, setFormPadding] = useState("24px");
-  const [borderRadius, setBorderRadius] = useState("16px");
-  const [selectedElementId, setSelectedElementId] = useState<string | null>(null);
-  const [selectedColorPreset, setSelectedColorPreset] = useState<"dark" | "green">("green");
-  const [colorScheme, setColorScheme] = useState({
-    formBg: "#ffffff",
-    inputBg: "#ffffff",
-    inputBorder: "#bbf7d0",
-    inputBorderActive: "#22c55e",
-    buttonBg: "#16a34a",
-    buttonBgHover: "#15803d",
-    buttonBgDisabled: "#bbf7d0",
-    errorColor: "#ef4444",
-  });
-  const fieldRefs = useRef<{ [key: string]: HTMLDivElement | null }>({});
   const [calendarEvents, setCalendarEvents] = useState<Array<{ id: number; title: string; meeting_link: string; updated_at: string }>>([]);
 
   useEffect(() => {
@@ -233,39 +196,6 @@ export default function BuilderPage() {
     loadCalendarEvents();
   }, []);
 
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
-
-    const params = new URLSearchParams(window.location.search);
-    const tabParam = params.get('tab');
-
-    if (tabParam === 'calendar') {
-      setActiveTabIndex(1);
-    } else if (tabParam === 'form') {
-      setActiveTabIndex(0);
-    }
-  }, []);
-
-  useEffect(() => {
-    const observerOptions = {
-      threshold: 0.1,
-      rootMargin: "0px 0px -50px 0px",
-    };
-
-    const observer = new IntersectionObserver((entries) => {
-      entries.forEach((entry) => {
-        if (entry.isIntersecting) {
-          setVisibleFields((prev) => new Set([...prev, entry.target.id]));
-        }
-      });
-    }, observerOptions);
-
-    Object.values(fieldRefs.current).forEach((ref) => {
-      if (ref) observer.observe(ref);
-    });
-
-    return () => observer.disconnect();
-  }, [formFields]);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -466,47 +396,6 @@ export default function BuilderPage() {
     }
   };
 
-  const handleDeleteField = () => {
-    if (selectedElementId) {
-      setFormFields((prev) => prev.filter((field) => field.id !== selectedElementId));
-      setSelectedElementId(null);
-      toast({
-        title: "Field deleted",
-        status: "success",
-        duration: 2000,
-        isClosable: true,
-      });
-    }
-  };
-
-  const colorPresets = {
-    dark: {
-      formBg: "#1f2937",
-      inputBg: "#111827",
-      inputBorder: "#374151",
-      inputBorderActive: "#60a5fa",
-      buttonBg: "#3b82f6",
-      buttonBgHover: "#2563eb",
-      buttonBgDisabled: "#6b7280",
-      errorColor: "#f87171",
-    },
-    green: {
-      formBg: "#ffffff",
-      inputBg: "#ffffff",
-      inputBorder: "#bbf7d0",
-      inputBorderActive: "#22c55e",
-      buttonBg: "#16a34a",
-      buttonBgHover: "#15803d",
-      buttonBgDisabled: "#bbf7d0",
-      errorColor: "#ef4444",
-    },
-  };
-
-  const applyColorPreset = (preset: "dark" | "green") => {
-    setSelectedColorPreset(preset);
-    setColorScheme(colorPresets[preset]);
-  };
-
   const colors = ["#EA8C55", "#7C3AED", "#10B981", "#F59E0B", "#EF4444", "#06B6D4", "#8B5CF6", "#EC4899"];
 
   const serviceColors: { [key: string]: string } = {
@@ -698,327 +587,21 @@ export default function BuilderPage() {
                 </Menu>
                 {agents.length > 0 && (
                   <Button size="sm" bg="customGray.800" color="white" _hover={{ bg: "customGray.700" }} display="flex" alignItems="center" gap="8px" onClick={() => {
-                    const tab = activeTabIndex === 1 ? 'calendar' : 'form';
-                    router.push(`/calendar-builder?tab=${tab}`);
+                    router.push(`/calendar-builder?tab=calendar`);
                   }}>
                     <Box display="flex" alignItems="center" justifyContent="center" w="16px" h="16px">
                       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                         <path d="M12 5v14M5 12h14" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
                       </svg>
                     </Box>
-                    {activeTabIndex === 0 ? "Create form" : "Create event"}
+                    Create event
                   </Button>
                 )}
               </HStack>
             </HStack>
             )}
             {agents.length > 0 ? (
-            <Tabs flex={1} display="flex" flexDirection="column" overflow="hidden" w="100%" index={activeTabIndex} onChange={setActiveTabIndex}>
-              <TabList pl="24px" borderBottom="1px solid" borderColor="customGray.200">
-                <Tab fontSize="sm" color="customGray.500" pb="12px" mb="-1px" borderBottom="2px solid transparent" _selected={{ color: "customGray.800", borderColor: "customGray.800", bg: "white" }} display="flex" alignItems="center" gap="6px" pl="0px">
-                  <svg width="16" height="16" viewBox="0 0 18 18" fill="none" xmlns="http://www.w3.org/2000/svg">
-                    <path d="M10.5 1.5V4.5C10.5 4.89782 10.658 5.27936 10.9393 5.56066C11.2206 5.84196 11.6022 6 12 6H15M7.5 6.75H6M12 9.75H6M12 12.75H6M11.25 1.5H4.5C4.10218 1.5 3.72064 1.65804 3.43934 1.93934C3.15804 2.22064 3 2.60218 3 3V15C3 15.3978 3.15804 15.7794 3.43934 16.0607C3.72064 16.342 4.10218 16.5 4.5 16.5H13.5C13.8978 16.5 14.2794 16.342 14.5607 16.0607C14.842 15.7794 15 15.3978 15 15V5.25L11.25 1.5Z" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-                  </svg>
-                  Form
-                </Tab>
-                <Tab fontSize="sm" color="customGray.500" pb="12px" mb="-1px" borderBottom="2px solid transparent" _selected={{ color: "customGray.800", borderColor: "customGray.800", bg: "white" }} display="flex" alignItems="center" gap="6px">
-                  <svg width="16" height="16" viewBox="0 0 18 18" fill="none" xmlns="http://www.w3.org/2000/svg">
-                    <path d="M6 1.5V4.5M12 1.5V4.5M2.25 7.5H15.75M3.75 3H14.25C15.0784 3 15.75 3.67157 15.75 4.5V15C15.75 15.8284 15.0784 16.5 14.25 16.5H3.75C2.92157 16.5 2.25 15.8284 2.25 15V4.5C2.25 3.67157 2.92157 3 3.75 3Z" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-                  </svg>
-                  Calendar
-                </Tab>
-              </TabList>
-              <TabPanels flex={1} overflow="hidden" h="100%">
-                <TabPanel h="100%" p="0" overflow="hidden">
-                  <HStack align="stretch" spacing="0" h="100%" w="100%" p="0" m="0" overflow="hidden">
-                    <VStack align="center" justify="flex-start" flex={1} p={isFormFullWidth ? "0px" : "64px"} bg={isFormFullWidth ? "customDark.2" : "rgba(36, 39, 42, 0.02)"} spacing={0} h="100%" overflowY="auto" transition="padding 0.4s ease-in-out" sx={{
-                      '&::-webkit-scrollbar': {
-                        width: '6px',
-                      },
-                      '&::-webkit-scrollbar-track': {
-                        bg: 'transparent',
-                      },
-                      '&::-webkit-scrollbar-thumb': {
-                        bg: 'rgba(0, 0, 0, 0.1)',
-                        borderRadius: '3px',
-                        '&:hover': {
-                          bg: 'rgba(0, 0, 0, 0.2)',
-                        },
-                      },
-                    }}>
-                      <Box
-                        bg={colorScheme.formBg}
-                        borderRadius={isFormFullWidth ? "0px" : borderRadius}
-                        w="100%"
-                        maxW={isFormFullWidth ? "100%" : formWidth}
-                        h={isFormFullWidth ? "calc(100vh - 24px)" : "auto"}
-                        minH={isFormFullWidth ? "calc(100vh - 24px)" : formHeight}
-                        boxShadow={isFormFullWidth ? "none" : "lg"}
-                        transition="max-width 0.4s ease-in-out, border-radius 0.4s ease-in-out, padding 0.4s ease-in-out"
-                        display="flex"
-                        flexDirection="column"
-                        alignItems="center"
-                        justifyContent="flex-start"
-                        pt={isFormFullWidth ? "64px" : formPadding}
-                        pb={formPadding}
-                        px="32px"
-                        overflow="visible"
-                        style={{ willChange: "max-width, padding" }}
-                      >
-                        <VStack align="center" spacing={formPadding} w="100%" maxW={isFormFullWidth ? "100%" : formWidth} h="auto" style={{ willChange: "max-width" }}>
-                          <VStack align="center" spacing={formPadding} w="100%">
-                            <Text fontSize="xs" fontWeight="medium" color="customGray.500">
-                              Typeform
-                            </Text>
-                            <Heading fontSize="lg" fontWeight="semibold" color="customGray.800" textAlign="center">
-                              Let's get your Intercom demo started
-                            </Heading>
-                          </VStack>
-                          <VStack align={isFormFullWidth ? "center" : "stretch"} spacing={formPadding} w="100%">
-                            {formFields.map((field, index) => (
-                              <Box key={field.id} w={isFormFullWidth ? "100%" : "100%"} maxW={isFormFullWidth ? "500px" : "100%"} position="relative" role="group">
-                                {/* Insertion bar - absolutely positioned between fields */}
-                                {index > 0 && (
-                                  <Box
-                                    position="absolute"
-                                    top={`calc(-${formPadding} / 2 - 12px)`}
-                                    left="0"
-                                    w="100%"
-                                    h="24px"
-                                    display="flex"
-                                    alignItems="center"
-                                    justifyContent="flex-start"
-                                    opacity="0"
-                                    _groupHover={{ opacity: 1 }}
-                                    transition="opacity 0.2s ease-in-out"
-                                    pointerEvents="auto"
-                                    zIndex={10}
-                                    px="0"
-                                    gap="4px"
-                                  >
-                                    <Menu>
-                                      <MenuButton
-                                        as={Button}
-                                        size="sm"
-                                        bg="#06B6D4"
-                                        color="white"
-                                        p="0"
-                                        minW="auto"
-                                        h="20px"
-                                        w="20px"
-                                        fontSize="14px"
-                                        _hover={{ bg: "#0891B2" }}
-                                        borderRadius="full"
-                                        display="flex"
-                                        alignItems="center"
-                                        justifyContent="center"
-                                        flexShrink={0}
-                                      >
-                                        +
-                                      </MenuButton>
-                                      <MenuList minW="200px">
-                                        <MenuItem fontSize="sm" color="customGray.800" onClick={() => { const newField = { id: Date.now().toString(), name: "Short text", type: "text" }; const newFields = [...formFields]; newFields.splice(index, 0, newField); setFormFields(newFields); }}>Aa Short text</MenuItem>
-                                        <MenuItem fontSize="sm" color="customGray.800" onClick={() => { const newField = { id: Date.now().toString(), name: "Email", type: "email" }; const newFields = [...formFields]; newFields.splice(index, 0, newField); setFormFields(newFields); }}>@ Email</MenuItem>
-                                        <MenuItem fontSize="sm" color="customGray.800" onClick={() => { const newField = { id: Date.now().toString(), name: "Long text", type: "textarea" }; const newFields = [...formFields]; newFields.splice(index, 0, newField); setFormFields(newFields); }}>¶ Long text</MenuItem>
-                                        <MenuItem fontSize="sm" color="customGray.800" onClick={() => { const newField = { id: Date.now().toString(), name: "Phone", type: "text" }; const newFields = [...formFields]; newFields.splice(index, 0, newField); setFormFields(newFields); }}>☎ Phone</MenuItem>
-                                      </MenuList>
-                                    </Menu>
-                                    <Box h="1px" flex={1} bg="#06B6D4" m="0" p="0" />
-                                  </Box>
-                                )}
-
-                                {/* Form field */}
-                                <Box
-                                  w="100%"
-                                  id={field.id}
-                                  ref={(el) => {
-                                    if (el) fieldRefs.current[field.id] = el;
-                                  }}
-                                  animation="none"
-                                >
-                                  {field.type === "textarea" ? (
-                                    <Textarea
-                                      placeholder={field.name}
-                                      fontSize="sm"
-                                      border="1px solid"
-                                      borderColor="customGray.200"
-                                      color="customGray.800"
-                                      _placeholder={{ color: "customGray.400" }}
-                                      borderRadius="base"
-                                      minH="80px"
-                                      resize="none"
-                                    />
-                                  ) : (
-                                    <Input
-                                      placeholder={field.name}
-                                      fontSize="sm"
-                                      border="1px solid"
-                                      borderColor="customGray.200"
-                                      color="customGray.800"
-                                      _placeholder={{ color: "customGray.400" }}
-                                      borderRadius="base"
-                                      h="40px"
-                                    />
-                                  )}
-                                </Box>
-                              </Box>
-                            ))}
-                          </VStack>
-                          <Button
-                            w="100%"
-                            maxW="427px"
-                            bg="customGray.800"
-                            color="white"
-                            _hover={{ bg: "customGray.700" }}
-                            fontSize="sm"
-                            fontWeight="medium"
-                            h="40px"
-                            rightIcon={
-                              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                                <path d="M5 12h14M12 5l7 7-7 7" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                              </svg>
-                            }
-                          >
-                            Submit
-                          </Button>
-                          <Text fontSize="xs" color="customGray.500" textAlign="center">
-                            Made with Webform
-                          </Text>
-                        </VStack>
-                      </Box>
-                    </VStack>
-                    <VStack
-                      w="300px"
-                      h="100%"
-                      bg="white"
-                      borderLeft="1px solid"
-                      borderLeftColor="customGray.200"
-                      spacing={0}
-                      flexShrink={0}
-                      align="stretch"
-                      overflow="hidden"
-                    >
-                      <VStack
-                        w="100%"
-                        flex={1}
-                        overflowY="auto"
-                        overflowX="hidden"
-                        align="stretch"
-                        spacing={0}
-                        pb="24px"
-                        sx={{
-                          '&::-webkit-scrollbar': { width: '4px' },
-                          '&::-webkit-scrollbar-track': { bg: 'transparent' },
-                          '&::-webkit-scrollbar-thumb': { bg: 'customGray.200', borderRadius: '2px' },
-                          '&::-webkit-scrollbar-thumb:hover': { bg: 'customGray.400' },
-                        }}
-                      >
-                        <VStack align="start" spacing="18px" w="100%" p="16px" borderBottom="1px solid" borderBottomColor="customGray.200">
-                          <Text fontSize="sm" fontWeight={500} color="customGray.800">Form Properties</Text>
-                          <HStack justify="space-between" w="100%">
-                            <Text fontSize="xs" fontWeight="medium" color="customGray.600">Full Width</Text>
-                            <Box w="36px" h="20px" bg={isFormFullWidth ? "customGray.800" : "customGray.300"} borderRadius="full" position="relative" cursor="pointer" onClick={() => setIsFormFullWidth(!isFormFullWidth)}>
-                              <Box w="16px" h="16px" bg="white" borderRadius="full" position="absolute" top="2px" left={isFormFullWidth ? "18px" : "2px"} transition="all 0.2s" />
-                            </Box>
-                          </HStack>
-                          <HStack spacing="14px" w="100%" opacity={isFormFullWidth ? 0.6 : 1} transition="opacity 0.2s">
-                            <HStack align="center" flex={1} spacing="8px">
-                              <Text fontSize="xs" fontWeight="medium" color="customGray.600" minW="fit-content">Width</Text>
-                              <Input isDisabled={isFormFullWidth} value={formWidth} placeholder="427px" fontSize="xs" border="1px solid" borderColor={isFormFullWidth ? "customGray.300" : "customGray.300"} h="28px" borderRadius="base" w="100%" px="8px" bg="customDark.5" color={isFormFullWidth ? "customGray.400" : "customGray.800"} _placeholder={{ color: isFormFullWidth ? "customGray.400" : "customGray.500" }} _disabled={{ cursor: "not-allowed", color: "customGray.400" }} _hover={!isFormFullWidth ? { borderColor: "customGray.400" } : {}} _focus={!isFormFullWidth ? { borderColor: "customGray.800", boxShadow: "0 0 0 1px customGray.800" } : {}} onChange={(e) => { setFormWidth(e.target.value.replace(/[^0-9px]/gi, '')); }} />
-                            </HStack>
-                            <HStack align="center" flex={1} spacing="8px">
-                              <Text fontSize="xs" fontWeight="medium" color="customGray.600" minW="fit-content">Height</Text>
-                              <Input isDisabled={true} value={formHeight} placeholder="auto" fontSize="xs" border="1px solid" borderColor="customGray.300" h="28px" borderRadius="base" w="100%" px="8px" bg="customDark.5" color="customGray.400" _placeholder={{ color: "customGray.400" }} _disabled={{ cursor: "not-allowed", color: "customGray.400" }} onChange={(e) => { setFormHeight(e.target.value.replace(/[^0-9pxauto]/gi, '')); }} />
-                            </HStack>
-                          </HStack>
-                        </VStack>
-
-                        <HStack align="center" justify="space-between" w="100%" p="16px" borderBottom="1px solid" borderBottomColor="customGray.200">
-                          <Text fontSize="xs" fontWeight="medium" color="customGray.600">Form padding</Text>
-                          <Input value={formPadding} placeholder="24px" fontSize="xs" border="1px solid" borderColor="customGray.300" h="28px" borderRadius="base" px="8px" bg="customDark.5" w="80px" onChange={(e) => { setFormPadding(e.target.value.replace(/[^0-9px]/gi, '')); }} />
-                        </HStack>
-
-                        <VStack align="start" spacing="12px" w="100%" p="16px" borderBottom="1px solid" borderBottomColor="customGray.200">
-                          <Text fontSize="xs" fontWeight="medium" color="customGray.600">Form Colour</Text>
-
-                          {/* Color Presets */}
-                          <HStack spacing="8px" w="100%">
-                            {/* White Preset */}
-                            <HStack
-                              flex={1}
-                              h="28px"
-                              px="6px"
-                              borderRadius="8px"
-                              border="1px solid"
-                              borderColor={selectedColorPreset === "green" ? "customGray.800" : "customGray.300"}
-                              cursor="pointer"
-                              bg={selectedColorPreset === "green" ? "customGray.100" : "white"}
-                              onClick={() => applyColorPreset("green")}
-                              _hover={{ bg: "customGray.50" }}
-                              transition="all 0.2s"
-                              align="center"
-                            >
-                              <Box w="16px" h="16px" bg="#ffffff" borderRadius="3px" flexShrink={0} border="1px solid" borderColor="customGray.300" />
-                              <Text fontSize="sm" fontWeight="medium" color="customGray.800" flex={1}>
-                                White
-                              </Text>
-                            </HStack>
-
-                            {/* Black Preset */}
-                            <HStack
-                              flex={1}
-                              h="28px"
-                              px="6px"
-                              borderRadius="8px"
-                              border="1px solid"
-                              borderColor={selectedColorPreset === "dark" ? "customGray.800" : "customGray.300"}
-                              cursor="pointer"
-                              bg={selectedColorPreset === "dark" ? "customGray.100" : "white"}
-                              onClick={() => applyColorPreset("dark")}
-                              _hover={{ bg: "customGray.50" }}
-                              transition="all 0.2s"
-                              align="center"
-                            >
-                              <Box w="16px" h="16px" bg="#1f2937" borderRadius="3px" flexShrink={0} />
-                              <Text fontSize="sm" fontWeight="medium" color="customGray.800" flex={1}>
-                                Black
-                              </Text>
-                            </HStack>
-                          </HStack>
-
-                          {/* Custom Colour Button */}
-                          <HStack spacing="4px" cursor="pointer" onClick={onCustomColourOpen}>
-                            <IconButton
-                              icon={
-                                <svg width="14" height="14" viewBox="0 0 14 14" fill="none" xmlns="http://www.w3.org/2000/svg">
-                                  <path d="M2.91675 7H11.0834M7.00008 2.91667V11.0833" stroke="currentColor" strokeWidth="1.16667" strokeLinecap="round" strokeLinejoin="round"/>
-                                </svg>
-                              }
-                              variant="unstyled"
-                              size="sm"
-                              minW="auto"
-                              h="auto"
-                              p="0"
-                              color="customGray.600"
-                              _hover={{ color: "customGray.800" }}
-                              aria-label="Custom colour"
-                            />
-                            <Text fontSize="xs" fontWeight="medium" color="customGray.600" _hover={{ color: "customGray.800" }}>
-                              Custom colour
-                            </Text>
-                          </HStack>
-                        </VStack>
-
-                        <HStack align="center" justify="space-between" w="100%" p="16px" borderBottom="1px solid" borderBottomColor="customGray.200" opacity={isFormFullWidth ? 0.6 : 1} transition="opacity 0.2s">
-                          <Text fontSize="xs" fontWeight="medium" color="customGray.600">Border Radius</Text>
-                          <Input isDisabled={isFormFullWidth} value={borderRadius} placeholder="16px" fontSize="xs" border="1px solid" borderColor={isFormFullWidth ? "customGray.300" : "customGray.300"} h="28px" borderRadius="base" px="8px" bg="customDark.5" w="80px" color={isFormFullWidth ? "customGray.400" : "customGray.800"} _placeholder={{ color: isFormFullWidth ? "customGray.400" : "customGray.500" }} _disabled={{ cursor: "not-allowed", color: "customGray.400" }} _hover={!isFormFullWidth ? { borderColor: "customGray.400" } : {}} _focus={!isFormFullWidth ? { borderColor: "customGray.800", boxShadow: "0 0 0 1px customGray.800" } : {}} onChange={(e) => { setBorderRadius(e.target.value.replace(/[^0-9px]/gi, '')); }} />
-                        </HStack>
-                      </VStack>
-                    </VStack>
-                  </HStack>
-                </TabPanel>
-                <TabPanel h="100%" p="0" overflow="hidden">
-                  <VStack w="100%" align="stretch" spacing={0}>
+            <VStack w="100%" align="stretch" spacing={0} flex={1} overflow="hidden">
                     <Box w="100%" px="24px" py="12px" h="50px" display="flex" alignItems="center" justifyContent="flex-end" bg="white" borderBottom="1px solid" borderBottomColor="customGray.200">
                       <HStack spacing="12px">
                         <HStack ref={searchRef} spacing="0" bg={isSearchExpanded ? "white" : "transparent"} borderRadius="6px" border="1px solid" borderColor={isSearchExpanded ? "customGray.300" : "transparent"} transition="all 0.3s ease" overflow="hidden" h="32px">
@@ -1176,10 +759,7 @@ export default function BuilderPage() {
                         </Box>
                       </Flex>
                     </Box>
-                  </VStack>
-                </TabPanel>
-              </TabPanels>
-            </Tabs>
+            </VStack>
             ) : isLoadingWorkspaces ? (
             <VStack
               data-area="workspace-container"
@@ -1275,7 +855,7 @@ export default function BuilderPage() {
                 }
               }}
               placeholder="Share your thoughts..."
-              fontSize="sm"
+              fontSize="16px"
               fontWeight="normal"
               minH="120px"
               bg="customGray.50"
@@ -1639,167 +1219,6 @@ export default function BuilderPage() {
         </ModalContent>
       </Modal>
 
-      <Modal
-        isOpen={isAddFieldOpen}
-        onClose={onAddFieldClose}
-        isCentered
-      >
-        <ModalOverlay bg="rgba(0, 0, 0, 0.5)" />
-        <ModalContent
-          bg="white"
-          borderRadius="lg"
-          boxShadow="0 10px 40px rgba(0, 0, 0, 0.1)"
-          maxW="400px"
-        >
-          <ModalHeader pb="12px" pt="lg" px="16px">
-            <Heading fontSize="base" fontWeight="medium" color="customGray.800">
-              Add a field
-            </Heading>
-          </ModalHeader>
-          <ModalBody pt="0" px="16px" pb="16px">
-            <VStack align="stretch" spacing="8px">
-              {[
-                { type: "text", label: "Short text", icon: "Aa" },
-                { type: "email", label: "Email", icon: "@" },
-                { type: "textarea", label: "Long text", icon: "¶" },
-                { type: "phone", label: "Phone", icon: "☎" },
-              ].map((fieldOption) => (
-                <Button
-                  key={fieldOption.type}
-                  variant="ghost"
-                  w="100%"
-                  justifyContent="flex-start"
-                  fontSize="sm"
-                  color="customGray.800"
-                  _hover={{ bg: "customGray.50" }}
-                  p="12px"
-                  h="auto"
-                  onClick={() => {
-                    const newField = {
-                      id: Date.now().toString(),
-                      name: fieldOption.label,
-                      type: fieldOption.type,
-                    };
-                    const newFields = [...formFields];
-                    newFields.splice(insertAtIndex, 0, newField);
-                    setFormFields(newFields);
-                    onAddFieldClose();
-                  }}
-                >
-                  <HStack spacing="12px" w="100%">
-                    <Text fontSize="base" fontWeight="medium" color="customGray.500">
-                      {fieldOption.icon}
-                    </Text>
-                    <Text>{fieldOption.label}</Text>
-                  </HStack>
-                </Button>
-              ))}
-            </VStack>
-          </ModalBody>
-        </ModalContent>
-      </Modal>
-
-      {/* Embed Modal */}
-      <Modal isOpen={isEmbedOpen} onClose={onEmbedClose} isCentered>
-        <ModalOverlay bg="rgba(0, 0, 0, 0.5)" />
-        <ModalContent bg="white" borderRadius="lg" maxW="500px" boxShadow="0 10px 40px rgba(0, 0, 0, 0.1)">
-          <ModalHeader fontSize="sm" fontWeight="semibold" color="customGray.800" px="16px" pt="16px" pb="0px">
-            Embed Code
-          </ModalHeader>
-          <ModalBody py="16px" px="16px">
-            <VStack align="stretch" spacing="12px">
-              <Box
-                bg="customGray.50"
-                border="1px solid"
-                borderColor="customGray.200"
-                borderRadius="base"
-                p="12px"
-                fontSize="xs"
-                color="customGray.800"
-                fontFamily="monospace"
-                maxH="100px"
-                overflowY="auto"
-                wordBreak="break-all"
-              >
-                {`<script src="https://form-api-zeta.vercel.app/widget.js"><\/script>`}
-              </Box>
-              <Button
-                size="sm"
-                bg="customGray.800"
-                color="white"
-                _hover={{ bg: "customGray.700" }}
-                w="100%"
-                onClick={() => {
-                  const code = `<script src="https://form-api-zeta.vercel.app/widget.js"><\/script>`;
-                  navigator.clipboard.writeText(code).then(() => {
-                    toast({
-                      title: "Code copied!",
-                      description: "Paste this into your website",
-                      status: "success",
-                      duration: 3000,
-                      isClosable: true,
-                    });
-                    onEmbedClose();
-                  });
-                }}
-              >
-                Copy Code
-              </Button>
-              <Text fontSize="xs" color="customGray.600" textAlign="center">
-                Paste this one line before your closing &lt;/body&gt; tag
-              </Text>
-            </VStack>
-          </ModalBody>
-        </ModalContent>
-      </Modal>
-
-      {/* Custom Colour Modal */}
-      <Modal isOpen={isCustomColourOpen} onClose={onCustomColourClose} isCentered>
-        <ModalOverlay bg="rgba(0, 0, 0, 0.5)" />
-        <ModalContent bg="white" borderRadius="lg" maxW="400px" boxShadow="0 10px 40px rgba(0, 0, 0, 0.1)">
-          <ModalHeader fontSize="sm" fontWeight="semibold" color="customGray.800" px="16px" pt="16px" pb="0px">
-            Custom Colour
-          </ModalHeader>
-          <ModalBody py="16px" px="16px">
-            <VStack align="stretch" spacing="16px">
-              <Text fontSize="sm" color="customGray.600">
-                Choose a custom color for your form
-              </Text>
-              <Input
-                type="color"
-                h="48px"
-                borderRadius="base"
-                border="1px solid"
-                borderColor="customGray.200"
-                cursor="pointer"
-              />
-            </VStack>
-          </ModalBody>
-          <ModalFooter pt="16px" px="16px" pb="16px">
-            <HStack spacing="md">
-              <Button
-                size="sm"
-                variant="outline"
-                borderColor="customGray.300"
-                color="customGray.800"
-                _hover={{ bg: "customGray.50" }}
-                onClick={onCustomColourClose}
-              >
-                Cancel
-              </Button>
-              <Button
-                size="sm"
-                bg="customGray.800"
-                color="white"
-                _hover={{ bg: "customGray.700" }}
-                onClick={onCustomColourClose}
-              >
-                Apply
-              </Button>
-            </HStack>
-          </ModalFooter>
-        </ModalContent>
-      </Modal>
     </Flex>
   );
 }

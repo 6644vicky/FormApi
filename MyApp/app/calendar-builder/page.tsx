@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { Box, VStack, HStack, Text, Button, Heading, IconButton, Input, Textarea, useToast, Tabs, TabList, Tab, Avatar, Menu, MenuButton, MenuList, MenuItem, Modal, ModalOverlay, ModalContent, ModalHeader, ModalBody, ModalCloseButton, useDisclosure, Checkbox, Badge, Divider, Alert, AlertIcon, Tag, TagLabel, TagCloseButton } from "@chakra-ui/react";
+import { Box, VStack, HStack, Text, Button, Heading, IconButton, Input, Textarea, useToast, Tabs, TabList, Tab, Avatar, Menu, MenuButton, MenuList, MenuItem, Modal, ModalOverlay, ModalContent, ModalHeader, ModalBody, ModalCloseButton, useDisclosure, Checkbox, Badge, Divider, Alert, AlertIcon, Tag, TagLabel, TagCloseButton, Progress } from "@chakra-ui/react";
 import { Spinner } from "@chakra-ui/react";
 import { ArrowBackIcon, DeleteIcon, AddIcon, ChevronDownIcon, DragHandleIcon, CloseIcon, ViewIcon } from "@chakra-ui/icons";
 import { useState, useEffect } from "react";
@@ -296,7 +296,18 @@ export default function CalendarBuilderPage() {
           }
         `}</style>
         <Box h="100dvh" w="100vw" bg="customGray.100" display="flex" alignItems="center" justifyContent="center">
-          <Spinner size="xl" thickness="3px" speed="0.7s" color="customGray.800" emptyColor="customGray.200" />
+          <Progress
+            isIndeterminate
+            size="xs"
+            width="200px"
+            trackColor="transparent"
+            borderRadius="full"
+            sx={{
+              "& > div": {
+                backgroundColor: "#3F3F46",
+              },
+            }}
+          />
         </Box>
       </>
     );

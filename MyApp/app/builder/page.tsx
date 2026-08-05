@@ -2,7 +2,7 @@
 
 export const dynamic = 'force-dynamic';
 
-import { useState, useEffect, useRef, useLayoutEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { keyframes } from "@emotion/react";
 import { supabase } from "@/lib/supabase";
@@ -93,7 +93,8 @@ export default function BuilderPage() {
   const [isDeleting, setIsDeleting] = useState(false);
   const [isCreatingWorkspace, setIsCreatingWorkspace] = useState(false);
   const [isLoadingWorkspaces, setIsLoadingWorkspaces] = useState(true);
-  const [hasMounted, setHasMounted] = useState(false);
+  const [enableSidebarTransition, setEnableSidebarTransition] = useState(false);
+  const isMountedRef = useRef(false);
   const { isOpen: isAddFieldOpen, onOpen: onAddFieldOpen, onClose: onAddFieldClose } = useDisclosure();
   const [formFields, setFormFields] = useState<Array<{ id: string; name: string; type: string }>>([
     { id: "1", name: "First name", type: "text" },
@@ -132,10 +133,7 @@ export default function BuilderPage() {
   const [calendarEvents, setCalendarEvents] = useState<Array<{ id: number; title: string; meeting_link: string; updated_at: string }>>([]);
 
   useEffect(() => {
-    const timer = setTimeout(() => {
-      setHasMounted(true);
-    }, 0);
-    return () => clearTimeout(timer);
+    isMountedRef.current = true;
   }, []);
 
   useEffect(() => {
@@ -583,7 +581,7 @@ export default function BuilderPage() {
       >
 
         <HStack flex={1} h="100%" align="stretch" spacing={0} bg="white" borderRadius="8px" border="1px solid" borderColor="customGray.200" overflow="hidden">
-          <VStack w={agents.length === 0 ? "0px" : isWorkspaceListCollapsed ? "0px" : "255px"} h="100%" align="stretch" spacing={0} borderRight={agents.length === 0 || isWorkspaceListCollapsed ? "none" : "1px solid"} borderColor="customGray.200" overflow="hidden" transition={hasMounted ? "width 0.3s ease-in-out" : "none"}>
+          <VStack w={agents.length === 0 ? "0px" : isWorkspaceListCollapsed ? "0px" : "255px"} h="100%" align="stretch" spacing={0} borderRight={agents.length === 0 || isWorkspaceListCollapsed ? "none" : "1px solid"} borderColor="customGray.200" overflow="hidden" transition={enableSidebarTransition ? "width 0.3s ease-in-out" : "none"}>
             <HStack h="64px" align="center" justify="space-between" pl="20px" pr="16px" pt="14px" pb="16px">
               <Text fontSize="base" fontWeight="medium" color="customGray.800">
                 Workspace
@@ -656,7 +654,10 @@ export default function BuilderPage() {
                     minW="auto"
                     color="customGray.800"
                     _hover={{ bg: "customGray.50" }}
-                    onClick={() => setIsWorkspaceListCollapsed(!isWorkspaceListCollapsed)}
+                    onClick={() => {
+                      if (!enableSidebarTransition) setEnableSidebarTransition(true);
+                      setIsWorkspaceListCollapsed(!isWorkspaceListCollapsed);
+                    }}
                   >
                     <svg width="20" height="20" viewBox="0 0 18 18" fill="none" xmlns="http://www.w3.org/2000/svg">
                       <path d="M14.25 2.25H3.75C2.92157 2.25 2.25 2.92157 2.25 3.75V14.25C2.25 15.0784 2.92157 15.75 3.75 15.75H14.25C15.0784 15.75 15.75 15.0784 15.75 14.25V3.75C15.75 2.92157 15.0784 2.25 14.25 2.25Z" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>

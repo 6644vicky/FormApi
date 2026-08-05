@@ -644,7 +644,7 @@ export default function BuilderPage() {
           </VStack>
           <VStack flex={1} h="100%" align="stretch" spacing={0} overflow="hidden">
             {agents.length > 0 && (
-            <HStack h="64px" align="center" justify="space-between" pl="20px" pr="16px" pt="14px" pb="18px" w="100%">
+            <HStack h="64px" align="center" justify="space-between" pl="20px" pr="14px" pt="14px" pb="18px" w="100%">
               <HStack spacing="4px" align="center">
                 <Tooltip label={isWorkspaceListCollapsed ? "Expand" : "Collapse"} placement="bottom">
                   <Button

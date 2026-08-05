@@ -1187,9 +1187,13 @@ export default function BuilderPage() {
                 isIndeterminate
                 size="xs"
                 width="200px"
-                colorScheme="teal"
                 trackColor="transparent"
                 borderRadius="full"
+                sx={{
+                  "& > div": {
+                    backgroundColor: "#3F3F46",
+                  },
+                }}
               />
               <Text fontSize="sm" color="customGray.600" fontWeight="medium">
                 Loading workspace...

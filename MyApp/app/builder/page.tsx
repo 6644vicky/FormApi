@@ -1003,6 +1003,7 @@ export default function BuilderPage() {
                     handleCreateWorkspace();
                   }
                 }}
+                h="32px"
                 fontSize="sm"
                 border="1px solid"
                 borderColor="customGray.300"

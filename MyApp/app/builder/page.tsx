@@ -179,7 +179,7 @@ export default function BuilderPage() {
       } finally {
         setTimeout(() => {
           setIsLoadingWorkspaces(false);
-        }, 5000);
+        }, 30000);
       }
     };
 

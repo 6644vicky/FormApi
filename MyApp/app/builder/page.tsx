@@ -58,6 +58,15 @@ const slideUpFade = keyframes`
   }
 `;
 
+const spin = keyframes`
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+`;
+
 export default function BuilderPage() {
   const toast = useToast();
   const router = useRouter();
@@ -82,6 +91,7 @@ export default function BuilderPage() {
   const [isWorkspaceListCollapsed, setIsWorkspaceListCollapsed] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [isCreatingWorkspace, setIsCreatingWorkspace] = useState(false);
+  const [isLoadingWorkspaces, setIsLoadingWorkspaces] = useState(true);
   const { isOpen: isAddFieldOpen, onOpen: onAddFieldOpen, onClose: onAddFieldClose } = useDisclosure();
   const [formFields, setFormFields] = useState<Array<{ id: string; name: string; type: string }>>([
     { id: "1", name: "First name", type: "text" },
@@ -165,6 +175,8 @@ export default function BuilderPage() {
             console.error("Error loading agents from localStorage:", error);
           }
         }
+      } finally {
+        setIsLoadingWorkspaces(false);
       }
     };
 
@@ -1156,6 +1168,38 @@ export default function BuilderPage() {
                 </TabPanel>
               </TabPanels>
             </Tabs>
+            ) : isLoadingWorkspaces ? (
+            <VStack
+              data-area="workspace-container"
+              flex={1}
+              align="center"
+              justify="center"
+              spacing="24px"
+              w="100%"
+              bg="white"
+              borderRadius="16px"
+              boxShadow="lg"
+              maxW="427px"
+            >
+              <Box display="flex" alignItems="center" justifyContent="center">
+                <Box
+                  as="div"
+                  animation={`${spin} 1s linear infinite`}
+                  display="flex"
+                  alignItems="center"
+                  justifyContent="center"
+                >
+                  <svg width="32" height="32" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <circle cx="12" cy="12" r="10" stroke="#E4E4E7" strokeWidth="2" opacity="0.3"/>
+                    <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8z" fill="#D4D4D8"/>
+                    <path d="M12 2C6.48 2 2 6.48 2 12" stroke="#27272A" strokeWidth="2" strokeLinecap="round"/>
+                  </svg>
+                </Box>
+              </Box>
+              <Text fontSize="sm" color="customGray.600" fontWeight="medium">
+                Loading workspace...
+              </Text>
+            </VStack>
             ) : (
             <VStack flex={1} align="center" justify="center" spacing="24px" w="100%">
               <VStack align="center" spacing="12px">

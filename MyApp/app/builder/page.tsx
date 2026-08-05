@@ -92,7 +92,8 @@ export default function BuilderPage() {
   const [isWorkspaceListCollapsed, setIsWorkspaceListCollapsed] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [isCreatingWorkspace, setIsCreatingWorkspace] = useState(false);
-  const [isLoadingWorkspaces, setIsLoadingWorkspaces] = useState(false);
+  const [isLoadingWorkspaces, setIsLoadingWorkspaces] = useState(true);
+  const [hasMounted, setHasMounted] = useState(false);
   const { isOpen: isAddFieldOpen, onOpen: onAddFieldOpen, onClose: onAddFieldClose } = useDisclosure();
   const [formFields, setFormFields] = useState<Array<{ id: string; name: string; type: string }>>([
     { id: "1", name: "First name", type: "text" },
@@ -129,6 +130,10 @@ export default function BuilderPage() {
   });
   const fieldRefs = useRef<{ [key: string]: HTMLDivElement | null }>({});
   const [calendarEvents, setCalendarEvents] = useState<Array<{ id: number; title: string; meeting_link: string; updated_at: string }>>([]);
+
+  useEffect(() => {
+    setHasMounted(true);
+  }, []);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -575,7 +580,7 @@ export default function BuilderPage() {
       >
 
         <HStack flex={1} h="100%" align="stretch" spacing={0} bg="white" borderRadius="8px" border="1px solid" borderColor="customGray.200" overflow="hidden">
-          <VStack w={agents.length === 0 ? "0px" : isWorkspaceListCollapsed ? "0px" : "255px"} h="100%" align="stretch" spacing={0} borderRight={agents.length === 0 || isWorkspaceListCollapsed ? "none" : "1px solid"} borderColor="customGray.200" overflow="hidden" transition="width 0.3s ease-in-out">
+          <VStack w={agents.length === 0 ? "0px" : isWorkspaceListCollapsed ? "0px" : "255px"} h="100%" align="stretch" spacing={0} borderRight={agents.length === 0 || isWorkspaceListCollapsed ? "none" : "1px solid"} borderColor="customGray.200" overflow="hidden" transition={hasMounted ? "width 0.3s ease-in-out" : "none"}>
             <HStack h="64px" align="center" justify="space-between" pl="20px" pr="16px" pt="14px" pb="16px">
               <Text fontSize="base" fontWeight="medium" color="customGray.800">
                 Workspace

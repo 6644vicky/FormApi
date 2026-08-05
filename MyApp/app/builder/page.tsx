@@ -527,7 +527,7 @@ export default function BuilderPage() {
               {agents.map((agentObj, index) => (
                 <Box
                   key={index}
-                  h="28px"
+                  h="32px"
                   bg={selectedAgent === agentObj.name ? "customGray.100" : "transparent"}
                   borderRadius="8px"
                   px="8px"
@@ -1003,7 +1003,6 @@ export default function BuilderPage() {
                     handleCreateWorkspace();
                   }
                 }}
-                h="32px"
                 fontSize="sm"
                 border="1px solid"
                 borderColor="customGray.300"

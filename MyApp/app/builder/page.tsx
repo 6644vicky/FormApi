@@ -10,6 +10,7 @@ import { deleteUserAccount } from "@/app/actions/deleteUser";
 import { getAgents, createAgent, deleteAgent } from "@/app/actions/agentActions";
 import CryptoJS from "crypto-js";
 import Sidebar from "@/app/components/Sidebar";
+import FullScreenLoader from "@/components/FullScreenLoader";
 import {
   Box,
   Flex,
@@ -55,15 +56,6 @@ const slideUpFade = keyframes`
   to {
     opacity: 1;
     transform: translateY(0);
-  }
-`;
-
-const spin = keyframes`
-  from {
-    transform: rotate(0deg);
-  }
-  to {
-    transform: rotate(360deg);
   }
 `;
 
@@ -548,7 +540,9 @@ export default function BuilderPage() {
   };
 
   return (
-    <Flex h="100vh" w="100vw" bg="dark.bg" overflow="hidden" position="fixed" top={0} left={0}>
+    <>
+      {isLoadingWorkspaces && <FullScreenLoader />}
+      <Flex h="100vh" w="100vw" bg="dark.bg" overflow="hidden" position="fixed" top={0} left={0}>
       <Sidebar
         selectedNav={selectedNav}
         onNavClick={setSelectedNav}
@@ -1168,37 +1162,6 @@ export default function BuilderPage() {
                 </TabPanel>
               </TabPanels>
             </Tabs>
-            ) : isLoadingWorkspaces ? (
-            <VStack
-              data-area="workspace-container"
-              flex={1}
-              align="center"
-              justify="center"
-              spacing="24px"
-              w="100%"
-              bg="customGray.50"
-              borderRadius="0px"
-              boxShadow="none"
-            >
-              <Box display="flex" alignItems="center" justifyContent="center">
-                <Box
-                  as="div"
-                  animation={`${spin} 1s linear infinite`}
-                  display="flex"
-                  alignItems="center"
-                  justifyContent="center"
-                >
-                  <svg width="32" height="32" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                    <circle cx="12" cy="12" r="10" stroke="#E4E4E7" strokeWidth="2" opacity="0.3"/>
-                    <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8z" fill="#D4D4D8"/>
-                    <path d="M12 2C6.48 2 2 6.48 2 12" stroke="#27272A" strokeWidth="2" strokeLinecap="round"/>
-                  </svg>
-                </Box>
-              </Box>
-              <Text fontSize="sm" color="customGray.600" fontWeight="medium">
-                Loading workspace...
-              </Text>
-            </VStack>
             ) : (
             <VStack flex={1} align="center" justify="center" spacing="24px" w="100%">
               <VStack align="center" spacing="12px">
@@ -1795,6 +1758,7 @@ export default function BuilderPage() {
         </ModalContent>
       </Modal>
     </Flex>
+    </>
   );
 }
 

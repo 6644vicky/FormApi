@@ -98,6 +98,11 @@ export default function BuilderPage() {
   const [activeTabIndex, setActiveTabIndex] = useState(0);
   const [isSearchExpanded, setIsSearchExpanded] = useState(false);
   const searchRef = useRef<HTMLDivElement>(null);
+  // Chakra's Tooltip opens on focus as well as hover, so closing the create
+  // workspace modal (which restores focus into the header) popped these open
+  // with no pointer nearby. Driving isOpen from hover alone keeps them
+  // pointer-only.
+  const [hoveredTooltip, setHoveredTooltip] = useState<"collapse" | "create" | null>(null);
 
   useOutsideClick({
     ref: searchRef,
@@ -630,13 +635,19 @@ export default function BuilderPage() {
               <Text fontSize="base" fontWeight="medium" color="customGray.800">
                 Workspace
               </Text>
-              <Tooltip label="Create workspace" placement="bottom">
+              <Tooltip
+                label="Create workspace"
+                placement="bottom"
+                isOpen={hoveredTooltip === "create"}
+              >
                 <Button
                   variant="ghost"
                   size="sm"
                   p="6px"
                   minW="auto"
                   _hover={{ bg: "customGray.100" }}
+                  onMouseEnter={() => setHoveredTooltip("create")}
+                  onMouseLeave={() => setHoveredTooltip(null)}
                   onClick={onCreateOpen}
                 >
                   <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -690,7 +701,11 @@ export default function BuilderPage() {
             {agents.length > 0 && (
             <HStack h="64px" align="center" justify="space-between" pl="20px" pr="14px" pt="14px" pb="18px" w="100%">
               <HStack spacing="4px" align="center">
-                <Tooltip label={isWorkspaceListCollapsed ? "Expand" : "Collapse"} placement="bottom">
+                <Tooltip
+                  label={isWorkspaceListCollapsed ? "Expand" : "Collapse"}
+                  placement="bottom"
+                  isOpen={hoveredTooltip === "collapse"}
+                >
                   <Button
                     variant="ghost"
                     size="sm"
@@ -700,6 +715,8 @@ export default function BuilderPage() {
                     minW="32px"
                     color="customGray.800"
                     _hover={{ bg: "customGray.100" }}
+                    onMouseEnter={() => setHoveredTooltip("collapse")}
+                    onMouseLeave={() => setHoveredTooltip(null)}
                     onClick={() => {
                       if (!enableSidebarTransition) setEnableSidebarTransition(true);
                       setIsWorkspaceListCollapsed(!isWorkspaceListCollapsed);
@@ -744,7 +761,7 @@ export default function BuilderPage() {
                 </Menu>
                 {agents.length > 0 && (
                   <Button size="sm" bg="customGray.800" color="white" _hover={{ bg: "customGray.700" }} display="flex" alignItems="center" gap="8px" onClick={() => {
-                    const tab = activeTabIndex === 1 ? 'calendar' : 'form';
+                    const tab = activeTabIndex === 0 ? "form" : activeTabIndex === 1 ? "calendar" : "newsletter";
                     // Carry the workspace through so the new event is created
                     // inside it and stays scoped to it.
                     const workspace = encodeURIComponent(selectedAgent || "");
@@ -755,7 +772,7 @@ export default function BuilderPage() {
                         <path d="M12 5v14M5 12h14" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
                       </svg>
                     </Box>
-                    {activeTabIndex === 0 ? "Create form" : "Create event"}
+                    {activeTabIndex === 0 ? "Create form" : activeTabIndex === 1 ? "Create event" : "Create newsletter"}
                   </Button>
                 )}
               </HStack>
@@ -774,7 +791,14 @@ export default function BuilderPage() {
                   <svg width="16" height="16" viewBox="0 0 18 18" fill="none" xmlns="http://www.w3.org/2000/svg">
                     <path d="M6 1.5V4.5M12 1.5V4.5M2.25 7.5H15.75M3.75 3H14.25C15.0784 3 15.75 3.67157 15.75 4.5V15C15.75 15.8284 15.0784 16.5 14.25 16.5H3.75C2.92157 16.5 2.25 15.8284 2.25 15V4.5C2.25 3.67157 2.92157 3 3.75 3Z" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
                   </svg>
-                  Calendar
+                  Meeting scheduler
+                </Tab>
+                <Tab fontSize="sm" color="customGray.500" pb="12px" mb="-1px" borderBottom="2px solid transparent" _selected={{ color: "customGray.800", borderColor: "customGray.800", bg: "white" }} display="flex" alignItems="center" gap="6px">
+                  <svg width="16" height="16" viewBox="0 0 18 18" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M2.25 4.5H15.75V13.5C15.75 14.3284 15.0784 15 14.25 15H3.75C2.92157 15 2.25 14.3284 2.25 13.5V4.5Z" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                    <path d="M2.25 5.25L9 10.5L15.75 5.25" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                  </svg>
+                  Newsletter
                 </Tab>
               </TabList>
               <TabPanels flex={1} overflow="hidden" h="100%">
@@ -888,6 +912,27 @@ export default function BuilderPage() {
                       );
                     })}
                     </Box>
+                  </VStack>
+                </TabPanel>
+                <TabPanel h="100%" p="0" overflow="hidden">
+                  <VStack w="100%" align="center" justify="center" spacing="24px">
+                    <VStack align="center" spacing="12px">
+                      <Box w="120px" h="120px" display="flex" alignItems="center" justifyContent="center">
+                        <svg width="120" height="120" viewBox="0 0 120 120" fill="none" xmlns="http://www.w3.org/2000/svg">
+                          <circle cx="60" cy="60" r="50" stroke="#E4E4E7" strokeWidth="2" opacity="0.5"/>
+                          <path d="M40 48H80V74C80 75.1046 79.1046 76 78 76H42C40.8954 76 40 75.1046 40 74V48Z" stroke="#A1A1AA" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                          <path d="M40 50L60 64L80 50" stroke="#A1A1AA" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                        </svg>
+                      </Box>
+                      <VStack align="center" spacing="8px">
+                        <Heading fontSize="18px" fontWeight="500" color="customGray.800">
+                          Newsletter coming soon
+                        </Heading>
+                        <Text fontSize="14px" color="customGray.600" textAlign="center" maxW="280px">
+                          Newsletter features will be available soon
+                        </Text>
+                      </VStack>
+                    </VStack>
                   </VStack>
                 </TabPanel>
               </TabPanels>

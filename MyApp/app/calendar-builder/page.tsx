@@ -606,6 +606,31 @@ export default function CalendarBuilderPage() {
                     bg="customGray.50"
                     _hover={{ borderColor: "customGray.400" }}
                   >
+                    <Menu>
+                      <MenuButton
+                        as={Box}
+                        px="12px"
+                        py="8px"
+                        cursor="pointer"
+                        display="flex"
+                        alignItems="center"
+                        gap="4px"
+                        fontSize="14px"
+                        color="customGray.800"
+                        fontWeight="400"
+                        flexShrink={0}
+                      >
+                        {meetingLink}
+                        <ChevronDownIcon w="16px" h="16px" />
+                      </MenuButton>
+                      <MenuList fontSize="14px">
+                        <MenuItem onClick={() => setMeetingLink("G-meet")}>G-meet</MenuItem>
+                        <MenuItem onClick={() => setMeetingLink("Zoom")}>Zoom</MenuItem>
+                        <MenuItem onClick={() => setMeetingLink("In person")}>In person</MenuItem>
+                        <MenuItem onClick={() => setMeetingLink("Link")}>Link</MenuItem>
+                      </MenuList>
+                    </Menu>
+                    <Box w="1px" h="24px" bg="customGray.300" flexShrink={0} />
                     {meetingLink === "G-meet" ? (
                       <HStack spacing="8px" flex="1" px="8px">
                         <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -646,30 +671,6 @@ export default function CalendarBuilderPage() {
                         _hover={{ bg: "transparent" }}
                       />
                     )}
-                    <Box w="1px" h="24px" bg="customGray.300" />
-                    <Menu>
-                      <MenuButton
-                        as={Box}
-                        px="12px"
-                        py="8px"
-                        cursor="pointer"
-                        display="flex"
-                        alignItems="center"
-                        gap="4px"
-                        fontSize="14px"
-                        color="customGray.800"
-                        fontWeight="400"
-                      >
-                        {meetingLink}
-                        <ChevronDownIcon w="16px" h="16px" />
-                      </MenuButton>
-                      <MenuList fontSize="14px">
-                        <MenuItem onClick={() => setMeetingLink("G-meet")}>G-meet</MenuItem>
-                        <MenuItem onClick={() => setMeetingLink("Zoom")}>Zoom</MenuItem>
-                        <MenuItem onClick={() => setMeetingLink("In person")}>In person</MenuItem>
-                        <MenuItem onClick={() => setMeetingLink("Link")}>Link</MenuItem>
-                      </MenuList>
-                    </Menu>
                   </HStack>
                   {meetingLink === "G-meet" && !isGoogleConnected && (
                     <Alert

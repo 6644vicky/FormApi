@@ -1,8 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { Box, VStack, HStack, Text, Button, Heading, IconButton, Input, Textarea, useToast, Tabs, TabList, Tab, Avatar, Menu, MenuButton, MenuList, MenuItem, Modal, ModalOverlay, ModalContent, ModalHeader, ModalBody, ModalCloseButton, useDisclosure, Checkbox, Badge, Divider, Alert, AlertIcon, Tag, TagLabel, TagCloseButton, Progress } from "@chakra-ui/react";
-import { Spinner } from "@chakra-ui/react";
+import { Box, VStack, HStack, Text, Button, Heading, IconButton, Input, Textarea, useToast, Tabs, TabList, Tab, Avatar, Menu, MenuButton, MenuList, MenuItem, Modal, ModalOverlay, ModalContent, ModalHeader, ModalBody, ModalCloseButton, useDisclosure, Checkbox, Badge, Divider, Alert, AlertIcon, Tag, TagLabel, TagCloseButton } from "@chakra-ui/react";
 import { ArrowBackIcon, DeleteIcon, AddIcon, ChevronDownIcon, DragHandleIcon, CloseIcon, ViewIcon } from "@chakra-ui/icons";
 import { useState, useEffect } from "react";
 import { CalendarPicker } from "@/components/CalendarPicker";
@@ -34,7 +33,6 @@ export default function CalendarBuilderPage() {
   const [availablePages, setAvailablePages] = useState<string[]>(["Main page", "Form page", "Success page"]);
   const [isGoogleConnected, setIsGoogleConnected] = useState(false);
   const [isZoomConnected, setIsZoomConnected] = useState(false);
-  const [isLoading, setIsLoading] = useState(true);
   const [currentEventId, setCurrentEventId] = useState<number | null>(null);
 
   useEffect(() => {
@@ -95,8 +93,6 @@ export default function CalendarBuilderPage() {
         }
       } catch (error) {
         console.error("Error loading user profile:", error);
-      } finally {
-        setIsLoading(false);
       }
     };
 
@@ -106,14 +102,14 @@ export default function CalendarBuilderPage() {
   useEffect(() => {
     // Only auto-save updates for an existing event. A brand-new event is
     // saved as a draft when the user clicks the back button (handleBack).
-    if (isLoading || currentEventId === null) return;
+    if (currentEventId === null) return;
 
     const saveTimer = setTimeout(() => {
       saveEventToDatabase();
     }, 1000);
 
     return () => clearTimeout(saveTimer);
-  }, [formName, title, description, ownerName, meetingLink, meetingLinkUrl, durations, userAvatar, currentEventId, isLoading]);
+  }, [formName, title, description, ownerName, meetingLink, meetingLinkUrl, durations, userAvatar, currentEventId]);
 
   const handleTitleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const val = e.target.value;
@@ -284,36 +280,7 @@ export default function CalendarBuilderPage() {
   };
 
 
-  if (isLoading) {
-    return (
-      <>
-        <style jsx global>{`
-          html, body, #__next {
-            height: 100%;
-            margin: 0;
-            padding: 0;
-            overflow: hidden;
-          }
-        `}</style>
-        <Box h="100dvh" w="100vw" bg="white" display="flex" alignItems="center" justifyContent="center">
-          <Progress
-            isIndeterminate
-            size="xs"
-            width="200px"
-            borderRadius="full"
-            sx={{
-              "& > div": {
-                backgroundColor: "#3F3F46 !important",
-                backgroundImage: "none",
-              },
-            }}
-          />
-        </Box>
-      </>
-    );
-  }
-
-  return (
+return (
     <>
       <style jsx global>{`
         html, body, #__next {

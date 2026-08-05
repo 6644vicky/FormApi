@@ -295,7 +295,7 @@ export default function CalendarBuilderPage() {
             overflow: hidden;
           }
         `}</style>
-        <Box h="100dvh" w="100vw" bg="customGray.100" display="flex" alignItems="center" justifyContent="center">
+        <Box h="100dvh" w="100vw" bg="white" display="flex" alignItems="center" justifyContent="center">
           <Progress
             isIndeterminate
             size="xs"
@@ -304,7 +304,8 @@ export default function CalendarBuilderPage() {
             borderRadius="full"
             sx={{
               "& > div": {
-                backgroundColor: "#3F3F46",
+                backgroundColor: "#3F3F46 !important",
+                backgroundImage: "none",
               },
             }}
           />

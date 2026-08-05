@@ -472,7 +472,7 @@ export default function BuilderPage() {
         top={0}
         left={0}
         zIndex={9999}
-        sx={{ backgroundColor: "#ffffff !important" }}
+        style={{ backgroundColor: "white" }}
       >
         <Progress
           isIndeterminate

@@ -114,7 +114,7 @@ export default function BuilderPage() {
   const [formWidth, setFormWidth] = useState("427px");
   const [formHeight, setFormHeight] = useState("auto");
   const [formPadding, setFormPadding] = useState("24px");
-  const [borderRadius, setBorderRadius] = useState("16px");
+  const [borderRadius, setBorderRadius] = useState("178px");
   const [selectedElementId, setSelectedElementId] = useState<string | null>(null);
   const [selectedColorPreset, setSelectedColorPreset] = useState<"dark" | "green">("green");
   const [colorScheme, setColorScheme] = useState({

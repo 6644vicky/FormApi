@@ -299,8 +299,7 @@ export default function CalendarBuilderPage() {
           <Progress
             isIndeterminate
             size="xs"
-            width="200px"
-            trackColor="transparent"
+            width="150px"
             borderRadius="full"
             sx={{
               "& > div": {

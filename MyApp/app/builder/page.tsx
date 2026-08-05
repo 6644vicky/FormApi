@@ -2,7 +2,7 @@
 
 export const dynamic = 'force-dynamic';
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { keyframes } from "@emotion/react";
 import { supabase } from "@/lib/supabase";
@@ -10,6 +10,7 @@ import { deleteUserAccount } from "@/app/actions/deleteUser";
 import { getAgents, createAgent, deleteAgent } from "@/app/actions/agentActions";
 import CryptoJS from "crypto-js";
 import Sidebar from "@/app/components/Sidebar";
+import FullPageLoader from "@/app/components/FullPageLoader";
 import {
   Box,
   Flex,
@@ -67,7 +68,8 @@ const spin = keyframes`
 `;
 
 export default function BuilderPage() {
-  const toast = useToast();
+  // Default every toast on this page to the top; individual calls can override.
+  const toast = useToast({ position: "top" });
   const router = useRouter();
   const [selectedNav, setSelectedNav] = useState("Messages");
   const [userEmail, setUserEmail] = useState("");
@@ -81,7 +83,9 @@ export default function BuilderPage() {
   const [feedbackError, setFeedbackError] = useState("");
   const [agentName, setAgentName] = useState("");
   const [agents, setAgents] = useState<Array<{ name: string; services: string[] }>>([]);
-  const [selectedAgent, setSelectedAgent] = useState<string | null>(null);
+  // Selection is by position, not name: two workspaces can share a name, and
+  // matching on the name highlighted both at once and made one unselectable.
+  const [selectedAgentIndex, setSelectedAgentIndex] = useState<number | null>(null);
   const [selectedServices, setSelectedServices] = useState<string[]>([]);
   const [hoveredAgent, setHoveredAgent] = useState<string | null>(null);
   const [createError, setCreateError] = useState("");
@@ -99,7 +103,11 @@ export default function BuilderPage() {
     ref: searchRef,
     handler: () => setIsSearchExpanded(false),
   });
-  const [calendarEvents, setCalendarEvents] = useState<Array<{ id: number; title: string; meeting_link: string; updated_at: string }>>([]);
+  const [calendarEvents, setCalendarEvents] = useState<Array<{ id: number; title: string; meeting_link: string; updated_at: string; status: string }>>([]);
+
+  // Name of the selected workspace, derived from the index. Everything that
+  // scopes by name (event queries, delete, the header) reads this.
+  const selectedAgent = selectedAgentIndex !== null ? agents[selectedAgentIndex]?.name ?? null : null;
 
   useEffect(() => {
     isMountedRef.current = true;
@@ -113,6 +121,34 @@ export default function BuilderPage() {
       setAvatarUrl(cached);
     }
 
+    // Restore whichever workspace was last open so a refresh (or coming back
+    // from the calendar builder) stays put instead of jumping to the newest
+    // one. Stores name *and* index so duplicate names resolve to the exact one
+    // that was open. Falls back to the most recent if it can't be found.
+    const pickWorkspaceIndex = (list: Array<{ name: string }>) => {
+      const raw = localStorage.getItem("selected_workspace");
+      if (raw) {
+        let savedName: string | undefined;
+        let savedIndex: number | undefined;
+        try {
+          const parsed = JSON.parse(raw);
+          savedName = parsed?.name;
+          savedIndex = parsed?.index;
+        } catch {
+          savedName = raw; // value written before this stored an index
+        }
+
+        // Same name still at the same position: unambiguous.
+        if (typeof savedIndex === "number" && list[savedIndex]?.name === savedName) {
+          return savedIndex;
+        }
+        // Otherwise settle for the first workspace with that name.
+        const byName = list.findIndex((a) => a.name === savedName);
+        if (byName !== -1) return byName;
+      }
+      return list.length - 1;
+    };
+
     const loadAgents = async () => {
       try {
         const { data: { session } } = await supabase.auth.getSession();
@@ -120,7 +156,7 @@ export default function BuilderPage() {
           const dbAgents = await getAgents(session.user.id);
           setAgents(dbAgents);
           if (dbAgents.length > 0) {
-            setSelectedAgent(dbAgents[dbAgents.length - 1].name);
+            setSelectedAgentIndex(pickWorkspaceIndex(dbAgents));
           }
           localStorage.setItem("workspace_agents", JSON.stringify(dbAgents));
         } else {
@@ -130,7 +166,7 @@ export default function BuilderPage() {
               const parsed = JSON.parse(cachedAgents);
               setAgents(parsed);
               if (parsed.length > 0) {
-                setSelectedAgent(parsed[parsed.length - 1].name);
+                setSelectedAgentIndex(pickWorkspaceIndex(parsed));
               }
             } catch (error) {
               console.error("Error loading agents from localStorage:", error);
@@ -145,7 +181,7 @@ export default function BuilderPage() {
             const parsed = JSON.parse(cachedAgents);
             setAgents(parsed);
             if (parsed.length > 0) {
-              setSelectedAgent(parsed[parsed.length - 1].name);
+              setSelectedAgentIndex(pickWorkspaceIndex(parsed));
             }
           } catch (error) {
             console.error("Error loading agents from localStorage:", error);
@@ -165,40 +201,120 @@ export default function BuilderPage() {
     localStorage.setItem("workspace_agents", JSON.stringify(agents));
   }, [agents]);
 
+  // Remember the open workspace so pickWorkspaceIndex can restore it next load.
+  // Both name and index are stored so duplicate names resolve unambiguously.
   useEffect(() => {
-    const loadCalendarEvents = async () => {
-      try {
-        const { data: { session } } = await supabase.auth.getSession();
-        if (!session?.user) return;
+    if (typeof window === 'undefined') return;
+    if (selectedAgentIndex === null) return;
+    const name = agents[selectedAgentIndex]?.name;
+    if (name === undefined) return;
+    localStorage.setItem(
+      "selected_workspace",
+      JSON.stringify({ name, index: selectedAgentIndex })
+    );
+  }, [selectedAgentIndex, agents]);
 
-        const { data, error } = await supabase
-          .from("calendar_events")
-          .select("id, event_title, title, meeting_link, updated_at")
-          .eq("user_id", session.user.id)
-          .order("updated_at", { ascending: false });
+  // Labels for the workspace list. Workspaces sharing a name are numbered
+  // "Name (1)", "Name (2)", ... so accidental duplicates are tellable apart; a
+  // name used once is left alone. Display-only — the stored name is untouched.
+  // getAgents orders by created_at, so index order is creation order.
+  const workspaceLabels = useMemo(() => {
+    const totals = new Map<string, number>();
+    agents.forEach((a) => totals.set(a.name, (totals.get(a.name) ?? 0) + 1));
 
-        if (error) {
-          console.log("Error loading calendar events:", error);
-          return;
-        }
+    const running = new Map<string, number>();
+    return agents.map((a) => {
+      if ((totals.get(a.name) ?? 0) < 2) return a.name;
+      const n = (running.get(a.name) ?? 0) + 1;
+      running.set(a.name, n);
+      return `${a.name} (${n})`;
+    });
+  }, [agents]);
 
-        if (data) {
-          setCalendarEvents(
-            data.map((e) => ({
-              id: e.id,
-              title: e.event_title || e.title || "Untitled event",
-              meeting_link: e.meeting_link || "Link",
-              updated_at: e.updated_at,
-            }))
-          );
-        }
-      } catch (error) {
-        console.error("Error loading calendar events:", error);
+  const loadCalendarEvents = useCallback(async () => {
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.user) return;
+
+      // Events belong to one workspace. With none selected there is nothing to
+      // scope the listing to, so show an empty list rather than every event.
+      if (!selectedAgent) {
+        setCalendarEvents([]);
+        return;
       }
+
+      const { data, error } = await supabase
+        .from("calendar_events")
+        .select("id, event_title, title, meeting_link, updated_at")
+        .eq("user_id", session.user.id)
+        .eq("workspace_name", selectedAgent)
+        .order("updated_at", { ascending: false });
+
+      if (error) {
+        console.log("Error loading calendar events:", error);
+        return;
+      }
+
+      if (data) {
+        const rows = data.map((e) => ({
+          id: e.id,
+          title: e.event_title || e.title || "Untitled event",
+          meeting_link: e.meeting_link || "Link",
+          updated_at: e.updated_at,
+          // No status column on calendar_events yet, so everything is a draft.
+          // Once one exists, reading it here is all that's needed for the
+          // coloured badges below to start appearing.
+          status: "Draft",
+        }));
+
+        // Number events that share a name so they're tellable apart in the
+        // listing: "Demo call (1)", "Demo call (2)", ... A name used only once
+        // is left alone. This is display-only — the stored title is untouched.
+        const totals = new Map<string, number>();
+        rows.forEach((r) => totals.set(r.title, (totals.get(r.title) ?? 0) + 1));
+
+        const numbered = new Map<number, string>();
+        const running = new Map<string, number>();
+        // Walk oldest-first (by id) so the numbering follows creation order
+        // rather than however the listing happens to be sorted.
+        [...rows]
+          .sort((a, b) => a.id - b.id)
+          .forEach((r) => {
+            if ((totals.get(r.title) ?? 0) < 2) return;
+            const n = (running.get(r.title) ?? 0) + 1;
+            running.set(r.title, n);
+            numbered.set(r.id, `${r.title} (${n})`);
+          });
+
+        setCalendarEvents(
+          rows.map((r) => ({ ...r, title: numbered.get(r.id) ?? r.title }))
+        );
+      }
+    } catch (error) {
+      console.error("Error loading calendar events:", error);
+    }
+    // Refetches whenever the user switches workspace.
+  }, [selectedAgent]);
+
+  useEffect(() => {
+    loadCalendarEvents();
+  }, [loadCalendarEvents]);
+
+  // Events are created/edited on the calendar-builder page, so refetch whenever
+  // this page regains focus. Without this the listing keeps showing whatever it
+  // fetched on first mount and new events never appear.
+  useEffect(() => {
+    const refresh = () => {
+      if (document.visibilityState === "visible") loadCalendarEvents();
     };
 
-    loadCalendarEvents();
-  }, []);
+    window.addEventListener("focus", refresh);
+    document.addEventListener("visibilitychange", refresh);
+    return () => {
+      window.removeEventListener("focus", refresh);
+      document.removeEventListener("visibilitychange", refresh);
+    };
+  }, [loadCalendarEvents]);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -389,7 +505,8 @@ export default function BuilderPage() {
           if (success) {
             const dbAgents = await getAgents(session.user.id);
             setAgents(dbAgents);
-            setSelectedAgent(newAgentName);
+            // Select the copy just made — the newest row, so the last index.
+            setSelectedAgentIndex(dbAgents.length - 1);
             localStorage.setItem("workspace_agents", JSON.stringify(dbAgents));
             toast({
               title: "Duplicated!",
@@ -448,11 +565,29 @@ export default function BuilderPage() {
       setAgents(updatedAgents);
       localStorage.setItem("workspace_agents", JSON.stringify(updatedAgents));
 
-      setSelectedAgent(agentName);
+      const createdName = agentName;
+
+      // Select the workspace just created — the one appended last. Index-based
+      // so an identically-named existing workspace isn't selected instead.
+      setSelectedAgentIndex(updatedAgents.length - 1);
       setAgentName("");
       setSelectedServices([]);
       setCreateError("");
       onCreateClose();
+
+      // Land on the calendar listing for the new workspace. No full-page
+      // loader here — the spinner inside the Create workspace button already
+      // covers the wait, and switching selectedAgent refetches the listing.
+      setActiveTabIndex(1);
+
+      toast({
+        title: "Workspace created",
+        description: `"${createdName}" is ready`,
+        status: "success",
+        duration: 3000,
+        isClosable: true,
+        position: "top",
+      });
     } catch (error) {
       console.error("Error creating workspace:", error);
       setCreateError("Failed to create workspace. Please try again.");
@@ -462,27 +597,7 @@ export default function BuilderPage() {
   };
 
   if (isLoadingWorkspaces) {
-    return (
-      <div style={{ height: "100vh", width: "100vw", backgroundColor: "white", position: "fixed", top: 0, left: 0, zIndex: 9999, display: "flex", alignItems: "center", justifyContent: "center" }}>
-        <Flex
-          align="center"
-          justify="center"
-        >
-          <Progress
-            isIndeterminate
-            size="xs"
-            width="200px"
-            bg="transparent"
-            borderRadius="full"
-            sx={{
-              "& > div": {
-                backgroundColor: "#27272A",
-              },
-            }}
-          />
-        </Flex>
-      </div>
-    );
+    return <FullPageLoader />;
   }
 
   return (
@@ -550,7 +665,7 @@ export default function BuilderPage() {
                 <Box
                   key={index}
                   h="32px"
-                  bg={selectedAgent === agentObj.name ? "customGray.100" : "transparent"}
+                  bg={selectedAgentIndex === index ? "customGray.100" : "transparent"}
                   borderRadius="8px"
                   px="8px"
                   py="8px"
@@ -558,14 +673,14 @@ export default function BuilderPage() {
                   alignItems="center"
                   justifyContent="space-between"
                   cursor="pointer"
-                  onClick={() => setSelectedAgent(agentObj.name)}
+                  onClick={() => setSelectedAgentIndex(index)}
                   onMouseEnter={() => setHoveredAgent(agentObj.name)}
                   onMouseLeave={() => setHoveredAgent(null)}
-                  _hover={{ bg: selectedAgent === agentObj.name ? "customGray.100" : "customGray.100" }}
+                  _hover={{ bg: "customGray.100" }}
                   transition="all 0.2s"
                 >
-                  <Text fontSize="sm" fontWeight={selectedAgent === agentObj.name ? "medium" : "normal"} color={selectedAgent === agentObj.name ? "customGray.800" : "customGray.500"} noOfLines={1} overflow="hidden" textOverflow="ellipsis" minW={0}>
-                    {agentObj.name}
+                  <Text fontSize="sm" fontWeight={selectedAgentIndex === index ? "medium" : "normal"} color={selectedAgentIndex === index ? "customGray.800" : "customGray.500"} noOfLines={1} overflow="hidden" textOverflow="ellipsis" minW={0}>
+                    {workspaceLabels[index]}
                   </Text>
                 </Box>
               ))}
@@ -579,16 +694,18 @@ export default function BuilderPage() {
                   <Button
                     variant="ghost"
                     size="sm"
-                    p="6px"
-                    minW="auto"
+                    p="0"
+                    w="32px"
+                    h="32px"
+                    minW="32px"
                     color="customGray.800"
-                    _hover={{ bg: "customGray.50" }}
+                    _hover={{ bg: "customGray.100" }}
                     onClick={() => {
                       if (!enableSidebarTransition) setEnableSidebarTransition(true);
                       setIsWorkspaceListCollapsed(!isWorkspaceListCollapsed);
                     }}
                   >
-                    <svg width="20" height="20" viewBox="0 0 18 18" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <svg width="16" height="16" viewBox="0 0 18 18" fill="none" xmlns="http://www.w3.org/2000/svg">
                       <path d="M14.25 2.25H3.75C2.92157 2.25 2.25 2.92157 2.25 3.75V14.25C2.25 15.0784 2.92157 15.75 3.75 15.75H14.25C15.0784 15.75 15.75 15.0784 15.75 14.25V3.75C15.75 2.92157 15.0784 2.25 14.25 2.25Z" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
                       <path d="M8 13.25L8 4.75C8 4.33579 7.66421 4 7.25 4L4.75 4C4.33579 4 4 4.33579 4 4.75L4 13.25C4 13.6642 4.33579 14 4.75 14L7.25 14C7.66421 14 8 13.6642 8 13.25Z" fill="currentColor"/>
                     </svg>
@@ -628,7 +745,10 @@ export default function BuilderPage() {
                 {agents.length > 0 && (
                   <Button size="sm" bg="customGray.800" color="white" _hover={{ bg: "customGray.700" }} display="flex" alignItems="center" gap="8px" onClick={() => {
                     const tab = activeTabIndex === 1 ? 'calendar' : 'form';
-                    router.push(`/calendar-builder?tab=${tab}`);
+                    // Carry the workspace through so the new event is created
+                    // inside it and stays scoped to it.
+                    const workspace = encodeURIComponent(selectedAgent || "");
+                    router.push(`/calendar-builder?tab=${tab}&workspace=${workspace}`);
                   }}>
                     <Box display="flex" alignItems="center" justifyContent="center" w="16px" h="16px">
                       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -679,8 +799,8 @@ export default function BuilderPage() {
                   </VStack>
                 </TabPanel>
                 <TabPanel h="100%" p="0" overflow="hidden">
-                  <VStack w="100%" align="stretch" spacing={0}>
-                    <Box w="100%" px="24px" py="12px" h="50px" display="flex" alignItems="center" justifyContent="flex-end" bg="white" borderBottom="1px solid" borderBottomColor="customGray.200">
+                  <VStack w="100%" h="100%" align="stretch" spacing={0} overflow="hidden">
+                    <Box flexShrink={0} w="100%" px="24px" py="12px" h="50px" display="flex" alignItems="center" justifyContent="flex-end" bg="white" borderBottom="1px solid" borderBottomColor="customGray.200">
                       <HStack spacing="12px">
                         <HStack ref={searchRef} spacing="0" bg={isSearchExpanded ? "white" : "transparent"} borderRadius="6px" border="1px solid" borderColor={isSearchExpanded ? "customGray.300" : "transparent"} transition="all 0.3s ease" overflow="hidden" h="32px">
                           <IconButton aria-label="Search" icon={<SearchIcon w="16px" h="16px" />} size="sm" variant="ghost" color="customGray.600" _hover={{ bg: "customGray.50" }} onClick={() => setIsSearchExpanded(!isSearchExpanded)} />
@@ -692,7 +812,7 @@ export default function BuilderPage() {
                         </Button>
                       </HStack>
                     </Box>
-                    <Box w="100%" bg="customGray.50" borderBottom="1px solid" borderBottomColor="customGray.200">
+                    <Box flexShrink={0} w="100%" bg="customGray.50" borderBottom="1px solid" borderBottomColor="customGray.200">
                       <Flex w="100%" h="50px" pl="24px" pr="24px" align="center" gap="12px">
                         <Box w="300px" display="flex" alignItems="center">
                           <Text fontSize="sm" fontWeight="medium" color="customGray.600">Event Name</Text>
@@ -713,14 +833,31 @@ export default function BuilderPage() {
                         </Box>
                       </Flex>
                     </Box>
+                    <Box
+                      flex={1}
+                      w="100%"
+                      overflowY="auto"
+                      sx={{
+                        '&::-webkit-scrollbar': { width: '6px' },
+                        '&::-webkit-scrollbar-track': { bg: 'transparent' },
+                        '&::-webkit-scrollbar-thumb': { bg: 'customGray.300', borderRadius: '3px' },
+                        '&::-webkit-scrollbar-thumb:hover': { bg: 'customGray.400' },
+                      }}
+                    >
                     {calendarEvents.map((event) => {
                       const initial = (event.title || "U").charAt(0).toUpperCase();
                       const updatedLabel = new Date(event.updated_at).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+                      // Drafts keep the neutral grey badge. The colour palette
+                      // only kicks in once the event goes live, and is keyed off
+                      // the event id so it stays the same across refetches and
+                      // reordering.
+                      const isLive = event.status === "Online" || event.status === "Offline";
+                      const badgeColor = isLive ? colors[event.id % colors.length] : "customGray.400";
                       return (
                         <Box key={event.id} w="100%" cursor="pointer" onClick={() => router.push(`/calendar-builder?id=${event.id}&tab=calendar`)}>
                           <Flex w="100%" h="50px" pl="24px" pr="24px" bg="white" borderBottom="1px solid" borderBottomColor="customGray.200" align="center" gap="12px" _hover={{ bg: "customGray.50" }} transition="background-color 0.2s">
                             <Box w="300px" display="flex" alignItems="center" gap="8px">
-                              <Box w="24px" h="24px" bg="customGray.400" borderRadius="full" display="flex" alignItems="center" justifyContent="center" flexShrink={0}>
+                              <Box w="24px" h="24px" bg={badgeColor} borderRadius="full" display="flex" alignItems="center" justifyContent="center" flexShrink={0}>
                                 <Text fontSize="xs" fontWeight="medium" color="white">{initial}</Text>
                               </Box>
                               <Text fontSize="sm" color="customGray.800">{event.title}</Text>
@@ -730,7 +867,7 @@ export default function BuilderPage() {
                             </Box>
                             <Box w="132px" display="flex" alignItems="center">
                               <Box px="8px" py="2px" bg="customGray.100" borderRadius="full">
-                                <Text fontSize="xs" fontWeight="medium" color="customGray.600">Draft</Text>
+                                <Text fontSize="xs" fontWeight="medium" color="customGray.600">{event.status}</Text>
                               </Box>
                             </Box>
                             <Box w="132px" display="flex" alignItems="center">
@@ -750,92 +887,6 @@ export default function BuilderPage() {
                         </Box>
                       );
                     })}
-                    <Box w="100%" cursor="pointer">
-                      <Flex w="100%" h="50px" pl="24px" pr="24px" bg="white" borderBottom="1px solid" borderBottomColor="customGray.200" align="center" gap="12px" _hover={{ bg: "customGray.50" }} transition="background-color 0.2s">
-                        <Box w="300px" display="flex" alignItems="center" gap="8px">
-                          <Box w="24px" h="24px" bg="#7C3AED" borderRadius="full" display="flex" alignItems="center" justifyContent="center" flexShrink={0}>
-                            <Text fontSize="xs" fontWeight="medium" color="white">D</Text>
-                          </Box>
-                          <Text fontSize="sm" color="customGray.800">Demo Event</Text>
-                        </Box>
-                        <Box w="256px" display="flex" alignItems="center">
-                          <Text fontSize="sm" color="customGray.600" textDecoration="underline">example.com/booking</Text>
-                        </Box>
-                        <Box w="132px" display="flex" alignItems="center">
-                          <Text fontSize="sm" color="customGray.600">Active</Text>
-                        </Box>
-                        <Box w="132px" display="flex" alignItems="center">
-                          <Text fontSize="sm" color="customGray.600">12</Text>
-                        </Box>
-                        <Box flex={1} display="flex" alignItems="center">
-                          <Text fontSize="sm" color="customGray.600">Jul 18, 2026</Text>
-                        </Box>
-                        <Box display="flex" alignItems="center" justifyContent="center" w="32px" h="32px" ml="12px">
-                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                            <circle cx="12" cy="5" r="2" fill="currentColor" />
-                            <circle cx="12" cy="12" r="2" fill="currentColor" />
-                            <circle cx="12" cy="19" r="2" fill="currentColor" />
-                          </svg>
-                        </Box>
-                      </Flex>
-                    </Box>
-                    <Box w="100%" cursor="pointer">
-                      <Flex w="100%" h="50px" pl="24px" pr="24px" bg="white" borderBottom="1px solid" borderBottomColor="customGray.200" align="center" gap="12px" _hover={{ bg: "customGray.50" }} transition="background-color 0.2s">
-                        <Box w="300px" display="flex" alignItems="center" gap="8px">
-                          <Box w="24px" h="24px" bg="#EC4899" borderRadius="full" display="flex" alignItems="center" justifyContent="center" flexShrink={0}>
-                            <Text fontSize="xs" fontWeight="medium" color="white">P</Text>
-                          </Box>
-                          <Text fontSize="sm" color="customGray.800">Product Launch</Text>
-                        </Box>
-                        <Box w="256px" display="flex" alignItems="center">
-                          <Text fontSize="sm" color="customGray.600" textDecoration="underline">launch.mysite.com</Text>
-                        </Box>
-                        <Box w="132px" display="flex" alignItems="center">
-                          <Text fontSize="sm" color="customGray.600">Pending</Text>
-                        </Box>
-                        <Box w="132px" display="flex" alignItems="center">
-                          <Text fontSize="sm" color="customGray.600">8</Text>
-                        </Box>
-                        <Box flex={1} display="flex" alignItems="center">
-                          <Text fontSize="sm" color="customGray.600">Jul 20, 2026</Text>
-                        </Box>
-                        <Box display="flex" alignItems="center" justifyContent="center" w="32px" h="32px" ml="12px">
-                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                            <circle cx="12" cy="5" r="2" fill="currentColor" />
-                            <circle cx="12" cy="12" r="2" fill="currentColor" />
-                            <circle cx="12" cy="19" r="2" fill="currentColor" />
-                          </svg>
-                        </Box>
-                      </Flex>
-                    </Box>
-                    <Box w="100%" cursor="pointer">
-                      <Flex w="100%" h="50px" pl="24px" pr="24px" bg="white" borderBottom="1px solid" borderBottomColor="customGray.200" align="center" gap="12px" _hover={{ bg: "customGray.50" }} transition="background-color 0.2s">
-                        <Box w="300px" display="flex" alignItems="center" gap="8px">
-                          <Box w="24px" h="24px" bg="#0EA5E9" borderRadius="full" display="flex" alignItems="center" justifyContent="center" flexShrink={0}>
-                            <Text fontSize="xs" fontWeight="medium" color="white">T</Text>
-                          </Box>
-                          <Text fontSize="sm" color="customGray.800">Team Meeting</Text>
-                        </Box>
-                        <Box w="256px" display="flex" alignItems="center">
-                          <Text fontSize="sm" color="customGray.600" textDecoration="underline">meet.company.com</Text>
-                        </Box>
-                        <Box w="132px" display="flex" alignItems="center">
-                          <Text fontSize="sm" color="customGray.600">Active</Text>
-                        </Box>
-                        <Box w="132px" display="flex" alignItems="center">
-                          <Text fontSize="sm" color="customGray.600">25</Text>
-                        </Box>
-                        <Box flex={1} display="flex" alignItems="center">
-                          <Text fontSize="sm" color="customGray.600">Jul 19, 2026</Text>
-                        </Box>
-                        <Box display="flex" alignItems="center" justifyContent="center" w="32px" h="32px" ml="12px">
-                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                            <circle cx="12" cy="5" r="2" fill="currentColor" />
-                            <circle cx="12" cy="12" r="2" fill="currentColor" />
-                            <circle cx="12" cy="19" r="2" fill="currentColor" />
-                          </svg>
-                        </Box>
-                      </Flex>
                     </Box>
                   </VStack>
                 </TabPanel>
@@ -1243,15 +1294,19 @@ export default function BuilderPage() {
                         return;
                       }
 
-                      // Only update local state after successful Supabase deletion
-                      const updatedAgents = agents.filter(a => a.name !== selectedAgent);
+                      // Only update local state after successful Supabase
+                      // deletion. Drop by index, not name, so deleting one of
+                      // two identically-named workspaces removes just that row.
+                      const removedIndex = selectedAgentIndex ?? 0;
+                      const updatedAgents = agents.filter((_, i) => i !== removedIndex);
                       setAgents(updatedAgents);
                       localStorage.setItem("workspace_agents", JSON.stringify(updatedAgents));
 
                       if (updatedAgents.length > 0) {
-                        setSelectedAgent(updatedAgents[updatedAgents.length - 1].name);
+                        // Stay near where the deleted one was.
+                        setSelectedAgentIndex(Math.min(removedIndex, updatedAgents.length - 1));
                       } else {
-                        setSelectedAgent(null);
+                        setSelectedAgentIndex(null);
                       }
 
                       toast({

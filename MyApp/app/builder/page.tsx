@@ -468,7 +468,7 @@ export default function BuilderPage() {
       <Flex
         h="100vh"
         w="100vw"
-        bg="customGray.50"
+        bg="white"
         align="center"
         justify="center"
         position="fixed"
@@ -484,7 +484,7 @@ export default function BuilderPage() {
           borderRadius="full"
           sx={{
             "& > div": {
-              backgroundColor: "#3F3F46",
+              backgroundColor: "#27272A",
             },
           }}
         />

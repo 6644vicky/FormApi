@@ -463,30 +463,25 @@ export default function BuilderPage() {
 
   if (isLoadingWorkspaces) {
     return (
-      <Flex
-        h="100vh"
-        w="100vw"
-        align="center"
-        justify="center"
-        position="fixed"
-        top={0}
-        left={0}
-        zIndex={9999}
-        style={{ backgroundColor: "white" }}
-      >
-        <Progress
-          isIndeterminate
-          size="xs"
-          width="200px"
-          bg="transparent"
-          borderRadius="full"
-          sx={{
-            "& > div": {
-              backgroundColor: "#27272A",
-            },
-          }}
-        />
-      </Flex>
+      <div style={{ height: "100vh", width: "100vw", backgroundColor: "white", position: "fixed", top: 0, left: 0, zIndex: 9999, display: "flex", alignItems: "center", justifyContent: "center" }}>
+        <Flex
+          align="center"
+          justify="center"
+        >
+          <Progress
+            isIndeterminate
+            size="xs"
+            width="200px"
+            bg="transparent"
+            borderRadius="full"
+            sx={{
+              "& > div": {
+                backgroundColor: "#27272A",
+              },
+            }}
+          />
+        </Flex>
+      </div>
     );
   }
 

@@ -44,6 +44,7 @@ import {
   InputGroup,
   InputLeftElement,
   useOutsideClick,
+  Progress,
 } from "@chakra-ui/react";
 import { SearchIcon, ChevronDownIcon, HamburgerIcon } from "@chakra-ui/icons";
 
@@ -55,6 +56,15 @@ const slideUpFade = keyframes`
   to {
     opacity: 1;
     transform: translateY(0);
+  }
+`;
+
+const spin = keyframes`
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
   }
 `;
 
@@ -81,6 +91,10 @@ export default function BuilderPage() {
   const [createError, setCreateError] = useState("");
   const [isWorkspaceListCollapsed, setIsWorkspaceListCollapsed] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [isCreatingWorkspace, setIsCreatingWorkspace] = useState(false);
+  const [isLoadingWorkspaces, setIsLoadingWorkspaces] = useState(true);
+  const [enableSidebarTransition, setEnableSidebarTransition] = useState(false);
+  const isMountedRef = useRef(false);
   const { isOpen: isAddFieldOpen, onOpen: onAddFieldOpen, onClose: onAddFieldClose } = useDisclosure();
   const [formFields, setFormFields] = useState<Array<{ id: string; name: string; type: string }>>([
     { id: "1", name: "First name", type: "text" },
@@ -116,6 +130,11 @@ export default function BuilderPage() {
     errorColor: "#ef4444",
   });
   const fieldRefs = useRef<{ [key: string]: HTMLDivElement | null }>({});
+  const [calendarEvents, setCalendarEvents] = useState<Array<{ id: number; title: string; meeting_link: string; updated_at: string }>>([]);
+
+  useEffect(() => {
+    isMountedRef.current = true;
+  }, []);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -163,6 +182,10 @@ export default function BuilderPage() {
             console.error("Error loading agents from localStorage:", error);
           }
         }
+      } finally {
+        setTimeout(() => {
+          setIsLoadingWorkspaces(false);
+        }, 30000);
       }
     };
 
@@ -174,6 +197,54 @@ export default function BuilderPage() {
     if (typeof window === 'undefined') return;
     localStorage.setItem("workspace_agents", JSON.stringify(agents));
   }, [agents]);
+
+  useEffect(() => {
+    const loadCalendarEvents = async () => {
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!session?.user) return;
+
+        const { data, error } = await supabase
+          .from("calendar_events")
+          .select("id, event_title, title, meeting_link, updated_at")
+          .eq("user_id", session.user.id)
+          .order("updated_at", { ascending: false });
+
+        if (error) {
+          console.log("Error loading calendar events:", error);
+          return;
+        }
+
+        if (data) {
+          setCalendarEvents(
+            data.map((e) => ({
+              id: e.id,
+              title: e.event_title || e.title || "Untitled event",
+              meeting_link: e.meeting_link || "Link",
+              updated_at: e.updated_at,
+            }))
+          );
+        }
+      } catch (error) {
+        console.error("Error loading calendar events:", error);
+      }
+    };
+
+    loadCalendarEvents();
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+
+    const params = new URLSearchParams(window.location.search);
+    const tabParam = params.get('tab');
+
+    if (tabParam === 'calendar') {
+      setActiveTabIndex(1);
+    } else if (tabParam === 'form') {
+      setActiveTabIndex(0);
+    }
+  }, []);
 
   useEffect(() => {
     const observerOptions = {
@@ -457,27 +528,31 @@ export default function BuilderPage() {
       return;
     }
 
+    setIsCreatingWorkspace(true);
+
     const newAgent = { name: agentName, services: selectedServices };
 
-    // Always update local state first
-    const updatedAgents = [...agents, newAgent];
-    setAgents(updatedAgents);
-    localStorage.setItem("workspace_agents", JSON.stringify(updatedAgents));
-
-    setSelectedAgent(agentName);
-    setAgentName("");
-    setSelectedServices([]);
-    setCreateError("");
-    onCreateClose();
-
-    // Try to save to Supabase in background
     try {
       const { data: { session } } = await supabase.auth.getSession();
       if (session?.user?.id) {
         await createAgent(session.user.id, newAgent);
       }
+
+      // Update local state after successful creation
+      const updatedAgents = [...agents, newAgent];
+      setAgents(updatedAgents);
+      localStorage.setItem("workspace_agents", JSON.stringify(updatedAgents));
+
+      setSelectedAgent(agentName);
+      setAgentName("");
+      setSelectedServices([]);
+      setCreateError("");
+      onCreateClose();
     } catch (error) {
-      console.error("Error saving to Supabase:", error);
+      console.error("Error creating workspace:", error);
+      setCreateError("Failed to create workspace. Please try again.");
+    } finally {
+      setIsCreatingWorkspace(false);
     }
   };
 
@@ -506,7 +581,7 @@ export default function BuilderPage() {
       >
 
         <HStack flex={1} h="100%" align="stretch" spacing={0} bg="white" borderRadius="8px" border="1px solid" borderColor="customGray.200" overflow="hidden">
-          <VStack w={isWorkspaceListCollapsed ? "0px" : "255px"} h="100%" align="stretch" spacing={0} borderRight={isWorkspaceListCollapsed ? "none" : "1px solid"} borderColor="customGray.200" overflow="hidden" transition="all 0.3s ease">
+          <VStack w={agents.length === 0 ? "0px" : isWorkspaceListCollapsed ? "0px" : "255px"} h="100%" align="stretch" spacing={0} borderRight={agents.length === 0 || isWorkspaceListCollapsed ? "none" : "1px solid"} borderColor="customGray.200" overflow="hidden" transition={enableSidebarTransition ? "width 0.3s ease-in-out" : "none"}>
             <HStack h="64px" align="center" justify="space-between" pl="20px" pr="16px" pt="14px" pb="16px">
               <Text fontSize="base" fontWeight="medium" color="customGray.800">
                 Workspace
@@ -568,6 +643,7 @@ export default function BuilderPage() {
             </VStack>
           </VStack>
           <VStack flex={1} h="100%" align="stretch" spacing={0} overflow="hidden">
+            {agents.length > 0 && (
             <HStack h="64px" align="center" justify="space-between" pl="20px" pr="16px" pt="14px" pb="18px" w="100%">
               <HStack spacing="4px" align="center">
                 <Tooltip label={isWorkspaceListCollapsed ? "Expand" : "Collapse"} placement="bottom">
@@ -578,7 +654,10 @@ export default function BuilderPage() {
                     minW="auto"
                     color="customGray.800"
                     _hover={{ bg: "customGray.50" }}
-                    onClick={() => setIsWorkspaceListCollapsed(!isWorkspaceListCollapsed)}
+                    onClick={() => {
+                      if (!enableSidebarTransition) setEnableSidebarTransition(true);
+                      setIsWorkspaceListCollapsed(!isWorkspaceListCollapsed);
+                    }}
                   >
                     <svg width="20" height="20" viewBox="0 0 18 18" fill="none" xmlns="http://www.w3.org/2000/svg">
                       <path d="M14.25 2.25H3.75C2.92157 2.25 2.25 2.92157 2.25 3.75V14.25C2.25 15.0784 2.92157 15.75 3.75 15.75H14.25C15.0784 15.75 15.75 15.0784 15.75 14.25V3.75C15.75 2.92157 15.0784 2.25 14.25 2.25Z" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
@@ -591,16 +670,49 @@ export default function BuilderPage() {
                 </Text>
               </HStack>
               <HStack spacing="8px">
-                <Button size="sm" bg="customGray.800" color="white" _hover={{ bg: "customGray.700" }} display="flex" alignItems="center" gap="8px" onClick={() => activeTabIndex === 1 && router.push("/calendar-builder")}>
-                  <Box display="flex" alignItems="center" justifyContent="center" w="16px" h="16px">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                      <path d="M12 5v14M5 12h14" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                    </svg>
-                  </Box>
-                  {activeTabIndex === 0 ? "Create form" : "Create event"}
-                </Button>
+                <Menu>
+                  <MenuButton
+                    as={IconButton}
+                    aria-label="More options"
+                    size="sm"
+                    variant="ghost"
+                    color="customGray.600"
+                    _hover={{ bg: "customGray.100" }}
+                    _active={{ bg: "customGray.100" }}
+                    icon={
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <circle cx="12" cy="5" r="2" fill="currentColor" />
+                        <circle cx="12" cy="12" r="2" fill="currentColor" />
+                        <circle cx="12" cy="19" r="2" fill="currentColor" />
+                      </svg>
+                    }
+                  />
+                  <MenuList fontSize="sm" minW="160px">
+                    <MenuItem color="customGray.800">
+                      Duplicate
+                    </MenuItem>
+                    <MenuItem color="red.500" onClick={onDeleteOpen}>
+                      Delete
+                    </MenuItem>
+                  </MenuList>
+                </Menu>
+                {agents.length > 0 && (
+                  <Button size="sm" bg="customGray.800" color="white" _hover={{ bg: "customGray.700" }} display="flex" alignItems="center" gap="8px" onClick={() => {
+                    const tab = activeTabIndex === 1 ? 'calendar' : 'form';
+                    router.push(`/calendar-builder?tab=${tab}`);
+                  }}>
+                    <Box display="flex" alignItems="center" justifyContent="center" w="16px" h="16px">
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M12 5v14M5 12h14" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                      </svg>
+                    </Box>
+                    {activeTabIndex === 0 ? "Create form" : "Create event"}
+                  </Button>
+                )}
               </HStack>
             </HStack>
+            )}
+            {agents.length > 0 ? (
             <Tabs flex={1} display="flex" flexDirection="column" overflow="hidden" w="100%" index={activeTabIndex} onChange={setActiveTabIndex}>
               <TabList pl="24px" borderBottom="1px solid" borderColor="customGray.200">
                 <Tab fontSize="sm" color="customGray.500" pb="12px" mb="-1px" borderBottom="2px solid transparent" _selected={{ color: "customGray.800", borderColor: "customGray.800", bg: "white" }} display="flex" alignItems="center" gap="6px" pl="0px">
@@ -722,7 +834,7 @@ export default function BuilderPage() {
                                   ref={(el) => {
                                     if (el) fieldRefs.current[field.id] = el;
                                   }}
-                                  animation={visibleFields.has(field.id) ? `${slideUpFade} 0.6s ease-out forwards` : "none"}
+                                  animation="none"
                                 >
                                   {field.type === "textarea" ? (
                                     <Textarea
@@ -940,6 +1052,43 @@ export default function BuilderPage() {
                         </Box>
                       </Flex>
                     </Box>
+                    {calendarEvents.map((event) => {
+                      const initial = (event.title || "U").charAt(0).toUpperCase();
+                      const updatedLabel = new Date(event.updated_at).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+                      return (
+                        <Box key={event.id} w="100%" cursor="pointer" onClick={() => router.push(`/calendar-builder?id=${event.id}&tab=calendar`)}>
+                          <Flex w="100%" h="50px" pl="24px" pr="24px" bg="white" borderBottom="1px solid" borderBottomColor="customGray.200" align="center" gap="12px" _hover={{ bg: "customGray.50" }} transition="background-color 0.2s">
+                            <Box w="300px" display="flex" alignItems="center" gap="8px">
+                              <Box w="24px" h="24px" bg="customGray.400" borderRadius="full" display="flex" alignItems="center" justifyContent="center" flexShrink={0}>
+                                <Text fontSize="xs" fontWeight="medium" color="white">{initial}</Text>
+                              </Box>
+                              <Text fontSize="sm" color="customGray.800">{event.title}</Text>
+                            </Box>
+                            <Box w="256px" display="flex" alignItems="center">
+                              <Text fontSize="sm" color="customGray.400">—</Text>
+                            </Box>
+                            <Box w="132px" display="flex" alignItems="center">
+                              <Box px="8px" py="2px" bg="customGray.100" borderRadius="full">
+                                <Text fontSize="xs" fontWeight="medium" color="customGray.600">Draft</Text>
+                              </Box>
+                            </Box>
+                            <Box w="132px" display="flex" alignItems="center">
+                              <Text fontSize="sm" color="customGray.600">0</Text>
+                            </Box>
+                            <Box flex={1} display="flex" alignItems="center">
+                              <Text fontSize="sm" color="customGray.600">{updatedLabel}</Text>
+                            </Box>
+                            <Box display="flex" alignItems="center" justifyContent="center" w="32px" h="32px" ml="12px">
+                              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                <circle cx="12" cy="5" r="2" fill="currentColor" />
+                                <circle cx="12" cy="12" r="2" fill="currentColor" />
+                                <circle cx="12" cy="19" r="2" fill="currentColor" />
+                              </svg>
+                            </Box>
+                          </Flex>
+                        </Box>
+                      );
+                    })}
                     <Box w="100%" cursor="pointer">
                       <Flex w="100%" h="50px" pl="24px" pr="24px" bg="white" borderBottom="1px solid" borderBottomColor="customGray.200" align="center" gap="12px" _hover={{ bg: "customGray.50" }} transition="background-color 0.2s">
                         <Box w="300px" display="flex" alignItems="center" gap="8px">
@@ -1031,6 +1180,67 @@ export default function BuilderPage() {
                 </TabPanel>
               </TabPanels>
             </Tabs>
+            ) : isLoadingWorkspaces ? (
+            <VStack
+              data-area="workspace-container"
+              flex={1}
+              align="center"
+              justify="center"
+              spacing="24px"
+              w="100%"
+              bg="customGray.50"
+              borderRadius="0px"
+              boxShadow="none"
+            >
+              <Progress
+                isIndeterminate
+                size="xs"
+                width="200px"
+                trackColor="transparent"
+                borderRadius="full"
+                sx={{
+                  "& > div": {
+                    backgroundColor: "#3F3F46",
+                  },
+                }}
+              />
+            </VStack>
+            ) : (
+            <VStack flex={1} align="center" justify="center" spacing="24px" w="100%">
+              <VStack align="center" spacing="12px">
+                <Box w="120px" h="120px" display="flex" alignItems="center" justifyContent="center">
+                  <svg width="120" height="120" viewBox="0 0 120 120" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <circle cx="60" cy="60" r="50" stroke="#E4E4E7" strokeWidth="2" opacity="0.5"/>
+                    <path d="M60 40L75 55M60 40L45 55M60 40V75M45 55H75" stroke="#A1A1AA" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                  </svg>
+                </Box>
+                <VStack align="center" spacing="8px">
+                  <Heading fontSize="18px" fontWeight="500" color="customGray.800">
+                    No workspace found
+                  </Heading>
+                  <Text fontSize="14px" color="customGray.600" textAlign="center" maxW="280px">
+                    Create your first workspace to get started with forms and calendar
+                  </Text>
+                </VStack>
+              </VStack>
+              <Button
+                size="sm"
+                bg="customGray.800"
+                color="white"
+                _hover={{ bg: "customGray.700" }}
+                onClick={onCreateOpen}
+              >
+                <HStack spacing="8px">
+                  <Box display="flex" alignItems="center" justifyContent="center">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                      <path d="M12 5v14M5 12h14" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                    </svg>
+                  </Box>
+                  <Text>Create workspace</Text>
+                </HStack>
+              </Button>
+            </VStack>
+            )}
           </VStack>
         </HStack>
       </VStack>
@@ -1300,7 +1510,11 @@ export default function BuilderPage() {
                 bg="customGray.800"
                 color="white"
                 _hover={{ bg: "customGray.700" }}
+                _disabled={{ bg: "customGray.400", cursor: "not-allowed" }}
                 onClick={handleCreateWorkspace}
+                isDisabled={isCreatingWorkspace}
+                isLoading={isCreatingWorkspace}
+                loadingText="Creating..."
               >
                 Create workspace
               </Button>

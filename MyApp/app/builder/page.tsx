@@ -572,7 +572,7 @@ export default function BuilderPage() {
       >
 
         <HStack flex={1} h="100%" align="stretch" spacing={0} bg="white" borderRadius="8px" border="1px solid" borderColor="customGray.200" overflow="hidden">
-          <VStack w={agents.length === 0 ? "0px" : isWorkspaceListCollapsed ? "0px" : "255px"} h="100%" align="stretch" spacing={0} borderRight={agents.length === 0 || isWorkspaceListCollapsed ? "none" : "1px solid"} borderColor="customGray.200" overflow="hidden">
+          <VStack w={agents.length === 0 || isLoadingWorkspaces ? "0px" : isWorkspaceListCollapsed ? "0px" : "255px"} h="100%" align="stretch" spacing={0} borderRight={agents.length === 0 || isWorkspaceListCollapsed || isLoadingWorkspaces ? "none" : "1px solid"} borderColor="customGray.200" overflow="hidden">
             <HStack h="64px" align="center" justify="space-between" pl="20px" pr="16px" pt="14px" pb="16px">
               <Text fontSize="base" fontWeight="medium" color="customGray.800">
                 Workspace
@@ -634,7 +634,7 @@ export default function BuilderPage() {
             </VStack>
           </VStack>
           <VStack flex={1} h="100%" align="stretch" spacing={0} overflow="hidden">
-            {agents.length > 0 && (
+            {agents.length > 0 && !isLoadingWorkspaces && (
             <HStack h="64px" align="center" justify="space-between" pl="20px" pr="16px" pt="14px" pb="18px" w="100%">
               <HStack spacing="4px" align="center">
                 <Tooltip label={isWorkspaceListCollapsed ? "Expand" : "Collapse"} placement="bottom">

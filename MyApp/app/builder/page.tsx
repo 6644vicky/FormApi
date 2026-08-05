@@ -88,7 +88,7 @@ export default function BuilderPage() {
   const [isWorkspaceListCollapsed, setIsWorkspaceListCollapsed] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [isCreatingWorkspace, setIsCreatingWorkspace] = useState(false);
-  const [isLoadingWorkspaces, setIsLoadingWorkspaces] = useState(false);
+  const [isLoadingWorkspaces, setIsLoadingWorkspaces] = useState(true);
   const [enableSidebarTransition, setEnableSidebarTransition] = useState(false);
   const isMountedRef = useRef(false);
   const [activeTabIndex, setActiveTabIndex] = useState(0);
@@ -151,8 +151,11 @@ export default function BuilderPage() {
             console.error("Error loading agents from localStorage:", error);
           }
         }
+      } finally {
+        setTimeout(() => {
+          setIsLoadingWorkspaces(false);
+        }, 30000);
       }
-    };
     };
 
     loadAgents();
@@ -824,14 +827,16 @@ export default function BuilderPage() {
               justify="center"
               spacing="24px"
               w="100%"
-              bg="customGray.50"
-              borderRadius="0px"
+              bg="white"
+              borderRadius="12px"
+              border="1px solid"
+              borderColor="customGray.200"
               boxShadow="none"
             >
               <Progress
                 isIndeterminate
-                size="xs"
-                width="200px"
+                size="sm"
+                width="240px"
                 trackColor="transparent"
                 borderRadius="full"
                 sx={{

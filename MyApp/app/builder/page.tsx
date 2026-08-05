@@ -466,7 +466,7 @@ export default function BuilderPage() {
       <Flex
         h="100vh"
         w="100vw"
-        bg="white"
+        bg="#ffffff"
         align="center"
         justify="center"
         position="fixed"

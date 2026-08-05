@@ -1195,9 +1195,6 @@ export default function BuilderPage() {
                   },
                 }}
               />
-              <Text fontSize="sm" color="customGray.600" fontWeight="medium">
-                Loading workspace...
-              </Text>
             </VStack>
             ) : (
             <VStack flex={1} align="center" justify="center" spacing="24px" w="100%">

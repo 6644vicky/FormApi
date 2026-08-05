@@ -30,6 +30,11 @@ import {
   Input,
   Tag,
   TagLabel,
+  Tabs,
+  TabList,
+  Tab,
+  TabPanels,
+  TabPanel,
   Menu,
   MenuButton,
   MenuList,
@@ -86,6 +91,7 @@ export default function BuilderPage() {
   const [isLoadingWorkspaces, setIsLoadingWorkspaces] = useState(true);
   const [enableSidebarTransition, setEnableSidebarTransition] = useState(false);
   const isMountedRef = useRef(false);
+  const [activeTabIndex, setActiveTabIndex] = useState(0);
   const [isSearchExpanded, setIsSearchExpanded] = useState(false);
   const searchRef = useRef<HTMLDivElement>(null);
 
@@ -196,6 +202,18 @@ export default function BuilderPage() {
     loadCalendarEvents();
   }, []);
 
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+
+    const params = new URLSearchParams(window.location.search);
+    const tabParam = params.get('tab');
+
+    if (tabParam === 'calendar') {
+      setActiveTabIndex(1);
+    } else if (tabParam === 'form') {
+      setActiveTabIndex(0);
+    }
+  }, []);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -587,21 +605,59 @@ export default function BuilderPage() {
                 </Menu>
                 {agents.length > 0 && (
                   <Button size="sm" bg="customGray.800" color="white" _hover={{ bg: "customGray.700" }} display="flex" alignItems="center" gap="8px" onClick={() => {
-                    router.push(`/calendar-builder?tab=calendar`);
+                    const tab = activeTabIndex === 1 ? 'calendar' : 'form';
+                    router.push(`/calendar-builder?tab=${tab}`);
                   }}>
                     <Box display="flex" alignItems="center" justifyContent="center" w="16px" h="16px">
                       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                         <path d="M12 5v14M5 12h14" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
                       </svg>
                     </Box>
-                    Create event
+                    {activeTabIndex === 0 ? "Create form" : "Create event"}
                   </Button>
                 )}
               </HStack>
             </HStack>
             )}
             {agents.length > 0 ? (
-            <VStack w="100%" align="stretch" spacing={0} flex={1} overflow="hidden">
+            <Tabs flex={1} display="flex" flexDirection="column" overflow="hidden" w="100%" index={activeTabIndex} onChange={setActiveTabIndex}>
+              <TabList pl="24px" borderBottom="1px solid" borderColor="customGray.200">
+                <Tab fontSize="sm" color="customGray.500" pb="12px" mb="-1px" borderBottom="2px solid transparent" _selected={{ color: "customGray.800", borderColor: "customGray.800", bg: "white" }} display="flex" alignItems="center" gap="6px" pl="0px">
+                  <svg width="16" height="16" viewBox="0 0 18 18" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M10.5 1.5V4.5C10.5 4.89782 10.658 5.27936 10.9393 5.56066C11.2206 5.84196 11.6022 6 12 6H15M7.5 6.75H6M12 9.75H6M12 12.75H6M11.25 1.5H4.5C4.10218 1.5 3.72064 1.65804 3.43934 1.93934C3.15804 2.22064 3 2.60218 3 3V15C3 15.3978 3.15804 15.7794 3.43934 16.0607C3.72064 16.342 4.10218 16.5 4.5 16.5H13.5C13.8978 16.5 14.2794 16.342 14.5607 16.0607C14.842 15.7794 15 15.3978 15 15V5.25L11.25 1.5Z" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                  </svg>
+                  Form
+                </Tab>
+                <Tab fontSize="sm" color="customGray.500" pb="12px" mb="-1px" borderBottom="2px solid transparent" _selected={{ color: "customGray.800", borderColor: "customGray.800", bg: "white" }} display="flex" alignItems="center" gap="6px">
+                  <svg width="16" height="16" viewBox="0 0 18 18" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M6 1.5V4.5M12 1.5V4.5M2.25 7.5H15.75M3.75 3H14.25C15.0784 3 15.75 3.67157 15.75 4.5V15C15.75 15.8284 15.0784 16.5 14.25 16.5H3.75C2.92157 16.5 2.25 15.8284 2.25 15V4.5C2.25 3.67157 2.92157 3 3.75 3Z" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                  </svg>
+                  Calendar
+                </Tab>
+              </TabList>
+              <TabPanels flex={1} overflow="hidden" h="100%">
+                <TabPanel h="100%" p="0" overflow="hidden">
+                  <VStack w="100%" align="center" justify="center" spacing="24px">
+                    <VStack align="center" spacing="12px">
+                      <Box w="120px" h="120px" display="flex" alignItems="center" justifyContent="center">
+                        <svg width="120" height="120" viewBox="0 0 120 120" fill="none" xmlns="http://www.w3.org/2000/svg">
+                          <circle cx="60" cy="60" r="50" stroke="#E4E4E7" strokeWidth="2" opacity="0.5"/>
+                          <path d="M60 40L75 55M60 40L45 55M60 40V75M45 55H75" stroke="#A1A1AA" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                        </svg>
+                      </Box>
+                      <VStack align="center" spacing="8px">
+                        <Heading fontSize="18px" fontWeight="500" color="customGray.800">
+                          Form builder coming soon
+                        </Heading>
+                        <Text fontSize="14px" color="customGray.600" textAlign="center" maxW="280px">
+                          Form builder features will be available soon
+                        </Text>
+                      </VStack>
+                    </VStack>
+                  </VStack>
+                </TabPanel>
+                <TabPanel h="100%" p="0" overflow="hidden">
+                  <VStack w="100%" align="stretch" spacing={0}>
                     <Box w="100%" px="24px" py="12px" h="50px" display="flex" alignItems="center" justifyContent="flex-end" bg="white" borderBottom="1px solid" borderBottomColor="customGray.200">
                       <HStack spacing="12px">
                         <HStack ref={searchRef} spacing="0" bg={isSearchExpanded ? "white" : "transparent"} borderRadius="6px" border="1px solid" borderColor={isSearchExpanded ? "customGray.300" : "transparent"} transition="all 0.3s ease" overflow="hidden" h="32px">
@@ -759,7 +815,10 @@ export default function BuilderPage() {
                         </Box>
                       </Flex>
                     </Box>
-            </VStack>
+                  </VStack>
+                </TabPanel>
+              </TabPanels>
+            </Tabs>
             ) : isLoadingWorkspaces ? (
             <VStack
               data-area="workspace-container"

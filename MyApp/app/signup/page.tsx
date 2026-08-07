@@ -257,7 +257,7 @@ export default function SignupPage() {
           <Button
             w="full"
             h="44px"
-            bg={fullName && email && password ? "customGray.950" : "customGray.400"}
+            bg={fullName && email && password ? "brand.primary" : "customGray.400"}
             color="white"
             fontSize="sm"
             fontWeight={500}
@@ -265,7 +265,7 @@ export default function SignupPage() {
             boxShadow="0 1px 2px 0 rgba(2, 6, 23, 0.05)"
             isLoading={isLoading}
             onClick={handleSignup}
-            _hover={{ bg: fullName && email && password ? "customGray.950" : "customGray.400" }}
+            _hover={{ bg: fullName && email && password ? "brand.primaryHover" : "customGray.400" }}
           >
             Create account
           </Button>

@@ -474,7 +474,7 @@ export default function CalendarBuilderPage() {
               <Button size="sm" px="14px" variant="outline" borderColor="customGray.300" color="customGray.800" _hover={{ bg: "customGray.50" }}>
                 Preview
               </Button>
-              <Button size="sm" px="14px" bg="customGray.800" color="white" _hover={{ bg: "customGray.700" }}>
+              <Button size="sm" px="14px" bg="brand.primary" color="white" _hover={{ bg: "brand.primaryHover" }}>
                 Share
               </Button>
             </HStack>
@@ -484,14 +484,14 @@ export default function CalendarBuilderPage() {
             {/* Left Sidebar */}
             <Box w="380px" bg="white" borderRight="1px solid" borderColor="customGray.200" p="0px" overflowY="auto">
               <VStack spacing="0px" align="stretch">
-                <HStack spacing="8px" py="20px" px="24px">
+                <HStack spacing="8px" py="20px" px="30px">
                   <Text fontSize="14px" fontWeight="bold">📅</Text>
                   <Heading fontSize="14px" fontWeight="600" color="customGray.800">General</Heading>
                 </HStack>
 
                 <Box h="1px" bg="customGray.200" w="100%" />
 
-                <HStack justify="space-between" align="center" py="20px" px="24px" w="100%">
+                <HStack justify="space-between" align="center" py="20px" px="30px" w="100%">
                   <Text fontSize="14px" fontWeight="500" color="customGray.800">Owner name</Text>
                   <Input
                     size="md"
@@ -514,7 +514,7 @@ export default function CalendarBuilderPage() {
 
                 <Box h="1px" bg="customGray.200" w="100%" />
 
-                <VStack spacing="2px" align="stretch" py="20px" px="24px">
+                <VStack spacing="2px" align="stretch" py="20px" px="30px">
                   <Text fontSize="14px" fontWeight="500" color="customGray.800">Profile picture</Text>
                   <Text fontSize="xs" color="customGray.500">Choose the times of day you'll accept meetings.</Text>
                   <HStack spacing="12px" pt="12px">
@@ -554,7 +554,7 @@ export default function CalendarBuilderPage() {
 
                 <Box h="1px" bg="customGray.200" w="100%" />
 
-                <VStack spacing="12px" align="stretch" py="20px" px="24px">
+                <VStack spacing="12px" align="stretch" py="20px" px="30px">
                   <VStack spacing="2px" align="stretch">
                     <Text fontSize="14px" fontWeight="500" color="customGray.800">Description</Text>
                     <Text fontSize="xs" color="customGray.500">Choose the times of day you'll accept meetings.</Text>
@@ -593,7 +593,7 @@ export default function CalendarBuilderPage() {
 
                 <Box h="1px" bg="customGray.200" w="100%" />
 
-                <VStack spacing="12px" align="stretch" py="20px" px="24px">
+                <VStack spacing="12px" align="stretch" py="20px" px="30px">
                   <VStack spacing="2px" align="stretch">
                     <Text fontSize="14px" fontWeight="500" color="customGray.800">Meeting link</Text>
                     <Text fontSize="xs" color="customGray.500">Choose the times of day you'll accept meetings.</Text>
@@ -756,7 +756,7 @@ export default function CalendarBuilderPage() {
 
                 <Box h="1px" bg="customGray.200" w="100%" />
 
-                <VStack spacing="8px" align="stretch" py="20px" px="24px" pb="32px">
+                <VStack spacing="8px" align="stretch" py="20px" px="30px" pb="32px">
                   <Text fontSize="14px" fontWeight="500" color="customGray.800">Duration</Text>
                   <Box position="relative" w="100%">
                     <Menu matchWidth>
@@ -916,12 +916,12 @@ export default function CalendarBuilderPage() {
 
                   {selectedPage === "Main page" ? (
                     <>
-                      <Box flex="0 0 440px" display="flex" alignItems="flex-start" justifyContent="center" borderLeft="1px solid" borderColor="customGray.200" px="24px" pt="24px">
+                      <Box flex="0 0 440px" display="flex" alignItems="flex-start" justifyContent="center" borderLeft="1px solid" borderColor="customGray.200" px="30px" pt="24px">
                         <CalendarPicker />
                       </Box>
 
                       <VStack spacing="0px" flex="0 0 260px" borderLeft="1px solid" borderColor="customGray.200" p="0px">
-                        <HStack w="100%" justify="space-between" px="24px" pt="24px" pb="12px">
+                        <HStack w="100%" justify="space-between" px="30px" pt="24px" pb="12px">
                           <Text fontSize="14px" fontWeight="600" color="customGray.800">Thu 23</Text>
                           <Tabs variant="soft-rounded" colorScheme="gray" size="sm">
                             <TabList bg="customGray.100" borderRadius="9999px" p="4px">
@@ -930,7 +930,7 @@ export default function CalendarBuilderPage() {
                             </TabList>
                           </Tabs>
                         </HStack>
-                        <VStack spacing="12px" w="100%" overflowY="auto" maxH="380px" align="stretch" px="24px" pt="4px" pb="16px" sx={{ "&::-webkit-scrollbar": { w: "0px" }, "&::-webkit-scrollbar-track": { bg: "transparent" }, "&::-webkit-scrollbar-thumb": { bg: "transparent" } }}>
+                        <VStack spacing="12px" w="100%" overflowY="auto" maxH="380px" align="stretch" px="30px" pt="4px" pb="16px" sx={{ "&::-webkit-scrollbar": { w: "0px" }, "&::-webkit-scrollbar-track": { bg: "transparent" }, "&::-webkit-scrollbar-thumb": { bg: "transparent" } }}>
                           {["09:00 AM", "09:15 AM", "09:30 AM", "09:45 AM", "10:00 AM", "10:15 AM", "10:30 AM", "10:45 AM", "11:00 AM"].map((time) => (
                             <Button
                               key={time}

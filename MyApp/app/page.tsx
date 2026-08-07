@@ -212,13 +212,13 @@ export default function Home() {
             <Button
               w="full"
               h="44px"
-              bg={email && password ? "customGray.950" : "customGray.400"}
+              bg={email && password ? "brand.primary" : "customGray.400"}
               color="white"
               fontSize="sm"
               fontWeight={500}
               borderRadius="12px"
               boxShadow="0 1px 2px 0 rgba(2, 6, 23, 0.05)"
-              _hover={{ bg: email && password ? "customGray.950" : "customGray.400" }}
+              _hover={{ bg: email && password ? "brand.primaryHover" : "customGray.400" }}
               isLoading={isLoading}
               onClick={async () => {
                 let hasError = false;

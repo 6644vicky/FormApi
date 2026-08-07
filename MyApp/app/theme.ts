@@ -17,8 +17,8 @@ const theme = extendTheme({
       text: "#27272a",
     },
     brand: {
-      primary: "#9333ea",
-      primaryHover: "#7c3aed",
+      primary: "#125E9A",
+      primaryHover: "#004E8C",
     },
   
     gray: {
@@ -47,6 +47,18 @@ const theme = extendTheme({
       900: "#18181B",
       950: "#111111",
     },
+    sky: {
+      50: "#F0F6FA",
+      100: "#C7DCED",
+      200: "#9ABFDC",
+      300: "#4A89BA",
+      400: "#286FA8",
+      500: "#125E9A",
+      600: "#004E8C",
+      700: "#00467E",
+      800: "#003B6A",
+      900: "#002C4E",
+    },
     customDark: {
       2: "rgba(36, 39, 42, 0.02)",
       5: "rgba(36, 39, 42, 0.05)",
@@ -72,8 +84,8 @@ const theme = extendTheme({
     },
   },
   fonts: {
-    body: '"Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
-    heading: '"Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
+    body: 'var(--font-inter), -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
+    heading: 'var(--font-inter), -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
   },
   fontSizes: {
     xs: "12px",

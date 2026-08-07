@@ -5,6 +5,7 @@ export const dynamic = 'force-dynamic';
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { keyframes } from "@emotion/react";
+import { motion } from "framer-motion";
 import { supabase } from "@/lib/supabase";
 import { deleteUserAccount } from "@/app/actions/deleteUser";
 import { getAgents, createAgent, deleteAgent } from "@/app/actions/agentActions";
@@ -44,8 +45,17 @@ import {
   IconButton,
   useOutsideClick,
   Progress,
+  Table,
+  Thead,
+  Tbody,
+  Tr,
+  Th,
+  Td,
+  Checkbox,
 } from "@chakra-ui/react";
-import { SearchIcon, ChevronDownIcon, HamburgerIcon } from "@chakra-ui/icons";
+import { SearchIcon, ChevronDownIcon, HamburgerIcon, CloseIcon, DeleteIcon } from "@chakra-ui/icons";
+
+const MotionBox = motion(Box);
 
 const slideUpFade = keyframes`
   from {
@@ -109,6 +119,23 @@ export default function BuilderPage() {
     handler: () => setIsSearchExpanded(false),
   });
   const [calendarEvents, setCalendarEvents] = useState<Array<{ id: number; title: string; meeting_link: string; updated_at: string; status: string }>>([]);
+  const [selectedEventIds, setSelectedEventIds] = useState<Set<number>>(new Set());
+  const [isBulkDeleting, setIsBulkDeleting] = useState(false);
+
+  const handleBulkDeleteEvents = async () => {
+    const ids = Array.from(selectedEventIds);
+    if (ids.length === 0) return;
+    setIsBulkDeleting(true);
+    const { error } = await supabase.from("calendar_events").delete().in("id", ids);
+    setIsBulkDeleting(false);
+    if (error) {
+      toast({ title: "Failed to delete events", description: error.message, status: "error" });
+      return;
+    }
+    setCalendarEvents((prev) => prev.filter((e) => !selectedEventIds.has(e.id)));
+    setSelectedEventIds(new Set());
+    toast({ title: `${ids.length} event${ids.length > 1 ? "s" : ""} deleted`, status: "success" });
+  };
 
   // Name of the selected workspace, derived from the index. Everything that
   // scopes by name (event queries, delete, the header) reads this.
@@ -699,7 +726,7 @@ export default function BuilderPage() {
           </VStack>
           <VStack flex={1} h="100%" align="stretch" spacing={0} overflow="hidden">
             {agents.length > 0 && (
-            <HStack h="64px" align="center" justify="space-between" pl="20px" pr="14px" pt="14px" pb="18px" w="100%">
+            <HStack h="64px" align="center" justify="space-between" pl="16px" pr="14px" pt="14px" pb="18px" w="100%">
               <HStack spacing="4px" align="center">
                 <Tooltip
                   label={isWorkspaceListCollapsed ? "Expand" : "Collapse"}
@@ -760,7 +787,7 @@ export default function BuilderPage() {
                   </MenuList>
                 </Menu>
                 {agents.length > 0 && (
-                  <Button size="sm" bg="customGray.800" color="white" _hover={{ bg: "customGray.700" }} display="flex" alignItems="center" gap="8px" onClick={() => {
+                  <Button size="sm" bg="brand.primary" color="white" _hover={{ bg: "brand.primaryHover" }} display="flex" alignItems="center" gap="8px" onClick={() => {
                     const tab = activeTabIndex === 0 ? "form" : activeTabIndex === 1 ? "calendar" : "newsletter";
                     // Carry the workspace through so the new event is created
                     // inside it and stays scoped to it.
@@ -823,7 +850,7 @@ export default function BuilderPage() {
                   </VStack>
                 </TabPanel>
                 <TabPanel h="100%" p="0" overflow="hidden">
-                  <VStack w="100%" h="100%" align="stretch" spacing={0} overflow="hidden">
+                  <VStack w="100%" h="100%" align="stretch" spacing={0} overflow="hidden" position="relative">
                     <Box flexShrink={0} w="100%" px="24px" py="12px" h="50px" display="flex" alignItems="center" justifyContent="flex-end" bg="white" borderBottom="1px solid" borderBottomColor="customGray.200">
                       <HStack spacing="12px">
                         <HStack ref={searchRef} spacing="0" bg={isSearchExpanded ? "white" : "transparent"} borderRadius="6px" border="1px solid" borderColor={isSearchExpanded ? "customGray.300" : "transparent"} transition="all 0.3s ease" overflow="hidden" h="32px">
@@ -837,25 +864,26 @@ export default function BuilderPage() {
                       </HStack>
                     </Box>
                     <Box flexShrink={0} w="100%" bg="customGray.50" borderBottom="1px solid" borderBottomColor="customGray.200">
-                      <Flex w="100%" h="50px" pl="24px" pr="24px" align="center" gap="12px">
-                        <Box w="300px" display="flex" alignItems="center">
-                          <Text fontSize="sm" fontWeight="medium" color="customGray.600">Event Name</Text>
-                        </Box>
-                        <Box w="256px" display="flex" alignItems="center">
-                          <Text fontSize="sm" fontWeight="medium" color="customGray.600">Booking Link</Text>
-                        </Box>
-                        <Box w="132px" display="flex" alignItems="center">
-                          <Text fontSize="sm" fontWeight="medium" color="customGray.600">Status</Text>
-                        </Box>
-                        <Box w="132px" display="flex" alignItems="center">
-                          <Text fontSize="sm" fontWeight="medium" color="customGray.600">Bookings</Text>
-                        </Box>
-                        <Box flex={1} display="flex" alignItems="center">
-                          <Text fontSize="sm" fontWeight="medium" color="customGray.600">Last Updated</Text>
-                        </Box>
-                        <Box display="flex" alignItems="center" justifyContent="center" w="32px" h="32px" ml="12px">
-                        </Box>
-                      </Flex>
+                      <Table w="100%" sx={{ tableLayout: "fixed" }}>
+                        <colgroup>
+                          <col style={{ width: "300px" }} />
+                          <col style={{ width: "256px" }} />
+                          <col style={{ width: "132px" }} />
+                          <col style={{ width: "132px" }} />
+                          <col />
+                          <col style={{ width: "56px" }} />
+                        </colgroup>
+                        <Thead>
+                          <Tr>
+                            <Th border="none" h="50px" py="0" pl="24px" pr="0" fontSize="sm" fontWeight="medium" color="customGray.600" textTransform="none" letterSpacing="normal">Event Name</Th>
+                            <Th border="none" h="50px" py="0" px="0" fontSize="sm" fontWeight="medium" color="customGray.600" textTransform="none" letterSpacing="normal">Booking Link</Th>
+                            <Th border="none" h="50px" py="0" px="0" fontSize="sm" fontWeight="medium" color="customGray.600" textTransform="none" letterSpacing="normal">Status</Th>
+                            <Th border="none" h="50px" py="0" px="0" fontSize="sm" fontWeight="medium" color="customGray.600" textTransform="none" letterSpacing="normal">Bookings</Th>
+                            <Th border="none" h="50px" py="0" px="0" fontSize="sm" fontWeight="medium" color="customGray.600" textTransform="none" letterSpacing="normal">Last Updated</Th>
+                            <Th border="none" h="50px" py="0" pr="24px" pl="0"></Th>
+                          </Tr>
+                        </Thead>
+                      </Table>
                     </Box>
                     <Box
                       flex={1}
@@ -868,6 +896,16 @@ export default function BuilderPage() {
                         '&::-webkit-scrollbar-thumb:hover': { bg: 'customGray.400' },
                       }}
                     >
+                    <Table w="100%" sx={{ tableLayout: "fixed" }}>
+                      <colgroup>
+                        <col style={{ width: "300px" }} />
+                        <col style={{ width: "256px" }} />
+                        <col style={{ width: "132px" }} />
+                        <col style={{ width: "132px" }} />
+                        <col />
+                        <col style={{ width: "56px" }} />
+                      </colgroup>
+                      <Tbody>
                     {calendarEvents.map((event) => {
                       const initial = (event.title || "U").charAt(0).toUpperCase();
                       const updatedLabel = new Date(event.updated_at).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
@@ -877,41 +915,176 @@ export default function BuilderPage() {
                       // reordering.
                       const isLive = event.status === "Online" || event.status === "Offline";
                       const badgeColor = isLive ? colors[event.id % colors.length] : "customGray.400";
+                      const isSelected = selectedEventIds.has(event.id);
+                      const toggleSelected = () => {
+                        setSelectedEventIds((prev) => {
+                          const next = new Set(prev);
+                          if (next.has(event.id)) {
+                            next.delete(event.id);
+                          } else {
+                            next.add(event.id);
+                          }
+                          return next;
+                        });
+                      };
                       return (
-                        <Box key={event.id} w="100%" cursor="pointer" onClick={() => router.push(`/calendar-builder?id=${event.id}&tab=calendar`)}>
-                          <Flex w="100%" h="50px" pl="24px" pr="24px" bg="white" borderBottom="1px solid" borderBottomColor="customGray.200" align="center" gap="12px" _hover={{ bg: "customGray.50" }} transition="background-color 0.2s">
-                            <Box w="300px" display="flex" alignItems="center" gap="8px">
-                              <Box w="24px" h="24px" bg={badgeColor} borderRadius="full" display="flex" alignItems="center" justifyContent="center" flexShrink={0}>
-                                <Text fontSize="xs" fontWeight="medium" color="white">{initial}</Text>
+                        <Tr key={event.id} role="group" cursor="pointer" bg="white" _hover={{ bg: "customGray.50" }} transition="background-color 0.2s" onClick={() => router.push(`/calendar-builder?id=${event.id}&tab=calendar`)}>
+                          <Td h="50px" py="0" pl="24px" pr="0" borderBottomColor="customGray.200">
+                            <Flex align="center" gap="8px">
+                              <Box
+                                position="relative"
+                                w="24px"
+                                h="24px"
+                                flexShrink={0}
+                                onClick={(e) => { e.stopPropagation(); toggleSelected(); }}
+                              >
+                                <Box
+                                  position="absolute"
+                                  inset={0}
+                                  display="flex"
+                                  alignItems="center"
+                                  justifyContent="center"
+                                  opacity={isSelected ? 1 : 0}
+                                  _groupHover={{ opacity: 1 }}
+                                  transition="opacity 0.15s"
+                                >
+                                  <Checkbox
+                                    isChecked={isSelected}
+                                    onChange={toggleSelected}
+                                    icon={
+                                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                        <path d="M5 13L9.5 17.5L19 7" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+                                      </svg>
+                                    }
+                                    sx={{
+                                      ".chakra-checkbox__control": {
+                                        borderWidth: "1px",
+                                        borderColor: "customGray.500",
+                                        _checked: {
+                                          bg: "green.500",
+                                          borderColor: "green.500",
+                                          _hover: { bg: "green.500", borderColor: "green.500" },
+                                        },
+                                      },
+                                    }}
+                                  />
+                                </Box>
+                                <Box
+                                  w="24px"
+                                  h="24px"
+                                  bg={badgeColor}
+                                  borderRadius="full"
+                                  display="flex"
+                                  alignItems="center"
+                                  justifyContent="center"
+                                  flexShrink={0}
+                                  opacity={isSelected ? 0 : 1}
+                                  _groupHover={{ opacity: 0 }}
+                                  transition="opacity 0.15s"
+                                >
+                                  <Text fontSize="xs" fontWeight="medium" color="white">{initial}</Text>
+                                </Box>
                               </Box>
                               <Text fontSize="sm" color="customGray.800">{event.title}</Text>
+                            </Flex>
+                          </Td>
+                          <Td h="50px" py="0" px="0" borderBottomColor="customGray.200">
+                            <Text fontSize="sm" color="customGray.400">—</Text>
+                          </Td>
+                          <Td h="50px" py="0" px="0" borderBottomColor="customGray.200">
+                            <Box px="8px" py="2px" bg="customGray.100" borderRadius="full" display="inline-block">
+                              <Text fontSize="xs" fontWeight="medium" color="customGray.600">{event.status}</Text>
                             </Box>
-                            <Box w="256px" display="flex" alignItems="center">
-                              <Text fontSize="sm" color="customGray.400">—</Text>
-                            </Box>
-                            <Box w="132px" display="flex" alignItems="center">
-                              <Box px="8px" py="2px" bg="customGray.100" borderRadius="full">
-                                <Text fontSize="xs" fontWeight="medium" color="customGray.600">{event.status}</Text>
-                              </Box>
-                            </Box>
-                            <Box w="132px" display="flex" alignItems="center">
-                              <Text fontSize="sm" color="customGray.600">0</Text>
-                            </Box>
-                            <Box flex={1} display="flex" alignItems="center">
-                              <Text fontSize="sm" color="customGray.600">{updatedLabel}</Text>
-                            </Box>
-                            <Box display="flex" alignItems="center" justifyContent="center" w="32px" h="32px" ml="12px">
+                          </Td>
+                          <Td h="50px" py="0" px="0" borderBottomColor="customGray.200">
+                            <Text fontSize="sm" color="customGray.600">0</Text>
+                          </Td>
+                          <Td h="50px" py="0" px="0" borderBottomColor="customGray.200">
+                            <Text fontSize="sm" color="customGray.600">{updatedLabel}</Text>
+                          </Td>
+                          <Td h="50px" py="0" pr="24px" pl="0" borderBottomColor="customGray.200">
+                            <Box display="flex" alignItems="center" justifyContent="center" w="32px" h="32px">
                               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                                 <circle cx="12" cy="5" r="2" fill="currentColor" />
                                 <circle cx="12" cy="12" r="2" fill="currentColor" />
                                 <circle cx="12" cy="19" r="2" fill="currentColor" />
                               </svg>
                             </Box>
-                          </Flex>
-                        </Box>
+                          </Td>
+                        </Tr>
                       );
                     })}
+                      </Tbody>
+                    </Table>
                     </Box>
+                    {selectedEventIds.size > 0 && (
+                      <HStack
+                        position="absolute"
+                        bottom="24px"
+                        left="50%"
+                        transform="translateX(-50%)"
+                        bg="customGray.800"
+                        color="white"
+                        borderRadius="full"
+                        pl="8px"
+                        pr="8px"
+                        py="6px"
+                        spacing="16px"
+                        boxShadow="0 8px 24px rgba(0,0,0,0.25)"
+                        zIndex={10}
+                      >
+                        <HStack spacing="10px">
+                          <IconButton
+                            aria-label="Clear selection"
+                            icon={<CloseIcon w="10px" h="10px" />}
+                            size="xs"
+                            borderRadius="full"
+                            bg="customGray.600"
+                            color="white"
+                            _hover={{ bg: "customGray.500" }}
+                            onClick={() => setSelectedEventIds(new Set())}
+                          />
+                          <Text fontSize="sm" fontWeight="medium">{selectedEventIds.size} Selected</Text>
+                        </HStack>
+                        <Box w="1px" h="20px" bg="customGray.600" />
+                        <Box
+                          as="button"
+                          position="relative"
+                          overflow="hidden"
+                          display="flex"
+                          alignItems="center"
+                          gap="6px"
+                          h="32px"
+                          px="12px"
+                          borderRadius="full"
+                          bg="transparent"
+                          border="none"
+                          cursor={isBulkDeleting ? "default" : "pointer"}
+                          _hover={isBulkDeleting ? undefined : { bg: "customGray.700" }}
+                          disabled={isBulkDeleting}
+                          onClick={isBulkDeleting ? undefined : handleBulkDeleteEvents}
+                        >
+                          {isBulkDeleting && (
+                            <MotionBox
+                              position="absolute"
+                              top={0}
+                              left={0}
+                              h="100%"
+                              w="45%"
+                              bg="customGray.600"
+                              borderRadius="full"
+                              initial={{ x: "-100%" }}
+                              animate={{ x: "320%" }}
+                              transition={{ duration: 1.1, repeat: Infinity, ease: "easeInOut" }}
+                            />
+                          )}
+                          <HStack position="relative" zIndex={1} spacing="6px" color="white" fontSize="sm" fontWeight="medium">
+                            <DeleteIcon w="14px" h="14px" />
+                            <Text>Delete</Text>
+                          </HStack>
+                        </Box>
+                      </HStack>
+                    )}
                   </VStack>
                 </TabPanel>
                 <TabPanel h="100%" p="0" overflow="hidden">

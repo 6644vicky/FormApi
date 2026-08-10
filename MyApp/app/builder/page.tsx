@@ -52,10 +52,37 @@ import {
   Th,
   Td,
   Checkbox,
+  Skeleton,
 } from "@chakra-ui/react";
-import { SearchIcon, ChevronDownIcon, HamburgerIcon, CloseIcon, DeleteIcon } from "@chakra-ui/icons";
+import { SearchIcon, ChevronDownIcon, HamburgerIcon, CloseIcon, DeleteIcon, CopyIcon } from "@chakra-ui/icons";
 
 const MotionBox = motion(Box);
+
+// Chakra clones this with isIndeterminate/isChecked, so the same `icon`
+// can render the row checkmark and the header's "select all" dash.
+function CheckboxGlyph({ isIndeterminate }: { isIndeterminate?: boolean }) {
+  return isIndeterminate ? (
+    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <path d="M5 12H19" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  ) : (
+    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <path d="M5 13L9.5 17.5L19 7" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+const checkboxControlSx = {
+  ".chakra-checkbox__control": {
+    borderWidth: "1px",
+    borderColor: "customGray.500",
+    _checked: {
+      bg: "sky.400",
+      borderColor: "sky.400",
+      _hover: { bg: "sky.400", borderColor: "sky.400" },
+    },
+  },
+};
 
 const slideUpFade = keyframes`
   from {
@@ -106,8 +133,33 @@ export default function BuilderPage() {
   const [enableSidebarTransition, setEnableSidebarTransition] = useState(false);
   const isMountedRef = useRef(false);
   const [activeTabIndex, setActiveTabIndex] = useState(0);
+
   const [isSearchExpanded, setIsSearchExpanded] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const searchInputRef = useRef<HTMLInputElement>(null);
   const searchRef = useRef<HTMLDivElement>(null);
+
+  // autoFocus only fires on mount, and this input never unmounts (it just
+  // resizes), so re-focus explicitly every time it expands again.
+  useEffect(() => {
+    if (isSearchExpanded) searchInputRef.current?.focus();
+    else setSearchQuery("");
+  }, [isSearchExpanded]);
+
+  const [isSearching, setIsSearching] = useState(false);
+
+  // Every keystroke shows a brief skeleton instead of snapping straight to
+  // the filtered rows, so the list reads as "searching" rather than just
+  // instantly cutting rows out.
+  useEffect(() => {
+    if (searchQuery.trim() === "") {
+      setIsSearching(false);
+      return;
+    }
+    setIsSearching(true);
+    const timer = setTimeout(() => setIsSearching(false), 500);
+    return () => clearTimeout(timer);
+  }, [searchQuery]);
   // Chakra's Tooltip opens on focus as well as hover, so closing the create
   // workspace modal (which restores focus into the header) popped these open
   // with no pointer nearby. Driving isOpen from hover alone keeps them
@@ -116,11 +168,15 @@ export default function BuilderPage() {
 
   useOutsideClick({
     ref: searchRef,
-    handler: () => setIsSearchExpanded(false),
+    // A non-empty query means there's an active search — clicking away
+    // shouldn't lose it, only an empty box collapses back to just the icon.
+    handler: () => { if (searchQuery === "") setIsSearchExpanded(false); },
   });
   const [calendarEvents, setCalendarEvents] = useState<Array<{ id: number; title: string; meeting_link: string; updated_at: string; status: string }>>([]);
+  const [chatbotAgents, setChatbotAgents] = useState<Array<{ id: number; name: string; status: string; updated_at: string }>>([]);
   const [selectedEventIds, setSelectedEventIds] = useState<Set<number>>(new Set());
   const [isBulkDeleting, setIsBulkDeleting] = useState(false);
+  const [isBulkDuplicating, setIsBulkDuplicating] = useState(false);
 
   const handleBulkDeleteEvents = async () => {
     const ids = Array.from(selectedEventIds);
@@ -137,9 +193,59 @@ export default function BuilderPage() {
     toast({ title: `${ids.length} event${ids.length > 1 ? "s" : ""} deleted`, status: "success" });
   };
 
+  const handleBulkDuplicateEvents = async () => {
+    const ids = Array.from(selectedEventIds);
+    if (ids.length === 0) return;
+    setIsBulkDuplicating(true);
+    const { data: rows, error: fetchError } = await supabase
+      .from("calendar_events")
+      .select("*")
+      .in("id", ids);
+
+    if (fetchError || !rows) {
+      setIsBulkDuplicating(false);
+      toast({ title: "Failed to duplicate events", description: fetchError?.message, status: "error" });
+      return;
+    }
+
+    // Drop the primary key and timestamps so the insert gets fresh ones;
+    // everything else (title, workspace, owner, etc.) carries over as-is.
+    // The listing's own numbering logic then labels same-named events
+    // "(1)", "(2)", ... once there's more than one.
+    const copies = rows.map(({ id, created_at, updated_at, ...rest }) => rest);
+    const { error: insertError } = await supabase.from("calendar_events").insert(copies);
+    setIsBulkDuplicating(false);
+
+    if (insertError) {
+      toast({ title: "Failed to duplicate events", description: insertError.message, status: "error" });
+      return;
+    }
+
+    setSelectedEventIds(new Set());
+    await loadCalendarEvents();
+    toast({ title: `${ids.length} event${ids.length > 1 ? "s" : ""} duplicated`, status: "success" });
+  };
+
   // Name of the selected workspace, derived from the index. Everything that
   // scopes by name (event queries, delete, the header) reads this.
   const selectedAgent = selectedAgentIndex !== null ? agents[selectedAgentIndex]?.name ?? null : null;
+
+  // Matches the event listing search box against event names. Select-all and
+  // the header checkbox operate on this rather than the full list, so a
+  // filtered search only selects/counts what's actually visible.
+  const filteredCalendarEvents = useMemo(() => {
+    const query = searchQuery.trim().toLowerCase();
+    if (query === "") return calendarEvents;
+    return calendarEvents.filter((e) => e.title.toLowerCase().includes(query));
+  }, [calendarEvents, searchQuery]);
+
+  const isAllEventsSelected = filteredCalendarEvents.length > 0 && filteredCalendarEvents.every((e) => selectedEventIds.has(e.id));
+  const isSomeEventsSelected = selectedEventIds.size > 0 && !isAllEventsSelected;
+  const toggleSelectAllEvents = () => {
+    // Anything short of everything selected reads as "off" — clicking always
+    // selects all from there; only a fully-checked box clears the selection.
+    setSelectedEventIds(isAllEventsSelected ? new Set() : new Set(filteredCalendarEvents.map((e) => e.id)));
+  };
 
   useEffect(() => {
     isMountedRef.current = true;
@@ -348,6 +454,75 @@ export default function BuilderPage() {
     };
   }, [loadCalendarEvents]);
 
+  const loadChatbotAgents = useCallback(async () => {
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.user) return;
+
+      // Same scoping as calendar events: no workspace selected means nothing
+      // to show rather than every agent across every workspace.
+      if (!selectedAgent) {
+        setChatbotAgents([]);
+        return;
+      }
+
+      const { data, error } = await supabase
+        .from("chatbot_agents")
+        .select("id, name, status, updated_at")
+        .eq("user_id", session.user.id)
+        .eq("workspace_name", selectedAgent)
+        .order("updated_at", { ascending: false });
+
+      if (error) {
+        console.log("Error loading chatbot agents:", error);
+        return;
+      }
+
+      if (data) {
+        setChatbotAgents(
+          data.map((a) => ({
+            id: a.id,
+            name: a.name || "Untitled",
+            status: a.status || "Draft",
+            updated_at: a.updated_at,
+          }))
+        );
+      }
+    } catch (error) {
+      console.error("Error loading chatbot agents:", error);
+    }
+    // Refetches whenever the user switches workspace.
+  }, [selectedAgent]);
+
+  useEffect(() => {
+    loadChatbotAgents();
+  }, [loadChatbotAgents]);
+
+  // Agents are created/edited on the chatbot-builder page, so refetch
+  // whenever this page regains focus — same reasoning as calendar events.
+  useEffect(() => {
+    const refresh = () => {
+      if (document.visibilityState === "visible") loadChatbotAgents();
+    };
+
+    window.addEventListener("focus", refresh);
+    document.addEventListener("visibilitychange", refresh);
+    return () => {
+      window.removeEventListener("focus", refresh);
+      document.removeEventListener("visibilitychange", refresh);
+    };
+  }, [loadChatbotAgents]);
+
+  const handleDeleteAgent = async (id: number) => {
+    const { error } = await supabase.from("chatbot_agents").delete().eq("id", id);
+    if (error) {
+      toast({ title: "Failed to delete agent", description: error.message, status: "error" });
+      return;
+    }
+    setChatbotAgents((prev) => prev.filter((a) => a.id !== id));
+    toast({ title: "Agent deleted", status: "success" });
+  };
+
   useEffect(() => {
     if (typeof window === 'undefined') return;
 
@@ -358,6 +533,10 @@ export default function BuilderPage() {
       setActiveTabIndex(1);
     } else if (tabParam === 'form') {
       setActiveTabIndex(0);
+    } else if (tabParam === 'newsletter') {
+      setActiveTabIndex(2);
+    } else if (tabParam === 'chatbot') {
+      setActiveTabIndex(3);
     }
   }, []);
 
@@ -726,7 +905,7 @@ export default function BuilderPage() {
           </VStack>
           <VStack flex={1} h="100%" align="stretch" spacing={0} overflow="hidden">
             {agents.length > 0 && (
-            <HStack h="64px" align="center" justify="space-between" pl="16px" pr="14px" pt="14px" pb="18px" w="100%">
+            <HStack h="64px" align="center" justify="space-between" pl="30px" pr="14px" pt="14px" pb="18px" w="100%">
               <HStack spacing="4px" align="center">
                 <Tooltip
                   label={isWorkspaceListCollapsed ? "Expand" : "Collapse"}
@@ -787,11 +966,15 @@ export default function BuilderPage() {
                   </MenuList>
                 </Menu>
                 {agents.length > 0 && (
-                  <Button size="sm" bg="brand.primary" color="white" _hover={{ bg: "brand.primaryHover" }} display="flex" alignItems="center" gap="8px" onClick={() => {
-                    const tab = activeTabIndex === 0 ? "form" : activeTabIndex === 1 ? "calendar" : "newsletter";
-                    // Carry the workspace through so the new event is created
-                    // inside it and stays scoped to it.
+                  <Button size="sm" bg="sky.400" color="white" _hover={{ bg: "sky.500" }} display="flex" alignItems="center" gap="8px" onClick={() => {
+                    // Carry the workspace through so the new event/agent is
+                    // created inside it and stays scoped to it.
                     const workspace = encodeURIComponent(selectedAgent || "");
+                    if (activeTabIndex === 3) {
+                      router.push(`/chatbot-builder?workspace=${workspace}`);
+                      return;
+                    }
+                    const tab = activeTabIndex === 0 ? "form" : activeTabIndex === 1 ? "calendar" : "newsletter";
                     router.push(`/calendar-builder?tab=${tab}&workspace=${workspace}`);
                   }}>
                     <Box display="flex" alignItems="center" justifyContent="center" w="16px" h="16px">
@@ -799,7 +982,7 @@ export default function BuilderPage() {
                         <path d="M12 5v14M5 12h14" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
                       </svg>
                     </Box>
-                    {activeTabIndex === 0 ? "Create form" : activeTabIndex === 1 ? "Create event" : "Create newsletter"}
+                    {activeTabIndex === 0 ? "Create form" : activeTabIndex === 1 ? "Create event" : activeTabIndex === 3 ? "Create agent" : "Create newsletter"}
                   </Button>
                 )}
               </HStack>
@@ -807,7 +990,7 @@ export default function BuilderPage() {
             )}
             {agents.length > 0 ? (
             <Tabs flex={1} display="flex" flexDirection="column" overflow="hidden" w="100%" index={activeTabIndex} onChange={setActiveTabIndex}>
-              <TabList pl="24px" borderBottom="1px solid" borderColor="customGray.200">
+              <TabList pl="38px" borderBottom="1px solid" borderColor="customGray.200">
                 <Tab fontSize="sm" color="customGray.500" pb="12px" mb="-1px" borderBottom="2px solid transparent" _selected={{ color: "customGray.800", borderColor: "customGray.800", bg: "white" }} display="flex" alignItems="center" gap="6px" pl="0px">
                   <svg width="16" height="16" viewBox="0 0 18 18" fill="none" xmlns="http://www.w3.org/2000/svg">
                     <path d="M10.5 1.5V4.5C10.5 4.89782 10.658 5.27936 10.9393 5.56066C11.2206 5.84196 11.6022 6 12 6H15M7.5 6.75H6M12 9.75H6M12 12.75H6M11.25 1.5H4.5C4.10218 1.5 3.72064 1.65804 3.43934 1.93934C3.15804 2.22064 3 2.60218 3 3V15C3 15.3978 3.15804 15.7794 3.43934 16.0607C3.72064 16.342 4.10218 16.5 4.5 16.5H13.5C13.8978 16.5 14.2794 16.342 14.5607 16.0607C14.842 15.7794 15 15.3978 15 15V5.25L11.25 1.5Z" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
@@ -826,6 +1009,13 @@ export default function BuilderPage() {
                     <path d="M2.25 5.25L9 10.5L15.75 5.25" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
                   </svg>
                   Newsletter
+                </Tab>
+                <Tab fontSize="sm" color="customGray.500" pb="12px" mb="-1px" borderBottom="2px solid transparent" _selected={{ color: "customGray.800", borderColor: "customGray.800", bg: "white" }} display="flex" alignItems="center" gap="6px">
+                  <svg width="16" height="16" viewBox="0 0 18 18" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M9 2.25C5.27208 2.25 2.25 4.92893 2.25 8.25C2.25 9.7867 2.90177 11.1893 3.96186 12.2652C4.13039 12.4372 4.21935 12.6743 4.19811 12.9128L4.02893 14.8168C3.99756 15.1706 4.34987 15.4373 4.68062 15.3005L6.87246 14.3939C7.05377 14.3195 7.25523 14.3103 7.44236 14.3679C7.9366 14.5182 8.45932 14.6 9 14.6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                    <path d="M15.75 12.75C15.75 10.6789 13.8995 9 11.625 9C9.35051 9 7.5 10.6789 7.5 12.75C7.5 14.8211 9.35051 16.5 11.625 16.5C12.1173 16.5 12.5891 16.4231 13.0264 16.2812L14.6182 16.9505C14.8845 17.0605 15.1636 16.8391 15.1257 16.5537L14.9636 15.2969C15.4667 14.6089 15.75 13.7089 15.75 12.75Z" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                  </svg>
+                  Chatbot
                 </Tab>
               </TabList>
               <TabPanels flex={1} overflow="hidden" h="100%">
@@ -853,9 +1043,39 @@ export default function BuilderPage() {
                   <VStack w="100%" h="100%" align="stretch" spacing={0} overflow="hidden" position="relative">
                     <Box flexShrink={0} w="100%" px="24px" py="12px" h="50px" display="flex" alignItems="center" justifyContent="flex-end" bg="white" borderBottom="1px solid" borderBottomColor="customGray.200">
                       <HStack spacing="12px">
-                        <HStack ref={searchRef} spacing="0" bg={isSearchExpanded ? "white" : "transparent"} borderRadius="6px" border="1px solid" borderColor={isSearchExpanded ? "customGray.300" : "transparent"} transition="all 0.3s ease" overflow="hidden" h="32px">
-                          <IconButton aria-label="Search" icon={<SearchIcon w="16px" h="16px" />} size="sm" variant="ghost" color="customGray.600" _hover={{ bg: "customGray.50" }} onClick={() => setIsSearchExpanded(!isSearchExpanded)} />
-                          <Input placeholder="Search..." variant="unstyled" w={isSearchExpanded ? "160px" : "0px"} opacity={isSearchExpanded ? 1 : 0} transition="all 0.3s ease" px={isSearchExpanded ? "8px" : "0px"} fontSize="sm" color="customGray.800" _placeholder={{ color: "customGray.400" }} onBlur={() => setIsSearchExpanded(false)} autoFocus={isSearchExpanded} />
+                        <HStack ref={searchRef} spacing="0" bg="transparent" borderRadius="6px" border="none" transition="width 0.3s ease" overflow="hidden" h="32px" w={isSearchExpanded ? "224px" : "32px"} flexShrink={0}>
+                          <IconButton aria-label="Search" icon={<SearchIcon w="16px" h="16px" />} size="sm" variant="ghost" color="customGray.600" flexShrink={0} _hover={isSearchExpanded ? undefined : { bg: "customGray.50" }} onClick={() => setIsSearchExpanded(!isSearchExpanded)} />
+                          <Input
+                            ref={searchInputRef}
+                            value={searchQuery}
+                            onChange={(e) => setSearchQuery(e.target.value)}
+                            placeholder="Search..."
+                            variant="unstyled"
+                            w="160px"
+                            flexShrink={0}
+                            px="8px"
+                            fontSize="sm"
+                            color="customGray.800"
+                            _placeholder={{ color: "customGray.400" }}
+                            onBlur={() => { if (searchQuery === "") setIsSearchExpanded(false); }}
+                          />
+                          <Box w="32px" h="32px" flexShrink={0} display="flex" alignItems="center" justifyContent="center">
+                            {searchQuery !== "" && (
+                              <IconButton
+                                aria-label="Clear search"
+                                icon={<CloseIcon w="9px" h="9px" />}
+                                size="xs"
+                                variant="ghost"
+                                color="customGray.500"
+                                _hover={{ bg: "customGray.100" }}
+                                onMouseDown={(e) => e.preventDefault()}
+                                onClick={() => {
+                                  setSearchQuery("");
+                                  searchInputRef.current?.focus();
+                                }}
+                              />
+                            )}
+                          </Box>
                         </HStack>
                         <IconButton aria-label="Filter" icon={<svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M3 6H21M5 12H19M7 18H17" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>} size="sm" variant="ghost" color="customGray.600" _hover={{ bg: "customGray.50" }} />
                         <Button size="sm" variant="outline" leftIcon={<Box w="8px" h="8px" display="flex" alignItems="center" justifyContent="center"><svg width="8" height="8" viewBox="0 0 8 8" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M0 4C0 1.79086 1.79086 0 4 0V0C6.20914 0 8 1.79086 8 4V4C8 6.20914 6.20914 8 4 8V8C1.79086 8 0 6.20914 0 4V4Z" fill="#16A34A"/></svg></Box>} rightIcon={<ChevronDownIcon w="16px" h="16px" />} borderRadius="full" border="1px solid" borderColor="customGray.300" bg="white" color="customGray.600" fontSize="sm" fontWeight="medium" _hover={{ bg: "customGray.50" }} iconSpacing="4px">
@@ -867,15 +1087,31 @@ export default function BuilderPage() {
                       <Table w="100%" sx={{ tableLayout: "fixed" }}>
                         <colgroup>
                           <col style={{ width: "300px" }} />
-                          <col style={{ width: "256px" }} />
-                          <col style={{ width: "132px" }} />
-                          <col style={{ width: "132px" }} />
-                          <col />
+                          <col style={{ width: "180px" }} />
+                          <col style={{ width: "180px" }} />
+                          <col style={{ width: "180px" }} />
+                          <col style={{ width: "180px" }} />
                           <col style={{ width: "56px" }} />
                         </colgroup>
                         <Thead>
                           <Tr>
-                            <Th border="none" h="50px" py="0" pl="24px" pr="0" fontSize="sm" fontWeight="medium" color="customGray.600" textTransform="none" letterSpacing="normal">Event Name</Th>
+                            <Th border="none" h="50px" py="0" pl="12px" pr="0" fontSize="sm" fontWeight="medium" color="customGray.600" textTransform="none" letterSpacing="normal">
+                              <HStack spacing="10px" role="group">
+                                <Box
+                                  opacity={isAllEventsSelected || isSomeEventsSelected ? 1 : 0}
+                                  _groupHover={{ opacity: 1 }}
+                                  transition="opacity 0.15s"
+                                >
+                                  <Checkbox
+                                    isChecked={isAllEventsSelected}
+                                    onChange={toggleSelectAllEvents}
+                                    icon={<CheckboxGlyph />}
+                                    sx={checkboxControlSx}
+                                  />
+                                </Box>
+                                <Text>Event Name</Text>
+                              </HStack>
+                            </Th>
                             <Th border="none" h="50px" py="0" px="0" fontSize="sm" fontWeight="medium" color="customGray.600" textTransform="none" letterSpacing="normal">Booking Link</Th>
                             <Th border="none" h="50px" py="0" px="0" fontSize="sm" fontWeight="medium" color="customGray.600" textTransform="none" letterSpacing="normal">Status</Th>
                             <Th border="none" h="50px" py="0" px="0" fontSize="sm" fontWeight="medium" color="customGray.600" textTransform="none" letterSpacing="normal">Bookings</Th>
@@ -899,14 +1135,36 @@ export default function BuilderPage() {
                     <Table w="100%" sx={{ tableLayout: "fixed" }}>
                       <colgroup>
                         <col style={{ width: "300px" }} />
-                        <col style={{ width: "256px" }} />
-                        <col style={{ width: "132px" }} />
-                        <col style={{ width: "132px" }} />
-                        <col />
+                        <col style={{ width: "180px" }} />
+                        <col style={{ width: "180px" }} />
+                        <col style={{ width: "180px" }} />
+                        <col style={{ width: "180px" }} />
                         <col style={{ width: "56px" }} />
                       </colgroup>
                       <Tbody>
-                    {calendarEvents.map((event) => {
+                    {isSearching ? (
+                      [0, 1, 2].map((i) => (
+                        <Tr key={`search-skeleton-${i}`}>
+                          <Td h="50px" py="0" pl="12px" pr="12px" borderBottomColor="customGray.200">
+                            <HStack spacing="12px">
+                              <Box w="19px" flexShrink={0} />
+                              <Skeleton startColor="customGray.100" endColor="customGray.200" h="12px" w="140px" borderRadius="6px" />
+                            </HStack>
+                          </Td>
+                          <Td h="50px" py="0" px="0" borderBottomColor="customGray.200"><Skeleton startColor="customGray.100" endColor="customGray.200" h="12px" w="60%" borderRadius="6px" /></Td>
+                          <Td h="50px" py="0" px="0" borderBottomColor="customGray.200"><Skeleton startColor="customGray.100" endColor="customGray.200" h="12px" w="50px" borderRadius="full" /></Td>
+                          <Td h="50px" py="0" px="0" borderBottomColor="customGray.200"><Skeleton startColor="customGray.100" endColor="customGray.200" h="12px" w="44px" borderRadius="6px" /></Td>
+                          <Td h="50px" py="0" px="0" borderBottomColor="customGray.200"><Skeleton startColor="customGray.100" endColor="customGray.200" h="12px" w="80px" borderRadius="6px" /></Td>
+                          <Td h="50px" py="0" px="0" borderBottomColor="customGray.200" />
+                        </Tr>
+                      ))
+                    ) : filteredCalendarEvents.length === 0 && searchQuery.trim() !== "" ? (
+                      <Tr>
+                        <Td colSpan={6} h="80px" textAlign="center" borderBottomColor="customGray.200">
+                          <Text fontSize="sm" color="customGray.500">No events match "{searchQuery}"</Text>
+                        </Td>
+                      </Tr>
+                    ) : filteredCalendarEvents.map((event) => {
                       const initial = (event.title || "U").charAt(0).toUpperCase();
                       const updatedLabel = new Date(event.updated_at).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
                       // Drafts keep the neutral grey badge. The colour palette
@@ -929,61 +1187,31 @@ export default function BuilderPage() {
                       };
                       return (
                         <Tr key={event.id} role="group" cursor="pointer" bg="white" _hover={{ bg: "customGray.50" }} transition="background-color 0.2s" onClick={() => router.push(`/calendar-builder?id=${event.id}&tab=calendar`)}>
-                          <Td h="50px" py="0" pl="24px" pr="0" borderBottomColor="customGray.200">
-                            <Flex align="center" gap="8px">
-                              <Box
-                                position="relative"
-                                w="24px"
-                                h="24px"
-                                flexShrink={0}
-                                onClick={(e) => { e.stopPropagation(); toggleSelected(); }}
-                              >
-                                <Box
-                                  position="absolute"
-                                  inset={0}
-                                  display="flex"
-                                  alignItems="center"
-                                  justifyContent="center"
+                          <Td h="50px" py="0" pl="12px" pr="12px" borderBottomColor="customGray.200">
+                            <Flex align="center" gap="10px">
+                              <Box display="contents" onClick={(e) => e.stopPropagation()}>
+                                <Checkbox
+                                  isChecked={isSelected}
+                                  onChange={toggleSelected}
+                                  icon={<CheckboxGlyph />}
+                                  sx={checkboxControlSx}
+                                  flexShrink={0}
                                   opacity={isSelected ? 1 : 0}
                                   _groupHover={{ opacity: 1 }}
                                   transition="opacity 0.15s"
-                                >
-                                  <Checkbox
-                                    isChecked={isSelected}
-                                    onChange={toggleSelected}
-                                    icon={
-                                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                                        <path d="M5 13L9.5 17.5L19 7" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
-                                      </svg>
-                                    }
-                                    sx={{
-                                      ".chakra-checkbox__control": {
-                                        borderWidth: "1px",
-                                        borderColor: "customGray.500",
-                                        _checked: {
-                                          bg: "green.500",
-                                          borderColor: "green.500",
-                                          _hover: { bg: "green.500", borderColor: "green.500" },
-                                        },
-                                      },
-                                    }}
-                                  />
-                                </Box>
-                                <Box
-                                  w="24px"
-                                  h="24px"
-                                  bg={badgeColor}
-                                  borderRadius="full"
-                                  display="flex"
-                                  alignItems="center"
-                                  justifyContent="center"
-                                  flexShrink={0}
-                                  opacity={isSelected ? 0 : 1}
-                                  _groupHover={{ opacity: 0 }}
-                                  transition="opacity 0.15s"
-                                >
-                                  <Text fontSize="xs" fontWeight="medium" color="white">{initial}</Text>
-                                </Box>
+                                />
+                              </Box>
+                              <Box
+                                w="24px"
+                                h="24px"
+                                bg={badgeColor}
+                                borderRadius="full"
+                                display="flex"
+                                alignItems="center"
+                                justifyContent="center"
+                                flexShrink={0}
+                              >
+                                <Text fontSize="xs" fontWeight="medium" color="white">{initial}</Text>
                               </Box>
                               <Text fontSize="sm" color="customGray.800">{event.title}</Text>
                             </Flex>
@@ -1059,6 +1287,43 @@ export default function BuilderPage() {
                           borderRadius="full"
                           bg="transparent"
                           border="none"
+                          cursor={isBulkDuplicating ? "default" : "pointer"}
+                          _hover={isBulkDuplicating ? undefined : { bg: "customGray.700" }}
+                          disabled={isBulkDuplicating}
+                          onClick={isBulkDuplicating ? undefined : handleBulkDuplicateEvents}
+                        >
+                          {isBulkDuplicating && (
+                            <MotionBox
+                              position="absolute"
+                              top={0}
+                              left={0}
+                              h="100%"
+                              w="45%"
+                              bg="customGray.600"
+                              borderRadius="full"
+                              initial={{ x: "-100%" }}
+                              animate={{ x: "320%" }}
+                              transition={{ duration: 1.1, repeat: Infinity, ease: "easeInOut" }}
+                            />
+                          )}
+                          <HStack position="relative" zIndex={1} spacing="6px" color="white" fontSize="sm" fontWeight="medium">
+                            <CopyIcon w="14px" h="14px" />
+                            <Text>Duplicate</Text>
+                          </HStack>
+                        </Box>
+                        <Box w="1px" h="20px" bg="customGray.600" />
+                        <Box
+                          as="button"
+                          position="relative"
+                          overflow="hidden"
+                          display="flex"
+                          alignItems="center"
+                          gap="6px"
+                          h="32px"
+                          px="12px"
+                          borderRadius="full"
+                          bg="transparent"
+                          border="none"
                           cursor={isBulkDeleting ? "default" : "pointer"}
                           _hover={isBulkDeleting ? undefined : { bg: "customGray.700" }}
                           disabled={isBulkDeleting}
@@ -1106,6 +1371,107 @@ export default function BuilderPage() {
                         </Text>
                       </VStack>
                     </VStack>
+                  </VStack>
+                </TabPanel>
+                <TabPanel h="100%" p="0" overflow="hidden">
+                  <VStack w="100%" h="100%" align="stretch" spacing={0} overflow="hidden">
+                    <Box flexShrink={0} w="100%" bg="customGray.50" borderBottom="1px solid" borderBottomColor="customGray.200">
+                      <Table w="100%" sx={{ tableLayout: "fixed" }}>
+                        <colgroup>
+                          <col style={{ width: "300px" }} />
+                          <col style={{ width: "180px" }} />
+                          <col />
+                          <col style={{ width: "56px" }} />
+                        </colgroup>
+                        <Thead>
+                          <Tr>
+                            <Th border="none" h="50px" py="0" pl="24px" pr="0" fontSize="sm" fontWeight="medium" color="customGray.600" textTransform="none" letterSpacing="normal">Agent Name</Th>
+                            <Th border="none" h="50px" py="0" px="0" fontSize="sm" fontWeight="medium" color="customGray.600" textTransform="none" letterSpacing="normal">Status</Th>
+                            <Th border="none" h="50px" py="0" px="0" fontSize="sm" fontWeight="medium" color="customGray.600" textTransform="none" letterSpacing="normal">Last Updated</Th>
+                            <Th border="none" h="50px" py="0" pr="24px" pl="0"></Th>
+                          </Tr>
+                        </Thead>
+                      </Table>
+                    </Box>
+                    <Box
+                      flex={1}
+                      w="100%"
+                      overflowY="auto"
+                      sx={{
+                        '&::-webkit-scrollbar': { width: '6px' },
+                        '&::-webkit-scrollbar-track': { bg: 'transparent' },
+                        '&::-webkit-scrollbar-thumb': { bg: 'customGray.300', borderRadius: '3px' },
+                        '&::-webkit-scrollbar-thumb:hover': { bg: 'customGray.400' },
+                      }}
+                    >
+                      {chatbotAgents.length === 0 ? (
+                        <VStack w="100%" py="60px" spacing="8px">
+                          <Text fontSize="sm" color="customGray.500">No agents yet</Text>
+                          <Text fontSize="xs" color="customGray.400">Click "Create agent" to build your first chatbot</Text>
+                        </VStack>
+                      ) : (
+                        <Table w="100%" sx={{ tableLayout: "fixed" }}>
+                          <colgroup>
+                            <col style={{ width: "300px" }} />
+                            <col style={{ width: "180px" }} />
+                            <col />
+                            <col style={{ width: "56px" }} />
+                          </colgroup>
+                          <Tbody>
+                            {chatbotAgents.map((agent) => {
+                              const initial = (agent.name || "U").charAt(0).toUpperCase();
+                              const updatedLabel = new Date(agent.updated_at).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+                              const isPublished = agent.status === "Published";
+                              return (
+                                <Tr key={agent.id} cursor="pointer" bg="white" _hover={{ bg: "customGray.50" }} transition="background-color 0.2s" onClick={() => router.push(`/chatbot-builder?id=${agent.id}&workspace=${encodeURIComponent(selectedAgent || "")}`)}>
+                                  <Td h="50px" py="0" pl="24px" pr="0" borderBottomColor="customGray.200">
+                                    <Flex align="center" gap="8px">
+                                      <Box w="24px" h="24px" bg="customGray.400" borderRadius="full" display="flex" alignItems="center" justifyContent="center" flexShrink={0}>
+                                        <Text fontSize="xs" fontWeight="medium" color="white">{initial}</Text>
+                                      </Box>
+                                      <Text fontSize="sm" color="customGray.800">{agent.name}</Text>
+                                    </Flex>
+                                  </Td>
+                                  <Td h="50px" py="0" px="0" borderBottomColor="customGray.200">
+                                    <Box px="8px" py="2px" bg={isPublished ? "green.100" : "customGray.100"} borderRadius="full" display="inline-block">
+                                      <Text fontSize="xs" fontWeight="medium" color={isPublished ? "green.700" : "customGray.600"}>{agent.status}</Text>
+                                    </Box>
+                                  </Td>
+                                  <Td h="50px" py="0" px="0" borderBottomColor="customGray.200">
+                                    <Text fontSize="sm" color="customGray.600">{updatedLabel}</Text>
+                                  </Td>
+                                  <Td h="50px" py="0" pr="24px" pl="0" borderBottomColor="customGray.200">
+                                    <Menu>
+                                      <MenuButton
+                                        as={IconButton}
+                                        aria-label="More options"
+                                        icon={
+                                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                            <circle cx="12" cy="5" r="2" fill="currentColor" />
+                                            <circle cx="12" cy="12" r="2" fill="currentColor" />
+                                            <circle cx="12" cy="19" r="2" fill="currentColor" />
+                                          </svg>
+                                        }
+                                        size="sm"
+                                        variant="ghost"
+                                        color="customGray.600"
+                                        _hover={{ bg: "customGray.200" }}
+                                        onClick={(e: React.MouseEvent) => e.stopPropagation()}
+                                      />
+                                      <MenuList fontSize="sm" minW="160px">
+                                        <MenuItem color="red.500" onClick={() => handleDeleteAgent(agent.id)}>
+                                          Delete
+                                        </MenuItem>
+                                      </MenuList>
+                                    </Menu>
+                                  </Td>
+                                </Tr>
+                              );
+                            })}
+                          </Tbody>
+                        </Table>
+                      )}
+                    </Box>
                   </VStack>
                 </TabPanel>
               </TabPanels>

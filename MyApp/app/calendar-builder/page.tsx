@@ -2,8 +2,8 @@
 
 import { useRouter } from "next/navigation";
 import { Box, VStack, HStack, Text, Button, Heading, IconButton, Input, Textarea, useToast, Tabs, TabList, Tab, Avatar, Menu, MenuButton, MenuList, MenuItem, Modal, ModalOverlay, ModalContent, ModalHeader, ModalBody, ModalCloseButton, useDisclosure, Checkbox, Badge, Divider, Alert, AlertIcon, Tag, TagLabel, TagCloseButton, Progress } from "@chakra-ui/react";
-import { ArrowBackIcon, DeleteIcon, AddIcon, ChevronDownIcon, DragHandleIcon, CloseIcon, ViewIcon } from "@chakra-ui/icons";
-import { useState, useEffect, useRef } from "react";
+import { ArrowBackIcon, DeleteIcon, AddIcon, ChevronDownIcon, DragHandleIcon, CloseIcon, ViewIcon, CopyIcon } from "@chakra-ui/icons";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { CalendarPicker } from "@/components/CalendarPicker";
 import { AddPage } from "@/components/AddPage";
 import { supabase } from "@/lib/supabase";
@@ -14,6 +14,7 @@ export default function CalendarBuilderPage() {
   // Default every toast on this page to the top; individual calls can override.
   const toast = useToast({ position: "top" });
   const { isOpen, onOpen, onClose } = useDisclosure();
+  const { isOpen: isShareOpen, onOpen: onShareOpen, onClose: onShareClose } = useDisclosure();
   const [tabIndex, setTabIndex] = useState(0);
   const [selectedPage, setSelectedPage] = useState("Main page");
 
@@ -51,6 +52,28 @@ export default function CalendarBuilderPage() {
   // second save firing before React re-renders would otherwise still see null
   // and insert a duplicate row.
   const currentEventIdRef = useRef<number | null>(null);
+
+  // Real, working embed snippets for public/booking-widget.js and the raw
+  // iframe alternative — both point at the public /book/[id] page, which
+  // only exists once this event has actually been saved.
+  const widgetEmbedCode = useMemo(() => {
+    if (!currentEventId) return "";
+    const origin = typeof window !== "undefined" ? window.location.origin : "https://your-domain.com";
+    const escapeAttr = (value: string) => value.replace(/&/g, "&amp;").replace(/"/g, "&quot;");
+    return [
+      `<script src="${origin}/booking-widget.js"`,
+      `  data-event-id="${currentEventId}"`,
+      `  data-label="${escapeAttr(title || "Book a meeting")}"`,
+      `  defer>`,
+      `</script>`,
+    ].join("\n");
+  }, [currentEventId, title]);
+
+  const iframeEmbedCode = useMemo(() => {
+    if (!currentEventId) return "";
+    const origin = typeof window !== "undefined" ? window.location.origin : "https://your-domain.com";
+    return `<iframe src="${origin}/book/${currentEventId}" width="100%" height="650" style="border:none;" title="Book a meeting"></iframe>`;
+  }, [currentEventId]);
 
   useEffect(() => {
     const loadUserProfile = async () => {
@@ -471,10 +494,32 @@ export default function CalendarBuilderPage() {
             </HStack>
 
             <HStack spacing="8px" position="absolute" right="16px">
-              <Button size="sm" px="14px" variant="outline" borderColor="customGray.300" color="customGray.800" _hover={{ bg: "customGray.50" }}>
+              <Button
+                size="sm"
+                px="14px"
+                variant="outline"
+                borderColor="customGray.300"
+                color="customGray.800"
+                _hover={{ bg: "customGray.50" }}
+                isDisabled={!currentEventId}
+                onClick={() => window.open(`/book/${currentEventId}`, "_blank")}
+              >
                 Preview
               </Button>
-              <Button size="sm" px="14px" bg="brand.primary" color="white" _hover={{ bg: "brand.primaryHover" }}>
+              <Button
+                size="sm"
+                px="14px"
+                bg="brand.primary"
+                color="white"
+                _hover={{ bg: "brand.primaryHover" }}
+                onClick={() => {
+                  if (!currentEventId) {
+                    toast({ title: "Save the event before sharing", status: "info" });
+                    return;
+                  }
+                  onShareOpen();
+                }}
+              >
                 Share
               </Button>
             </HStack>
@@ -1110,6 +1155,67 @@ export default function CalendarBuilderPage() {
         setAvailablePages={setAvailablePages}
         setSelectedPage={setSelectedPage}
       />
+
+      <Modal isOpen={isShareOpen} onClose={onShareClose} size="lg">
+        <ModalOverlay />
+        <ModalContent>
+          <ModalHeader fontSize="16px" fontWeight="600">Share this booking page</ModalHeader>
+          <ModalCloseButton />
+          <ModalBody pb="24px">
+            <VStack align="stretch" spacing="20px">
+              <Box>
+                <Text fontSize="sm" fontWeight="600" color="customGray.800" mb="4px">Widget</Text>
+                <Text fontSize="xs" color="customGray.500" mb="10px">Adds a floating "Book a meeting" button to your site that opens this page in a popup.</Text>
+                <Box position="relative" bg="customGray.50" border="1px solid" borderColor="customGray.200" borderRadius="8px" p="12px" pr="36px" maxH="140px" overflowY="auto">
+                  <Text as="pre" fontSize="xs" fontFamily="mono" color="customGray.700" whiteSpace="pre-wrap" wordBreak="break-all">
+                    {widgetEmbedCode}
+                  </Text>
+                  <IconButton
+                    aria-label="Copy widget code"
+                    icon={<CopyIcon w="12px" h="12px" />}
+                    size="xs"
+                    variant="ghost"
+                    position="absolute"
+                    top="8px"
+                    right="8px"
+                    color="customGray.500"
+                    _hover={{ bg: "customGray.200" }}
+                    onClick={() => {
+                      navigator.clipboard.writeText(widgetEmbedCode);
+                      toast({ title: "Widget code copied", status: "success", duration: 1500 });
+                    }}
+                  />
+                </Box>
+              </Box>
+
+              <Box>
+                <Text fontSize="sm" fontWeight="600" color="customGray.800" mb="4px">Iframe</Text>
+                <Text fontSize="xs" color="customGray.500" mb="10px">Embeds this booking page directly inline, wherever you paste it.</Text>
+                <Box position="relative" bg="customGray.50" border="1px solid" borderColor="customGray.200" borderRadius="8px" p="12px" pr="36px" maxH="140px" overflowY="auto">
+                  <Text as="pre" fontSize="xs" fontFamily="mono" color="customGray.700" whiteSpace="pre-wrap" wordBreak="break-all">
+                    {iframeEmbedCode}
+                  </Text>
+                  <IconButton
+                    aria-label="Copy iframe code"
+                    icon={<CopyIcon w="12px" h="12px" />}
+                    size="xs"
+                    variant="ghost"
+                    position="absolute"
+                    top="8px"
+                    right="8px"
+                    color="customGray.500"
+                    _hover={{ bg: "customGray.200" }}
+                    onClick={() => {
+                      navigator.clipboard.writeText(iframeEmbedCode);
+                      toast({ title: "Iframe code copied", status: "success", duration: 1500 });
+                    }}
+                  />
+                </Box>
+              </Box>
+            </VStack>
+          </ModalBody>
+        </ModalContent>
+      </Modal>
     </>
   );
 }

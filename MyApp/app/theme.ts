@@ -59,6 +59,78 @@ const theme = extendTheme({
       800: "#003B6A",
       900: "#002C4E",
     },
+    green: {
+      50: "#F0FFF4",
+      100: "#C6F6D5",
+      200: "#9AE6B4",
+      300: "#68D391",
+      400: "#48BB78",
+      500: "#38A169",
+      600: "#2F855A",
+      700: "#276749",
+      800: "#22543D",
+      900: "#1C4532",
+    },
+    red: {
+      50: "#FFF5F5",
+      100: "#FED7D7",
+      200: "#FEB2B2",
+      300: "#FC8181",
+      400: "#F56565",
+      500: "#E53E3E",
+      600: "#C53030",
+      700: "#9B2C2C",
+      800: "#822727",
+      900: "#63171B",
+    },
+    // Single-shade semantic accents, pulled from what's actually used
+    // across the app (not full 50-900 scales — these only ever appear as
+    // one shade each).
+    error: "#FF6B6B",
+    link: "#3B82F6",
+    success: "#22C55E",
+    zoomBlue: "#519CFD",
+    // Google Meet icon brand colors.
+    google: {
+      blue: "#4285F4",
+      blueDark: "#1967D2",
+      green: "#34A853",
+      greenDark: "#188038",
+      yellow: "#FBBC05",
+      red: "#EA4335",
+    },
+    // Dot colors for the Form/Review/Calendar service tags (ServiceSelector).
+    service: {
+      form: "#60A5FA",
+      review: "#4ADE80",
+      calendar: "#F472B6",
+    },
+    // Rotating colors for workspace/event badge avatars.
+    badge: {
+      orange: "#EA8C55",
+      purple: "#7C3AED",
+      green: "#10B981",
+      amber: "#F59E0B",
+      red: "#EF4444",
+      cyan: "#06B6D4",
+      violet: "#8B5CF6",
+      pink: "#EC4899",
+    },
+    // The diagonal gradient on the right side of every auth page
+    // (login, signup, verify-email, forgot/reset-password, etc.).
+    authGradient: {
+      50: "#FFFFFF",
+      100: "#FFF9E6",
+      200: "#FFEB99",
+      300: "#FFD966",
+      400: "#FFCC00",
+      500: "#87CEEB",
+      600: "#6BB6D6",
+      700: "#4DA6C7",
+      800: "#2E8AB8",
+      900: "#1E5AA3",
+      950: "#0047AB",
+    },
     customDark: {
       2: "rgba(36, 39, 42, 0.02)",
       5: "rgba(36, 39, 42, 0.05)",

@@ -12,6 +12,9 @@ import { getAgents, createAgent, deleteAgent } from "@/app/actions/agentActions"
 import CryptoJS from "crypto-js";
 import Sidebar from "@/app/components/Sidebar";
 import FullPageLoader from "@/app/components/FullPageLoader";
+import UsernameModal from "@/app/components/UsernameModal";
+import ServiceSelector from "@/app/components/ServiceSelector";
+import OnboardingGate from "@/app/components/OnboardingGate";
 import {
   Box,
   Flex,
@@ -115,11 +118,13 @@ export default function BuilderPage() {
   const { isOpen: isFeedbackOpen, onOpen: onFeedbackOpen, onClose: onFeedbackClose } = useDisclosure();
   const { isOpen: isCreateOpen, onOpen: onCreateOpen, onClose: onCreateClose } = useDisclosure();
   const { isOpen: isDeleteOpen, onOpen: onDeleteOpen, onClose: onDeleteClose } = useDisclosure();
+  const { isOpen: isUsernameOpen, onOpen: onUsernameOpen, onClose: onUsernameClose } = useDisclosure();
+  const [username, setUsername] = useState("");
   const [feedbackMessage, setFeedbackMessage] = useState("");
   const [isFeedbackSubmitting, setIsFeedbackSubmitting] = useState(false);
   const [feedbackError, setFeedbackError] = useState("");
   const [agentName, setAgentName] = useState("");
-  const [agents, setAgents] = useState<Array<{ name: string; services: string[] }>>([]);
+  const [agents, setAgents] = useState<Array<{ name: string; services: string[]; website?: string }>>([]);
   // Selection is by position, not name: two workspaces can share a name, and
   // matching on the name highlighted both at once and made one unselectable.
   const [selectedAgentIndex, setSelectedAgentIndex] = useState<number | null>(null);
@@ -172,7 +177,7 @@ export default function BuilderPage() {
     // shouldn't lose it, only an empty box collapses back to just the icon.
     handler: () => { if (searchQuery === "") setIsSearchExpanded(false); },
   });
-  const [calendarEvents, setCalendarEvents] = useState<Array<{ id: number; title: string; meeting_link: string; updated_at: string; status: string }>>([]);
+  const [calendarEvents, setCalendarEvents] = useState<Array<{ id: number; title: string; meeting_link: string; slug: string; updated_at: string; status: string }>>([]);
   const [chatbotAgents, setChatbotAgents] = useState<Array<{ id: number; name: string; status: string; updated_at: string }>>([]);
   const [selectedEventIds, setSelectedEventIds] = useState<Set<number>>(new Set());
   const [isBulkDeleting, setIsBulkDeleting] = useState(false);
@@ -383,7 +388,7 @@ export default function BuilderPage() {
 
       const { data, error } = await supabase
         .from("calendar_events")
-        .select("id, event_title, title, meeting_link, updated_at")
+        .select("id, event_title, title, meeting_link, slug, updated_at")
         .eq("user_id", session.user.id)
         .eq("workspace_name", selectedAgent)
         .order("updated_at", { ascending: false });
@@ -398,6 +403,7 @@ export default function BuilderPage() {
           id: e.id,
           title: e.event_title || e.title || "Untitled event",
           meeting_link: e.meeting_link || "Link",
+          slug: e.slug || "",
           updated_at: e.updated_at,
           // No status column on calendar_events yet, so everything is a draft.
           // Once one exists, reading it here is all that's needed for the
@@ -556,6 +562,13 @@ export default function BuilderPage() {
           const email = session.user.email || "";
           setUserEmail(email);
 
+          supabase
+            .from("profiles")
+            .select("username")
+            .eq("id", session.user.id)
+            .maybeSingle()
+            .then(({ data }) => setUsername(data?.username || ""));
+
           const googlePicture = session.user.user_metadata?.picture || session.user.user_metadata?.avatar_url || session.user.identities?.[0]?.identity_data?.picture;
 
           if (googlePicture) {
@@ -711,9 +724,53 @@ export default function BuilderPage() {
           const success = await createAgent(session.user.id, {
             name: newAgentName,
             services: agentToClone.services,
+            website: agentToClone.website,
           });
 
           if (success) {
+            // Clone every calendar event scoped to the old workspace into the
+            // new one. slug can't be copied byte-for-byte — it's unique per
+            // user, not per workspace, so the copy would collide with the
+            // original — instead each gets a new slug derived from the old
+            // one, so the duplicated event still has its own booking link.
+            const { data: oldEvents } = await supabase
+              .from("calendar_events")
+              .select("*")
+              .eq("user_id", session.user.id)
+              .eq("workspace_name", selectedAgent);
+
+            if (oldEvents && oldEvents.length > 0) {
+              const newEvents = oldEvents.map(({ id, created_at, updated_at, slug, ...rest }) => ({
+                ...rest,
+                workspace_name: newAgentName,
+                slug: slug ? `${slug}-copy-${Math.random().toString(36).slice(2, 6)}` : null,
+                updated_at: new Date().toISOString(),
+              }));
+              await supabase.from("calendar_events").insert(newEvents);
+            }
+
+            // Chatbot agents live in a separate table that may not exist in
+            // every environment yet — failing to clone them shouldn't block
+            // the rest of the duplicate.
+            try {
+              const { data: oldChatbotAgents } = await supabase
+                .from("chatbot_agents")
+                .select("*")
+                .eq("user_id", session.user.id)
+                .eq("workspace_name", selectedAgent);
+
+              if (oldChatbotAgents && oldChatbotAgents.length > 0) {
+                const newChatbotAgents = oldChatbotAgents.map(({ id, created_at, updated_at, ...rest }) => ({
+                  ...rest,
+                  workspace_name: newAgentName,
+                  updated_at: new Date().toISOString(),
+                }));
+                await supabase.from("chatbot_agents").insert(newChatbotAgents);
+              }
+            } catch (chatbotError) {
+              console.log("Skipping chatbot agent clone:", chatbotError);
+            }
+
             const dbAgents = await getAgents(session.user.id);
             setAgents(dbAgents);
             // Select the copy just made — the newest row, so the last index.
@@ -813,6 +870,7 @@ export default function BuilderPage() {
 
   return (
     <Flex h="100vh" w="100vw" bg="dark.bg" overflow="hidden" position="fixed" top={0} left={0}>
+      <OnboardingGate />
       <Sidebar
         selectedNav={selectedNav}
         onNavClick={setSelectedNav}
@@ -820,6 +878,7 @@ export default function BuilderPage() {
         avatarUrl={avatarUrl}
         onDelete={handleDeleteAccount}
         onFeedbackOpen={onFeedbackOpen}
+        onSettingsClick={onUsernameOpen}
         isLoading={!hydrated}
       />
 
@@ -957,7 +1016,7 @@ export default function BuilderPage() {
                     }
                   />
                   <MenuList fontSize="sm" minW="160px">
-                    <MenuItem color="customGray.800">
+                    <MenuItem color="customGray.800" onClick={handleDuplicate}>
                       Duplicate
                     </MenuItem>
                     <MenuItem color="red.500" onClick={onDeleteOpen}>
@@ -1041,8 +1100,8 @@ export default function BuilderPage() {
                 </TabPanel>
                 <TabPanel h="100%" p="0" overflow="hidden">
                   <VStack w="100%" h="100%" align="stretch" spacing={0} overflow="hidden" position="relative">
-                    <Box flexShrink={0} w="100%" px="24px" py="12px" h="50px" display="flex" alignItems="center" justifyContent="flex-end" bg="white" borderBottom="1px solid" borderBottomColor="customGray.200">
-                      <HStack spacing="12px">
+                    <Box flexShrink={0} w="100%" px="14px" py="12px" h="50px" display="flex" alignItems="center" justifyContent="flex-end" bg="white" borderBottom="1px solid" borderBottomColor="customGray.200">
+                      <HStack spacing="8px">
                         <HStack ref={searchRef} spacing="0" bg="transparent" borderRadius="6px" border="none" transition="width 0.3s ease" overflow="hidden" h="32px" w={isSearchExpanded ? "224px" : "32px"} flexShrink={0}>
                           <IconButton aria-label="Search" icon={<SearchIcon w="16px" h="16px" />} size="sm" variant="ghost" color="customGray.600" flexShrink={0} _hover={isSearchExpanded ? undefined : { bg: "customGray.50" }} onClick={() => setIsSearchExpanded(!isSearchExpanded)} />
                           <Input
@@ -1077,9 +1136,41 @@ export default function BuilderPage() {
                             )}
                           </Box>
                         </HStack>
-                        <IconButton aria-label="Filter" icon={<svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M3 6H21M5 12H19M7 18H17" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>} size="sm" variant="ghost" color="customGray.600" _hover={{ bg: "customGray.50" }} />
-                        <Button size="sm" variant="outline" leftIcon={<Box w="8px" h="8px" display="flex" alignItems="center" justifyContent="center"><svg width="8" height="8" viewBox="0 0 8 8" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M0 4C0 1.79086 1.79086 0 4 0V0C6.20914 0 8 1.79086 8 4V4C8 6.20914 6.20914 8 4 8V8C1.79086 8 0 6.20914 0 4V4Z" fill="#16A34A"/></svg></Box>} rightIcon={<ChevronDownIcon w="16px" h="16px" />} borderRadius="full" border="1px solid" borderColor="customGray.300" bg="white" color="customGray.600" fontSize="sm" fontWeight="medium" _hover={{ bg: "customGray.50" }} iconSpacing="4px">
-                          Online
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          borderRadius="8px"
+                          border="none"
+                          bg="white"
+                          color="customGray.700"
+                          fontSize="sm"
+                          fontWeight="medium"
+                          _hover={{ bg: "customGray.100" }}
+                          leftIcon={
+                            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+                              <path d="M8.66667 10.667L11.3333 13.3337L14 10.667M11.3333 13.3337V2.66699M7.33333 5.33366L4.66667 2.66699L2 5.33366M4.66667 2.66699V13.3337" stroke="currentColor" strokeWidth="1.33333" strokeLinecap="round" strokeLinejoin="round" />
+                            </svg>
+                          }
+                        >
+                          Sort
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          borderRadius="8px"
+                          border="none"
+                          bg="white"
+                          color="customGray.700"
+                          fontSize="sm"
+                          fontWeight="medium"
+                          _hover={{ bg: "customGray.100" }}
+                          leftIcon={
+                            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+                              <path d="M2 4H14M4.66667 8H11.3333M6.66667 12H9.33333" stroke="currentColor" strokeWidth="1.33333" strokeLinecap="round" strokeLinejoin="round" />
+                            </svg>
+                          }
+                        >
+                          Filters
                         </Button>
                       </HStack>
                     </Box>
@@ -1088,14 +1179,13 @@ export default function BuilderPage() {
                         <colgroup>
                           <col style={{ width: "300px" }} />
                           <col style={{ width: "180px" }} />
-                          <col style={{ width: "180px" }} />
-                          <col style={{ width: "180px" }} />
-                          <col style={{ width: "180px" }} />
-                          <col style={{ width: "56px" }} />
+                          <col style={{ width: "160px" }} />
+                          <col style={{ width: "160px" }} />
+                          <col style={{ width: "160px" }} />
                         </colgroup>
                         <Thead>
                           <Tr>
-                            <Th border="none" h="50px" py="0" pl="12px" pr="0" fontSize="sm" fontWeight="medium" color="customGray.600" textTransform="none" letterSpacing="normal">
+                            <Th border="none" h="50px" py="0" pl="12px" pr="0" fontSize="sm" fontWeight="medium" color="customGray.700" textTransform="none" letterSpacing="normal">
                               <HStack spacing="10px" role="group">
                                 <Box
                                   opacity={isAllEventsSelected || isSomeEventsSelected ? 1 : 0}
@@ -1105,6 +1195,7 @@ export default function BuilderPage() {
                                   <Checkbox
                                     isChecked={isAllEventsSelected}
                                     onChange={toggleSelectAllEvents}
+                                    onKeyDown={(e) => { if (e.key === "Enter") e.preventDefault(); }}
                                     icon={<CheckboxGlyph />}
                                     sx={checkboxControlSx}
                                   />
@@ -1112,11 +1203,10 @@ export default function BuilderPage() {
                                 <Text>Event Name</Text>
                               </HStack>
                             </Th>
-                            <Th border="none" h="50px" py="0" px="0" fontSize="sm" fontWeight="medium" color="customGray.600" textTransform="none" letterSpacing="normal">Booking Link</Th>
-                            <Th border="none" h="50px" py="0" px="0" fontSize="sm" fontWeight="medium" color="customGray.600" textTransform="none" letterSpacing="normal">Status</Th>
-                            <Th border="none" h="50px" py="0" px="0" fontSize="sm" fontWeight="medium" color="customGray.600" textTransform="none" letterSpacing="normal">Bookings</Th>
-                            <Th border="none" h="50px" py="0" px="0" fontSize="sm" fontWeight="medium" color="customGray.600" textTransform="none" letterSpacing="normal">Last Updated</Th>
-                            <Th border="none" h="50px" py="0" pr="24px" pl="0"></Th>
+                            <Th border="none" h="50px" py="0" px="0" fontSize="sm" fontWeight="medium" color="customGray.700" textTransform="none" letterSpacing="normal">Booking Link</Th>
+                            <Th border="none" h="50px" py="0" px="0" fontSize="sm" fontWeight="medium" color="customGray.700" textTransform="none" letterSpacing="normal">Status</Th>
+                            <Th border="none" h="50px" py="0" px="0" fontSize="sm" fontWeight="medium" color="customGray.700" textTransform="none" letterSpacing="normal">Bookings</Th>
+                            <Th border="none" h="50px" py="0" pr="24px" pl="0" fontSize="sm" fontWeight="medium" color="customGray.700" textTransform="none" letterSpacing="normal">Last Updated</Th>
                           </Tr>
                         </Thead>
                       </Table>
@@ -1136,10 +1226,9 @@ export default function BuilderPage() {
                       <colgroup>
                         <col style={{ width: "300px" }} />
                         <col style={{ width: "180px" }} />
-                        <col style={{ width: "180px" }} />
-                        <col style={{ width: "180px" }} />
-                        <col style={{ width: "180px" }} />
-                        <col style={{ width: "56px" }} />
+                        <col style={{ width: "160px" }} />
+                        <col style={{ width: "160px" }} />
+                        <col style={{ width: "160px" }} />
                       </colgroup>
                       <Tbody>
                     {isSearching ? (
@@ -1155,12 +1244,11 @@ export default function BuilderPage() {
                           <Td h="50px" py="0" px="0" borderBottomColor="customGray.200"><Skeleton startColor="customGray.100" endColor="customGray.200" h="12px" w="50px" borderRadius="full" /></Td>
                           <Td h="50px" py="0" px="0" borderBottomColor="customGray.200"><Skeleton startColor="customGray.100" endColor="customGray.200" h="12px" w="44px" borderRadius="6px" /></Td>
                           <Td h="50px" py="0" px="0" borderBottomColor="customGray.200"><Skeleton startColor="customGray.100" endColor="customGray.200" h="12px" w="80px" borderRadius="6px" /></Td>
-                          <Td h="50px" py="0" px="0" borderBottomColor="customGray.200" />
                         </Tr>
                       ))
                     ) : filteredCalendarEvents.length === 0 && searchQuery.trim() !== "" ? (
                       <Tr>
-                        <Td colSpan={6} h="80px" textAlign="center" borderBottomColor="customGray.200">
+                        <Td colSpan={5} h="80px" textAlign="center" borderBottomColor="customGray.200">
                           <Text fontSize="sm" color="customGray.500">No events match "{searchQuery}"</Text>
                         </Td>
                       </Tr>
@@ -1193,6 +1281,7 @@ export default function BuilderPage() {
                                 <Checkbox
                                   isChecked={isSelected}
                                   onChange={toggleSelected}
+                                  onKeyDown={(e) => { if (e.key === "Enter") e.preventDefault(); }}
                                   icon={<CheckboxGlyph />}
                                   sx={checkboxControlSx}
                                   flexShrink={0}
@@ -1213,11 +1302,36 @@ export default function BuilderPage() {
                               >
                                 <Text fontSize="xs" fontWeight="medium" color="white">{initial}</Text>
                               </Box>
-                              <Text fontSize="sm" color="customGray.800">{event.title}</Text>
+                              <Text fontSize="sm" fontWeight="500" color="customGray.800">{event.title}</Text>
                             </Flex>
                           </Td>
                           <Td h="50px" py="0" px="0" borderBottomColor="customGray.200">
-                            <Text fontSize="sm" color="customGray.400">—</Text>
+                            {username && event.slug ? (
+                              <Tooltip
+                                label={`formsparrow.com/${username}/${event.slug}`}
+                                placement="top"
+                                hasArrow
+                                bg="customGray.800"
+                                color="white"
+                              >
+                                <Text
+                                  fontSize="sm"
+                                  color="customGray.600"
+                                  textDecoration="underline"
+                                  noOfLines={1}
+                                  maxW="160px"
+                                  _hover={{ color: "sky.500" }}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    window.open(`/${username}/${event.slug}`, "_blank");
+                                  }}
+                                >
+                                  formsparrow.com/{username}/{event.slug}
+                                </Text>
+                              </Tooltip>
+                            ) : (
+                              <Text fontSize="sm" color="customGray.400">—</Text>
+                            )}
                           </Td>
                           <Td h="50px" py="0" px="0" borderBottomColor="customGray.200">
                             <Box px="8px" py="2px" bg="customGray.100" borderRadius="full" display="inline-block">
@@ -1227,17 +1341,8 @@ export default function BuilderPage() {
                           <Td h="50px" py="0" px="0" borderBottomColor="customGray.200">
                             <Text fontSize="sm" color="customGray.600">0</Text>
                           </Td>
-                          <Td h="50px" py="0" px="0" borderBottomColor="customGray.200">
-                            <Text fontSize="sm" color="customGray.600">{updatedLabel}</Text>
-                          </Td>
                           <Td h="50px" py="0" pr="24px" pl="0" borderBottomColor="customGray.200">
-                            <Box display="flex" alignItems="center" justifyContent="center" w="32px" h="32px">
-                              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                                <circle cx="12" cy="5" r="2" fill="currentColor" />
-                                <circle cx="12" cy="12" r="2" fill="currentColor" />
-                                <circle cx="12" cy="19" r="2" fill="currentColor" />
-                              </svg>
-                            </Box>
+                            <Text fontSize="sm" color="customGray.600">{updatedLabel}</Text>
                           </Td>
                         </Tr>
                       );
@@ -1516,6 +1621,13 @@ export default function BuilderPage() {
         </HStack>
       </VStack>
 
+      <UsernameModal
+        isOpen={isUsernameOpen}
+        onClose={onUsernameClose}
+        currentUsername={username}
+        onSaved={setUsername}
+      />
+
       <Modal
         isOpen={isFeedbackOpen}
         onClose={() => {
@@ -1650,107 +1762,16 @@ export default function BuilderPage() {
                 <Text fontSize="sm" fontWeight="medium" color="customGray.800">
                   Select service
                 </Text>
-                <HStack spacing="8px">
-                  <Tag
-                    h="36px"
-                    px="8px"
-                    py="6px"
-                    bg={selectedServices.includes("form") ? "customGray.50" : "white"}
-                    border="1px solid"
-                    borderColor={selectedServices.includes("form") ? "customGray.500" : "customGray.300"}
-                    cursor="pointer"
-                    borderRadius="full"
-                    _hover={{ bg: "customGray.50" }}
-                    display="flex"
-                    alignItems="center"
-                    gap="6px"
-                    onClick={() => {
-                      if (selectedServices.includes("form")) {
-                        setSelectedServices(selectedServices.filter(s => s !== "form"));
-                      } else {
-                        setSelectedServices([...selectedServices, "form"]);
-                      }
-                    }}
-                  >
-                    <Box w="8px" h="8px" borderRadius="full" bg="#60A5FA" flexShrink={0} />
-                    <TagLabel fontSize="sm" color="customGray.800" m={0}>Form</TagLabel>
-                    {selectedServices.includes("form") ? (
-                      <svg width="20" height="20" viewBox="0 0 18 18" fill="none" xmlns="http://www.w3.org/2000/svg">
-                        <path fillRule="evenodd" clipRule="evenodd" d="M2.25 9C2.25 12.7274 5.27258 15.75 9 15.75C12.7274 15.75 15.75 12.7274 15.75 9C15.75 5.27258 12.7274 2.25 9 2.25C5.27258 2.25 2.25 5.27258 2.25 9ZM6.25282 11.7472C5.97823 11.4726 5.97823 11.0274 6.25282 10.7528L8.00563 9L6.25282 7.24718C5.97823 6.9726 5.97823 6.5274 6.25282 6.25282C6.5274 5.97823 6.9726 5.97823 7.24718 6.25282L9 8.00563L10.7528 6.25282C11.0274 5.97823 11.4726 5.97823 11.7472 6.25282C12.0218 6.5274 12.0218 6.9726 11.7472 7.24718L9.99437 9L11.7472 10.7528C12.0218 11.0274 12.0218 11.4726 11.7472 11.7472C11.4726 12.0218 11.0274 12.0218 10.7528 11.7472L9 9.99437L7.24718 11.7472C6.9726 12.0218 6.5274 12.0218 6.25282 11.7472Z" fill="#71717A"/>
-                      </svg>
-                    ) : (
-                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                        <path d="M12 5v14M5 12h14" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                      </svg>
-                    )}
-                  </Tag>
-                  <Tag
-                    h="36px"
-                    px="8px"
-                    py="6px"
-                    bg={selectedServices.includes("review") ? "customGray.50" : "white"}
-                    border="1px solid"
-                    borderColor={selectedServices.includes("review") ? "customGray.500" : "customGray.300"}
-                    cursor="pointer"
-                    borderRadius="full"
-                    _hover={{ bg: "customGray.50" }}
-                    display="flex"
-                    alignItems="center"
-                    gap="6px"
-                    onClick={() => {
-                      if (selectedServices.includes("review")) {
-                        setSelectedServices(selectedServices.filter(s => s !== "review"));
-                      } else {
-                        setSelectedServices([...selectedServices, "review"]);
-                      }
-                    }}
-                  >
-                    <Box w="8px" h="8px" borderRadius="full" bg="#4ADE80" flexShrink={0} />
-                    <TagLabel fontSize="sm" color="customGray.800" m={0}>Review</TagLabel>
-                    {selectedServices.includes("review") ? (
-                      <svg width="20" height="20" viewBox="0 0 18 18" fill="none" xmlns="http://www.w3.org/2000/svg">
-                        <path fillRule="evenodd" clipRule="evenodd" d="M2.25 9C2.25 12.7274 5.27258 15.75 9 15.75C12.7274 15.75 15.75 12.7274 15.75 9C15.75 5.27258 12.7274 2.25 9 2.25C5.27258 2.25 2.25 5.27258 2.25 9ZM6.25282 11.7472C5.97823 11.4726 5.97823 11.0274 6.25282 10.7528L8.00563 9L6.25282 7.24718C5.97823 6.9726 5.97823 6.5274 6.25282 6.25282C6.5274 5.97823 6.9726 5.97823 7.24718 6.25282L9 8.00563L10.7528 6.25282C11.0274 5.97823 11.4726 5.97823 11.7472 6.25282C12.0218 6.5274 12.0218 6.9726 11.7472 7.24718L9.99437 9L11.7472 10.7528C12.0218 11.0274 12.0218 11.4726 11.7472 11.7472C11.4726 12.0218 11.0274 12.0218 10.7528 11.7472L9 9.99437L7.24718 11.7472C6.9726 12.0218 6.5274 12.0218 6.25282 11.7472Z" fill="#71717A"/>
-                      </svg>
-                    ) : (
-                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                        <path d="M12 5v14M5 12h14" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                      </svg>
-                    )}
-                  </Tag>
-                  <Tag
-                    h="36px"
-                    px="8px"
-                    py="6px"
-                    bg={selectedServices.includes("calendar") ? "customGray.50" : "white"}
-                    border="1px solid"
-                    borderColor={selectedServices.includes("calendar") ? "customGray.500" : "customGray.300"}
-                    cursor="pointer"
-                    borderRadius="full"
-                    _hover={{ bg: "customGray.50" }}
-                    display="flex"
-                    alignItems="center"
-                    gap="6px"
-                    onClick={() => {
-                      if (selectedServices.includes("calendar")) {
-                        setSelectedServices(selectedServices.filter(s => s !== "calendar"));
-                      } else {
-                        setSelectedServices([...selectedServices, "calendar"]);
-                      }
-                    }}
-                  >
-                    <Box w="8px" h="8px" borderRadius="full" bg="#F472B6" flexShrink={0} />
-                    <TagLabel fontSize="sm" color="customGray.800" m={0}>Calendar</TagLabel>
-                    {selectedServices.includes("calendar") ? (
-                      <svg width="20" height="20" viewBox="0 0 18 18" fill="none" xmlns="http://www.w3.org/2000/svg">
-                        <path fillRule="evenodd" clipRule="evenodd" d="M2.25 9C2.25 12.7274 5.27258 15.75 9 15.75C12.7274 15.75 15.75 12.7274 15.75 9C15.75 5.27258 12.7274 2.25 9 2.25C5.27258 2.25 2.25 5.27258 2.25 9ZM6.25282 11.7472C5.97823 11.4726 5.97823 11.0274 6.25282 10.7528L8.00563 9L6.25282 7.24718C5.97823 6.9726 5.97823 6.5274 6.25282 6.25282C6.5274 5.97823 6.9726 5.97823 7.24718 6.25282L9 8.00563L10.7528 6.25282C11.0274 5.97823 11.4726 5.97823 11.7472 6.25282C12.0218 6.5274 12.0218 6.9726 11.7472 7.24718L9.99437 9L11.7472 10.7528C12.0218 11.0274 12.0218 11.4726 11.7472 11.7472C11.4726 12.0218 11.0274 12.0218 10.7528 11.7472L9 9.99437L7.24718 11.7472C6.9726 12.0218 6.5274 12.0218 6.25282 11.7472Z" fill="#71717A"/>
-                      </svg>
-                    ) : (
-                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                        <path d="M12 5v14M5 12h14" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                      </svg>
-                    )}
-                  </Tag>
-                </HStack>
+                <ServiceSelector
+                  selected={selectedServices}
+                  onToggle={(service) => {
+                    setSelectedServices(
+                      selectedServices.includes(service)
+                        ? selectedServices.filter((s) => s !== service)
+                        : [...selectedServices, service]
+                    );
+                  }}
+                />
                 {createError && (
                   <Text fontSize="xs" color="#FF6B6B" fontWeight="normal" mt="4px">
                     {createError}

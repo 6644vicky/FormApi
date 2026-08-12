@@ -1,13 +1,27 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { Box, VStack, HStack, Text, Button, Heading, IconButton, Input, Textarea, useToast, Tabs, TabList, Tab, Avatar, Menu, MenuButton, MenuList, MenuItem, Modal, ModalOverlay, ModalContent, ModalHeader, ModalBody, ModalCloseButton, useDisclosure, Checkbox, Badge, Divider, Alert, AlertIcon, Tag, TagLabel, TagCloseButton, Progress } from "@chakra-ui/react";
-import { ArrowBackIcon, DeleteIcon, AddIcon, ChevronDownIcon, DragHandleIcon, CloseIcon, ViewIcon, CopyIcon } from "@chakra-ui/icons";
+import { Box, VStack, HStack, Text, Button, Heading, IconButton, Input, Textarea, useToast, Tabs, TabList, Tab, Avatar, Menu, MenuButton, MenuList, MenuItem, Modal, ModalOverlay, ModalContent, ModalHeader, ModalBody, ModalCloseButton, useDisclosure, Checkbox, Badge, Divider, Tag, TagLabel, TagCloseButton, Progress, Tooltip } from "@chakra-ui/react";
+import { ArrowBackIcon, DeleteIcon, AddIcon, ChevronDownIcon, DragHandleIcon, CloseIcon, ViewIcon, CopyIcon, InfoOutlineIcon } from "@chakra-ui/icons";
 import { useState, useEffect, useRef, useMemo } from "react";
 import { CalendarPicker } from "@/components/CalendarPicker";
 import { AddPage } from "@/components/AddPage";
 import { supabase } from "@/lib/supabase";
 import FullPageLoader from "@/app/components/FullPageLoader";
+import UsernameModal from "@/app/components/UsernameModal";
+
+// Default slug for the "Scheduling page link" field, derived from the event
+// title. Stays in sync with the title until the user edits the slug
+// directly (see slugManuallyEditedRef).
+function slugify(text: string): string {
+  return text
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9\s-]/g, "")
+    .replace(/\s+/g, "-")
+    .replace(/-+/g, "-")
+    .replace(/^-|-$/g, "");
+}
 
 export default function CalendarBuilderPage() {
   const router = useRouter();
@@ -15,6 +29,7 @@ export default function CalendarBuilderPage() {
   const toast = useToast({ position: "top" });
   const { isOpen, onOpen, onClose } = useDisclosure();
   const { isOpen: isShareOpen, onOpen: onShareOpen, onClose: onShareClose } = useDisclosure();
+  const { isOpen: isUsernameOpen, onOpen: onUsernameOpen, onClose: onUsernameClose } = useDisclosure();
   const [tabIndex, setTabIndex] = useState(0);
   const [selectedPage, setSelectedPage] = useState("Main page");
 
@@ -30,6 +45,11 @@ export default function CalendarBuilderPage() {
   const [title, setTitle] = useState("Demo call");
   const [description, setDescription] = useState("Get to know each other and discuss your needs. A perfect opportunity to connect and explore possibilities together.");
   const [descriptionError, setDescriptionError] = useState(false);
+  const [username, setUsername] = useState("");
+  const [slug, setSlug] = useState("");
+  // True once the user has typed into the slug field directly, so the
+  // title->slug auto-derivation below stops overwriting their edit.
+  const slugManuallyEditedRef = useRef(false);
   const [meetingLink, setMeetingLink] = useState("Link");
   const [meetingLinkUrl, setMeetingLinkUrl] = useState("");
   const [durations, setDurations] = useState<string[]>(["15 min"]);
@@ -106,6 +126,13 @@ export default function CalendarBuilderPage() {
           setIsGoogleConnected(!!hasGoogleProvider);
           setIsZoomConnected(!!hasZoomProvider);
 
+          const { data: profile } = await supabase
+            .from("profiles")
+            .select("username")
+            .eq("id", session.user.id)
+            .maybeSingle();
+          setUsername(profile?.username || "");
+
           // Only load event data when editing an existing event (id in URL).
           // No id = a fresh "Create event", so keep the defaults.
           if (idParam) {
@@ -125,6 +152,12 @@ export default function CalendarBuilderPage() {
               setFormName(eventData.title || "");
               setInputValue(eventData.title || "");
               if (eventData.event_title) setTitle(eventData.event_title);
+              if (eventData.slug) {
+                setSlug(eventData.slug);
+                slugManuallyEditedRef.current = true;
+              } else {
+                setSlug(slugify(eventData.event_title || eventData.title || ""));
+              }
               setDescription(eventData.description || "");
               setOwnerName(eventData.owner_name || fullName);
               setMeetingLink(eventData.meeting_link || "Link");
@@ -152,7 +185,7 @@ export default function CalendarBuilderPage() {
   // disagree about whether the user changed anything.
   const buildSnapshot = () =>
     JSON.stringify({
-      formName, title, description, ownerName,
+      formName, title, description, ownerName, slug,
       meetingLink, meetingLinkUrl, durations, userAvatar,
     });
 
@@ -181,7 +214,7 @@ export default function CalendarBuilderPage() {
     }, 1000);
 
     return () => clearTimeout(saveTimer);
-  }, [formName, title, description, ownerName, meetingLink, meetingLinkUrl, durations, userAvatar, currentEventId, isLoading]);
+  }, [formName, title, description, ownerName, slug, meetingLink, meetingLinkUrl, durations, userAvatar, currentEventId, isLoading]);
 
   const handleTitleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const val = e.target.value;
@@ -224,6 +257,7 @@ export default function CalendarBuilderPage() {
         event_title: title,
         description: description,
         owner_name: ownerName,
+        slug: slug || null,
         meeting_link: meetingLink,
         meeting_link_url: meetingLinkUrl,
         durations: durations,
@@ -427,7 +461,10 @@ export default function CalendarBuilderPage() {
               />
               <Input
                 value={title}
-                onChange={(e) => setTitle(e.target.value)}
+                onChange={(e) => {
+                  setTitle(e.target.value);
+                  if (!slugManuallyEditedRef.current) setSlug(slugify(e.target.value));
+                }}
                 placeholder="Untitled event"
                 size="sm"
                 variant="unstyled"
@@ -626,6 +663,9 @@ export default function CalendarBuilderPage() {
                     color="customGray.800"
                     rows={3}
                     maxLength={150}
+                    resize="vertical"
+                    minH="80px"
+                    overflowY="auto"
                     _hover={{ borderColor: descriptionError ? "red.500" : "customGray.400" }}
                     _focus={{ bg: "white", borderColor: descriptionError ? "red.500" : "customGray.500", boxShadow: descriptionError ? "0 0 0 3px rgba(239, 68, 68, 0.1)" : "0 0 0 3px rgba(39, 39, 42, 0.1)" }}
                   />
@@ -639,12 +679,83 @@ export default function CalendarBuilderPage() {
                 <Box h="1px" bg="customGray.200" w="100%" />
 
                 <VStack spacing="12px" align="stretch" py="20px" px="30px">
+                  <HStack spacing="6px">
+                    <Text fontSize="14px" fontWeight="500" color="customGray.800">Scheduling page link</Text>
+                    <Text as="span" color="red.500">*</Text>
+                    <Tooltip label="This is your public booking link. The username is set in account settings; you can edit the last part here." placement="top" hasArrow>
+                      <InfoOutlineIcon w="14px" h="14px" color="customGray.500" />
+                    </Tooltip>
+                  </HStack>
+                  <HStack
+                    spacing="0px"
+                    h="40px"
+                    px="12px"
+                    border="1px solid"
+                    borderColor="customGray.300"
+                    borderRadius="md"
+                    bg="customGray.50"
+                    _hover={{ borderColor: "customGray.400" }}
+                  >
+                    <Text fontSize="14px" color="customGray.600" whiteSpace="nowrap" flexShrink={0}>
+                      formsparrow.com/
+                    </Text>
+                    {username ? (
+                      <Text fontSize="14px" color="customGray.800" whiteSpace="nowrap" flexShrink={0}>
+                        {username}/
+                      </Text>
+                    ) : (
+                      <Button
+                        size="xs"
+                        variant="link"
+                        color="sky.500"
+                        flexShrink={0}
+                        onClick={onUsernameOpen}
+                      >
+                        Set your username
+                      </Button>
+                    )}
+                    {username && (
+                      <Input
+                        size="md"
+                        flex="1"
+                        value={slug}
+                        onChange={(e) => {
+                          slugManuallyEditedRef.current = true;
+                          setSlug(slugify(e.target.value));
+                        }}
+                        placeholder="event-name"
+                        border="none"
+                        bg="transparent"
+                        fontSize="14px"
+                        fontWeight="400"
+                        color="customGray.800"
+                        px="0px"
+                        _focus={{ boxShadow: "none" }}
+                        _hover={{ bg: "transparent" }}
+                      />
+                    )}
+                  </HStack>
+                </VStack>
+
+                <UsernameModal
+                  isOpen={isUsernameOpen}
+                  onClose={onUsernameClose}
+                  currentUsername={username}
+                  onSaved={setUsername}
+                />
+
+                <Box h="1px" bg="customGray.200" w="100%" />
+
+                <VStack spacing="12px" align="stretch" py="20px" px="30px">
                   <VStack spacing="2px" align="stretch">
                     <Text fontSize="14px" fontWeight="500" color="customGray.800">Meeting link</Text>
                     <Text fontSize="xs" color="customGray.500">Choose the times of day you'll accept meetings.</Text>
                   </VStack>
                   <HStack
+                    h="40px"
+                    boxSizing="border-box"
                     spacing="0px"
+                    align="center"
                     border="1px solid"
                     borderColor="customGray.300"
                     borderRadius="md"
@@ -654,19 +765,77 @@ export default function CalendarBuilderPage() {
                     <Menu>
                       <MenuButton
                         as={Box}
-                        px="12px"
-                        py="8px"
+                        h="100%"
+                        pl="12px"
+                        pr="8px"
                         cursor="pointer"
                         display="flex"
                         alignItems="center"
-                        gap="4px"
                         fontSize="14px"
                         color="customGray.800"
                         fontWeight="400"
                         flexShrink={0}
                       >
-                        {meetingLink}
-                        <ChevronDownIcon w="16px" h="16px" />
+                        {/* Chakra's MenuButton wraps this in its own <span>, which
+                            is NOT itself a flex container — so layout must be
+                            enforced here, in a single flex box, rather than
+                            relying on multiple loose siblings that could wrap. */}
+                        <Box as="span" display="flex" flexDirection="row" alignItems="center" gap="4px" whiteSpace="nowrap">
+                          {meetingLink === "G-meet" && (
+                            <Box as="span" flexShrink={0} display="flex" alignItems="center">
+                              <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                <path d="M1.37231 15.9301C1.37231 16.5541 1.88211 17.0596 2.51023 17.0596H2.52658C1.88885 17.0596 1.37231 16.5541 1.37231 15.9301Z" fill="#FBBC05"/>
+                                <path d="M11.1513 7.17604V10.1248L15.1268 6.91815V4.0701C15.1268 3.4461 14.6169 2.94067 13.9888 2.94067H5.3761L5.36841 7.17604H11.1513Z" fill="#FBBC05"/>
+                                <path d="M11.1508 13.0745H5.35831L5.35156 17.0585H13.9884C14.6175 17.0585 15.1264 16.5531 15.1264 15.9291V13.3577L11.1508 10.1257V13.0745Z" fill="#34A853"/>
+                                <path d="M5.37568 2.94067L1.37231 7.17604H5.36893L5.37568 2.94067Z" fill="#EA4335"/>
+                                <path d="M1.37231 13.075V15.9296C1.37231 16.5536 1.88885 17.059 2.52658 17.059H5.35168L5.35834 13.075H1.37231Z" fill="#1967D2"/>
+                                <path d="M5.36893 7.17529H1.37231V13.0738H5.35834L5.36893 7.17529Z" fill="#4285F4"/>
+                                <path d="M18.6218 14.9256V5.23139C18.3976 3.94478 16.9866 5.41963 16.9866 5.41963L15.1272 6.91894V13.3575L17.7887 15.5214C18.7497 15.6475 18.6218 14.9256 18.6218 14.9256Z" fill="#34A853"/>
+                                <path d="M11.1511 10.1246L15.1276 13.3576V6.91895L11.1511 10.1246Z" fill="#188038"/>
+                              </svg>
+                            </Box>
+                          )}
+                          {meetingLink === "Zoom" && (
+                            <Box as="span" flexShrink={0} display="flex" alignItems="center">
+                              <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                <path d="M13.75 1.25H6.25C3.48858 1.25 1.25 3.48858 1.25 6.25V13.75C1.25 16.5114 3.48858 18.75 6.25 18.75H13.75C16.5114 18.75 18.75 16.5114 18.75 13.75V6.25C18.75 3.48858 16.5114 1.25 13.75 1.25Z" fill="#519CFD"/>
+                                <path d="M5.05981 8.24035C5.05981 7.66696 5.52464 7.20215 6.09803 7.20215H10.1919C11.3387 7.20215 12.2683 8.13179 12.2683 9.27856V12.0251C12.2683 12.5985 11.8035 13.0634 11.2301 13.0634H7.13623C5.98946 13.0634 5.05981 12.1337 5.05981 10.9869V8.24035Z" fill="white"/>
+                                <path d="M12.6577 11.1375V8.9918C12.6577 8.962 12.6705 8.93365 12.6928 8.91393L14.4826 7.3351C14.6837 7.15767 15.0001 7.30047 15.0001 7.56866V12.5478C15.0001 12.8153 14.685 12.9584 14.4836 12.7822L12.6932 11.2156C12.6706 11.1959 12.6577 11.1674 12.6577 11.1375Z" fill="white"/>
+                              </svg>
+                            </Box>
+                          )}
+                          {meetingLink === "In person" && (
+                            <Box as="span" flexShrink={0} display="flex" alignItems="center">
+                              <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                <g clipPath="url(#clip0_58_45)">
+                                  <path d="M10.0002 2.5C13.2216 2.50022 15.8331 5.11163 15.8333 8.33301C15.8333 12.6917 10.0434 17.4645 10.0002 17.5C10.0002 17.5 4.16626 12.708 4.16626 8.33301C4.16644 5.11149 6.77869 2.5 10.0002 2.5ZM10.0002 5.83301C8.61952 5.83301 7.50041 6.95232 7.50024 8.33301C7.50024 9.71384 8.61941 10.833 10.0002 10.833C11.381 10.8329 12.5002 9.71376 12.5002 8.33301C12.5001 6.9524 11.3809 5.83314 10.0002 5.83301Z" fill="#52525B"/>
+                                </g>
+                                <defs>
+                                  <clipPath id="clip0_58_45">
+                                    <rect width="20" height="20" fill="white"/>
+                                  </clipPath>
+                                </defs>
+                              </svg>
+                            </Box>
+                          )}
+                          {meetingLink === "Link" && (
+                            <Box as="span" flexShrink={0} display="flex" alignItems="center">
+                              <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                <g clipPath="url(#clip0_58_39)">
+                                  <path d="M13.7301 11.6342L15.5559 9.80834C17.0187 8.3086 16.9888 5.90698 15.4891 4.44418C14.0157 3.00709 11.6651 3.00709 10.1918 4.44418L8.36593 6.27001M12.2251 7.77501L7.7751 12.225M6.2701 8.36584L4.44427 10.1917C2.98146 11.6914 3.0114 14.093 4.51114 15.5558C5.98451 16.9929 8.33507 16.9929 9.80844 15.5558L11.6343 13.73" stroke="#52525B" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                                </g>
+                                <defs>
+                                  <clipPath id="clip0_58_39">
+                                    <rect width="20" height="20" fill="white"/>
+                                  </clipPath>
+                                </defs>
+                              </svg>
+                            </Box>
+                          )}
+                          <Box as="span" flexShrink={0} display="flex" alignItems="center">
+                            <ChevronDownIcon w="16px" h="16px" />
+                          </Box>
+                        </Box>
                       </MenuButton>
                       <MenuList fontSize="14px">
                         <MenuItem onClick={() => setMeetingLink("G-meet")}>G-meet</MenuItem>
@@ -677,30 +846,64 @@ export default function CalendarBuilderPage() {
                     </Menu>
                     <Box w="1px" h="24px" bg="customGray.300" flexShrink={0} />
                     {meetingLink === "G-meet" ? (
-                      <HStack spacing="8px" flex="1" px="8px">
-                        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
-                          <path d="M1.0979 12.7441C1.0979 13.2433 1.50574 13.6477 2.00823 13.6477H2.02131C1.51113 13.6477 1.0979 13.2433 1.0979 12.7441Z" fill="#FBBC05"/>
-                          <path d="M8.92102 5.74083V8.09984L12.1014 5.53452V3.25608C12.1014 2.75688 11.6935 2.35254 11.191 2.35254H4.30083L4.29468 5.74083H8.92102Z" fill="#FBBC05"/>
-                          <path d="M8.92064 10.4596H4.28665L4.28125 13.6468H11.1907C11.694 13.6468 12.1011 13.2425 12.1011 12.7433V10.6862L8.92064 8.10059V10.4596Z" fill="#34A853"/>
-                          <path d="M4.30059 2.35254L1.0979 5.74083H4.29519L4.30059 2.35254Z" fill="#EA4335"/>
-                          <path d="M1.0979 10.46V12.7437C1.0979 13.2429 1.51113 13.6472 2.02131 13.6472H4.28139L4.28672 10.46H1.0979Z" fill="#1967D2"/>
-                          <path d="M4.29519 5.74023H1.0979V10.459H4.28672L4.29519 5.74023Z" fill="#4285F4"/>
-                          <path d="M14.8975 11.9405V4.18511C14.7181 3.15582 13.5893 4.3357 13.5893 4.3357L12.1018 5.53515V10.686L14.231 12.4171C14.9998 12.518 14.8975 11.9405 14.8975 11.9405Z" fill="#34A853"/>
-                          <path d="M8.92102 8.09966L12.1022 10.6861V5.53516L8.92102 8.09966Z" fill="#188038"/>
-                        </svg>
-                        <Text fontSize="14px" fontWeight="400" color="customGray.800">Google Meet</Text>
-                      </HStack>
+                      <>
+                        <HStack h="100%" spacing="8px" flex="1" px="8px" align="center">
+                          <Text fontSize="14px" fontWeight="400" color="customGray.800">Google Meet</Text>
+                        </HStack>
+                        {isGoogleConnected ? (
+                          <HStack h="100%" spacing="4px" flexShrink={0} pr="8px" align="center">
+                            <svg width="18" height="18" viewBox="0 0 14 14" fill="none" xmlns="http://www.w3.org/2000/svg">
+                              <path d="M7 1.75C9.8991 1.75 12.25 4.1009 12.25 7C12.25 9.8991 9.8991 12.25 7 12.25C4.1009 12.25 1.75 9.8991 1.75 7C1.75 4.10089 4.10089 1.75 7 1.75ZM9.62793 5.42578C9.39361 5.19157 9.01358 5.1915 8.7793 5.42578L6.28711 7.91797L4.96191 6.5918C4.72767 6.35746 4.34765 6.35757 4.11328 6.5918C3.87901 6.82605 3.87908 7.20608 4.11328 7.44043L5.8623 9.19141C5.97481 9.30397 6.12796 9.36716 6.28711 9.36719C6.44605 9.36719 6.59845 9.30368 6.71094 9.19141L9.62793 6.27441C9.86224 6.0401 9.86224 5.6601 9.62793 5.42578Z" fill="#16A34A"/>
+                            </svg>
+                            <Text fontSize="14px" fontWeight="500" color="green.500">Connected</Text>
+                          </HStack>
+                        ) : (
+                          <Button
+                            size="xs"
+                            variant="outline"
+                            flexShrink={0}
+                            mr="8px"
+                            borderColor="customGray.300"
+                            color="customGray.800"
+                            bg="white"
+                            _hover={{ bg: "customGray.50" }}
+                            onClick={handleConnectGoogle}
+                          >
+                            Connect
+                          </Button>
+                        )}
+                      </>
                     ) : meetingLink === "Zoom" ? (
-                      <HStack spacing="8px" flex="1" px="8px">
-                        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
-                          <rect x="1" y="1" width="14" height="14" rx="4" fill="#519CFD"/>
-                          <path d="M4.04785 6.59228C4.04785 6.13357 4.41971 5.76172 4.87842 5.76172H8.15353C9.07094 5.76172 9.81466 6.50543 9.81466 7.42285V9.62011C9.81466 10.0788 9.4428 10.4507 8.98409 10.4507H5.70898C4.79157 10.4507 4.04785 9.70696 4.04785 8.78955V6.59228Z" fill="white"/>
-                          <path d="M10.1261 8.91005V7.19351C10.1261 7.16967 10.1363 7.14699 10.1542 7.13122L11.586 5.86815C11.7469 5.72621 12 5.84045 12 6.055V10.0383C12 10.2523 11.7479 10.3668 11.5868 10.2258L10.1545 8.97255C10.1364 8.95678 10.1261 8.934 10.1261 8.91005Z" fill="white"/>
-                        </svg>
-                        <Text fontSize="14px" fontWeight="400" color="customGray.800">Zoom</Text>
-                      </HStack>
+                      <>
+                        <HStack h="100%" spacing="8px" flex="1" px="8px" align="center">
+                          <Text fontSize="14px" fontWeight="400" color="customGray.800">Zoom</Text>
+                        </HStack>
+                        {isZoomConnected ? (
+                          <HStack h="100%" spacing="4px" flexShrink={0} pr="8px" align="center">
+                            <svg width="18" height="18" viewBox="0 0 14 14" fill="none" xmlns="http://www.w3.org/2000/svg">
+                              <path d="M7 1.75C9.8991 1.75 12.25 4.1009 12.25 7C12.25 9.8991 9.8991 12.25 7 12.25C4.1009 12.25 1.75 9.8991 1.75 7C1.75 4.10089 4.10089 1.75 7 1.75ZM9.62793 5.42578C9.39361 5.19157 9.01358 5.1915 8.7793 5.42578L6.28711 7.91797L4.96191 6.5918C4.72767 6.35746 4.34765 6.35757 4.11328 6.5918C3.87901 6.82605 3.87908 7.20608 4.11328 7.44043L5.8623 9.19141C5.97481 9.30397 6.12796 9.36716 6.28711 9.36719C6.44605 9.36719 6.59845 9.30368 6.71094 9.19141L9.62793 6.27441C9.86224 6.0401 9.86224 5.6601 9.62793 5.42578Z" fill="#16A34A"/>
+                            </svg>
+                            <Text fontSize="14px" fontWeight="500" color="green.500">Connected</Text>
+                          </HStack>
+                        ) : (
+                          <Button
+                            size="xs"
+                            variant="outline"
+                            flexShrink={0}
+                            mr="8px"
+                            borderColor="customGray.300"
+                            color="customGray.800"
+                            bg="white"
+                            _hover={{ bg: "customGray.50" }}
+                            onClick={handleConnectZoom}
+                          >
+                            Connect
+                          </Button>
+                        )}
+                      </>
                     ) : (
                       <Input
+                        h="100%"
                         size="md"
                         flex="1"
                         value={meetingLinkUrl}
@@ -717,86 +920,6 @@ export default function CalendarBuilderPage() {
                       />
                     )}
                   </HStack>
-                  {meetingLink === "G-meet" && !isGoogleConnected && (
-                    <Alert
-                      status="warning"
-                      variant="subtle"
-                      bg="orange.50"
-                      borderRadius="md"
-                      border="1px solid"
-                      borderColor="orange.200"
-                      flexDirection="column"
-                      alignItems="flex-start"
-                      px="16px"
-                      py="12px"
-                    >
-                      <HStack spacing="12px" align="flex-start" w="100%">
-                        <AlertIcon mt="2px" />
-                        <VStack spacing="8px" align="stretch" flex="1">
-                          <Text fontSize="14px" fontWeight="500" color="customGray.800">
-                            You must configure your calendar connections to push events to a Google Calendar to host Google Meet web conferences on your events.
-                          </Text>
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            fontWeight="500"
-                            fontSize="14px"
-                            borderColor="customGray.800"
-                            color="customGray.800"
-                            _hover={{ bg: "customGray.50" }}
-                            onClick={handleConnectGoogle}
-                            rightIcon={
-                              <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
-                                <path d="M13 3H10V2H14V6H13V3ZM3 13H6V14H2V10H3V13Z" fill="currentColor"/>
-                              </svg>
-                            }
-                          >
-                            Connect Google
-                          </Button>
-                        </VStack>
-                      </HStack>
-                    </Alert>
-                  )}
-                  {meetingLink === "Zoom" && !isZoomConnected && (
-                    <Alert
-                      status="warning"
-                      variant="subtle"
-                      bg="orange.50"
-                      borderRadius="md"
-                      border="1px solid"
-                      borderColor="orange.200"
-                      flexDirection="column"
-                      alignItems="flex-start"
-                      px="16px"
-                      py="12px"
-                    >
-                      <HStack spacing="12px" align="flex-start" w="100%">
-                        <AlertIcon mt="2px" />
-                        <VStack spacing="8px" align="stretch" flex="1">
-                          <Text fontSize="14px" fontWeight="500" color="customGray.800">
-                            Your Zoom account is not connected
-                          </Text>
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            fontWeight="500"
-                            fontSize="14px"
-                            borderColor="customGray.800"
-                            color="customGray.800"
-                            _hover={{ bg: "customGray.50" }}
-                            onClick={handleConnectZoom}
-                            rightIcon={
-                              <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
-                                <path d="M13 3H10V2H14V6H13V3ZM3 13H6V14H2V10H3V13Z" fill="currentColor"/>
-                              </svg>
-                            }
-                          >
-                            Connect Zoom
-                          </Button>
-                        </VStack>
-                      </HStack>
-                    </Alert>
-                  )}
                 </VStack>
 
                 <Box h="1px" bg="customGray.200" w="100%" />

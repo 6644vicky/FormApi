@@ -11,6 +11,7 @@ interface SidebarProps {
   avatarUrl?: string;
   onDelete?: () => void;
   onFeedbackOpen?: () => void;
+  onSettingsClick?: () => void;
   isLoading?: boolean;
 }
 
@@ -21,7 +22,7 @@ const navItems = [
   { label: "Help", icon: "help" },
 ];
 
-export default function Sidebar({ selectedNav, onNavClick, userEmail = "", avatarUrl = "", onDelete, onFeedbackOpen, isLoading = false }: SidebarProps) {
+export default function Sidebar({ selectedNav, onNavClick, userEmail = "", avatarUrl = "", onDelete, onFeedbackOpen, onSettingsClick, isLoading = false }: SidebarProps) {
   const router = useRouter();
 
   const renderSvgIcon = (icon: string, strokeColor: string) => {
@@ -108,6 +109,8 @@ export default function Sidebar({ selectedNav, onNavClick, userEmail = "", avata
                   router.push("/builder");
                 } else if (item.label === "Home") {
                   router.push("/inbox");
+                } else if (item.label === "Settings") {
+                  onSettingsClick?.();
                 }
               }}
               borderRadius="base"

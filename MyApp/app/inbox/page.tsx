@@ -8,6 +8,7 @@ import { supabase } from "@/lib/supabase";
 import { deleteUserAccount } from "@/app/actions/deleteUser";
 import CryptoJS from "crypto-js";
 import Sidebar from "@/app/components/Sidebar";
+import OnboardingGate from "@/app/components/OnboardingGate";
 import {
   Box,
   Flex,
@@ -251,6 +252,7 @@ export default function InboxPage() {
 
   return (
     <Flex h="100vh" w="100vw" bg="dark.bg" overflow="hidden" position="fixed" top={0} left={0}>
+      <OnboardingGate />
       {/* Sidebar Component */}
       <Sidebar
         selectedNav={selectedNav}

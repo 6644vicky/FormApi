@@ -697,7 +697,7 @@ export default function CalendarBuilderPage() {
                     _hover={{ borderColor: "customGray.400" }}
                   >
                     <Text fontSize="14px" color="customGray.600" whiteSpace="nowrap" flexShrink={0}>
-                      formsparrow.com/
+                      webforms.com/
                     </Text>
                     {username ? (
                       <Text fontSize="14px" color="customGray.800" whiteSpace="nowrap" flexShrink={0}>

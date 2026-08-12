@@ -1308,7 +1308,7 @@ export default function BuilderPage() {
                           <Td h="50px" py="0" px="0" borderBottomColor="customGray.200">
                             {username && event.slug ? (
                               <Tooltip
-                                label={`formsparrow.com/${username}/${event.slug}`}
+                                label={`webforms.com/${username}/${event.slug}`}
                                 placement="top"
                                 hasArrow
                                 bg="customGray.800"
@@ -1326,7 +1326,7 @@ export default function BuilderPage() {
                                     window.open(`/${username}/${event.slug}`, "_blank");
                                   }}
                                 >
-                                  formsparrow.com/{username}/{event.slug}
+                                  webforms.com/{username}/{event.slug}
                                 </Text>
                               </Tooltip>
                             ) : (

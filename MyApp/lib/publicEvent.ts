@@ -10,7 +10,7 @@ export const supabaseAdmin = createClient(
 );
 
 const EVENT_COLUMNS =
-  "id, title, event_title, description, owner_name, avatar_url, meeting_link, meeting_link_url, durations";
+  "id, title, event_title, description, owner_name, avatar_url, meeting_link, meeting_link_url, durations, hide_form_page";
 
 export function formatPublicEvent(data: {
   id: number;
@@ -21,6 +21,7 @@ export function formatPublicEvent(data: {
   avatar_url: string | null;
   meeting_link: string | null;
   durations: string[] | null;
+  hide_form_page: boolean | null;
 }) {
   return {
     id: data.id,
@@ -30,6 +31,7 @@ export function formatPublicEvent(data: {
     avatarUrl: data.avatar_url || null,
     meetingLink: data.meeting_link || "Link",
     durations: data.durations || ["15 min"],
+    hideFormPage: data.hide_form_page || false,
   };
 }
 

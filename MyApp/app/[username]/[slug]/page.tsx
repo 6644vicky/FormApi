@@ -1,5 +1,6 @@
 "use client";
 
+import { Suspense } from "react";
 import { useParams } from "next/navigation";
 import { PublicBookingView } from "@/app/components/PublicBookingView";
 
@@ -9,8 +10,10 @@ export default function VanityBookingPage() {
   const slug = params?.slug as string;
 
   return (
-    <PublicBookingView
-      fetchUrl={`/api/public-event/by-slug?username=${encodeURIComponent(username)}&slug=${encodeURIComponent(slug)}`}
-    />
+    <Suspense>
+      <PublicBookingView
+        fetchUrl={`/api/public-event/by-slug?username=${encodeURIComponent(username)}&slug=${encodeURIComponent(slug)}`}
+      />
+    </Suspense>
   );
 }

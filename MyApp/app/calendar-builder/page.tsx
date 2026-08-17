@@ -1,12 +1,13 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { Box, VStack, HStack, Text, Button, Heading, IconButton, Input, Textarea, useToast, Tabs, TabList, Tab, Avatar, Menu, MenuButton, MenuList, MenuItem, Modal, ModalOverlay, ModalContent, ModalHeader, ModalBody, ModalCloseButton, useDisclosure, Checkbox, Badge, Divider, Tag, TagLabel, TagCloseButton, Progress, Tooltip } from "@chakra-ui/react";
-import { ArrowBackIcon, DeleteIcon, AddIcon, ChevronDownIcon, DragHandleIcon, CloseIcon, ViewIcon, CopyIcon, InfoOutlineIcon } from "@chakra-ui/icons";
-import { useState, useEffect, useRef, useMemo } from "react";
+import { Box, VStack, HStack, Text, Button, Heading, IconButton, Input, Textarea, useToast, Tabs, TabList, Tab, Avatar, Menu, MenuButton, MenuList, MenuItem, Modal, ModalOverlay, ModalContent, ModalHeader, ModalBody, ModalCloseButton, useDisclosure, Badge, Divider, Tag, TagLabel, TagCloseButton, Progress, Tooltip } from "@chakra-ui/react";
+import { ArrowBackIcon, ArrowForwardIcon, DeleteIcon, AddIcon, ChevronDownIcon, DragHandleIcon, CopyIcon, InfoOutlineIcon } from "@chakra-ui/icons";
+import { useState, useEffect, useRef, useMemo, ComponentProps } from "react";
 import { CalendarPicker } from "@/components/CalendarPicker";
 import { AddPage } from "@/components/AddPage";
 import { supabase } from "@/lib/supabase";
+import { parseDurationMinutes, formatTime, buildTimeSlots } from "@/lib/bookingTime";
 import FullPageLoader from "@/app/components/FullPageLoader";
 import UsernameModal from "@/app/components/UsernameModal";
 
@@ -23,6 +24,58 @@ function slugify(text: string): string {
     .replace(/^-|-$/g, "");
 }
 
+const WEEK_DAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+
+// Parses freeform text like "9:00 AM" / "09:00pm" back into minutes-since-
+// midnight. Returns null when it doesn't look like a time yet, so the field
+// below can hold an in-progress edit instead of snapping back on every
+// keystroke.
+function parseTimeText(text: string): number | null {
+  const match = text.trim().match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/i);
+  if (!match) return null;
+  const hour12 = parseInt(match[1], 10);
+  const minute = parseInt(match[2], 10);
+  if (hour12 < 1 || hour12 > 12 || minute > 59) return null;
+  const isPM = match[3].toUpperCase() === "PM";
+  const hour24 = (hour12 % 12) + (isPM ? 12 : 0);
+  return hour24 * 60 + minute;
+}
+
+// Plain text field for a time value — no native picker, no dropdown. Holds
+// its own draft text so the user can type freely; commits back to the
+// parent's minutes-since-midnight value on blur, or reverts if what's typed
+// still isn't a valid time.
+function TimeTextInput({
+  minutes,
+  onCommit,
+  ...inputProps
+}: {
+  minutes: number;
+  onCommit: (minutes: number) => void;
+} & Omit<ComponentProps<typeof Input>, "value" | "onChange" | "onBlur">) {
+  const [text, setText] = useState(formatTime(Math.floor(minutes / 60), minutes % 60, false));
+
+  useEffect(() => {
+    setText(formatTime(Math.floor(minutes / 60), minutes % 60, false));
+  }, [minutes]);
+
+  return (
+    <Input
+      {...inputProps}
+      value={text}
+      onChange={(e) => setText(e.target.value)}
+      onBlur={() => {
+        const parsed = parseTimeText(text);
+        if (parsed !== null) {
+          onCommit(parsed);
+        } else {
+          setText(formatTime(Math.floor(minutes / 60), minutes % 60, false));
+        }
+      }}
+    />
+  );
+}
+
 export default function CalendarBuilderPage() {
   const router = useRouter();
   // Default every toast on this page to the top; individual calls can override.
@@ -32,6 +85,42 @@ export default function CalendarBuilderPage() {
   const { isOpen: isUsernameOpen, onOpen: onUsernameOpen, onClose: onUsernameClose } = useDisclosure();
   const [tabIndex, setTabIndex] = useState(0);
   const [selectedPage, setSelectedPage] = useState("Main page");
+  const [isFormPageHidden, setIsFormPageHidden] = useState(false);
+  // Weekly hours summary, revealed by "Edit availability". Read-only display
+  // for now — each day holds a list of {start, end} ranges in
+  // minutes-since-midnight, empty meaning unavailable that day.
+  const isAvailabilityOpen = true;
+  const [weeklyHours, setWeeklyHours] = useState<Record<string, { start: number; end: number }[]>>({
+    Sunday: [],
+    Monday: [{ start: 9 * 60, end: 17 * 60 }],
+    Tuesday: [{ start: 9 * 60, end: 17 * 60 }],
+    Wednesday: [{ start: 9 * 60, end: 17 * 60 }],
+    Thursday: [{ start: 9 * 60, end: 17 * 60 }],
+    Friday: [{ start: 9 * 60, end: 17 * 60 }],
+    Saturday: [],
+  });
+  // Drives the "Main page" preview's calendar/time-slot list — the same
+  // state shape PublicBookingView uses, so the preview behaves like the real
+  // booking flow instead of a static mockup with hardcoded slots.
+  const [previewDate, setPreviewDate] = useState(new Date());
+  const [previewTime, setPreviewTime] = useState<number | null>(null);
+  const [previewIs24Hour, setPreviewIs24Hour] = useState(false);
+  const [bookings, setBookings] = useState<Array<{
+    id: number;
+    guest_name: string;
+    guest_email: string;
+    guest_phone: string | null;
+    guest_notes: string | null;
+    booking_date: string;
+    booking_time: string;
+    created_at: string;
+    extra_fields: Record<string, unknown> | null;
+    source: string;
+  }>>([]);
+  const [isLoadingBookings, setIsLoadingBookings] = useState(false);
+  // This event's key for the inbound webhook route (app/api/webhook/[apiKey]) —
+  // lets a third-party form post lead data straight to this event.
+  const [apiKey, setApiKey] = useState<string | null>(null);
 
   // Inline title state
   const [formName, setFormName] = useState("");
@@ -42,6 +131,7 @@ export default function CalendarBuilderPage() {
 
   // Sidebar form fields state
   const [ownerName, setOwnerName] = useState("Vicky Vignesh");
+  const [ownerEmail, setOwnerEmail] = useState("");
   const [title, setTitle] = useState("Demo call");
   const [description, setDescription] = useState("Get to know each other and discuss your needs. A perfect opportunity to connect and explore possibilities together.");
   const [descriptionError, setDescriptionError] = useState(false);
@@ -50,6 +140,21 @@ export default function CalendarBuilderPage() {
   // True once the user has typed into the slug field directly, so the
   // title->slug auto-derivation below stops overwriting their edit.
   const slugManuallyEditedRef = useRef(false);
+  // Whether the current slug value collides with another one of this user's
+  // events. Checked live (see effect below) so the field can say "already
+  // taken" up front, rather than the user only finding out from a failed save.
+  const [slugCheck, setSlugCheck] = useState<{ checking: boolean; taken: boolean }>({ checking: false, taken: false });
+  // Mirrors slugCheck synchronously. saveEventToDatabase reads this instead of
+  // the state value, because the debounced autosave timer is scheduled from
+  // whatever render was current when the slug last changed — by the time it
+  // actually fires, the availability check has often since resolved, and a
+  // stale closure over the old slugCheck would wrongly keep rejecting a slug
+  // that's since become available (or vice versa).
+  const slugCheckRef = useRef({ checking: false, taken: false });
+  const updateSlugCheck = (next: { checking: boolean; taken: boolean }) => {
+    slugCheckRef.current = next;
+    setSlugCheck(next);
+  };
   const [meetingLink, setMeetingLink] = useState("Link");
   const [meetingLinkUrl, setMeetingLinkUrl] = useState("");
   const [durations, setDurations] = useState<string[]>(["15 min"]);
@@ -63,6 +168,13 @@ export default function CalendarBuilderPage() {
   const lastSavedSnapshotRef = useRef<string | null>(null);
   // True while an insert is awaiting a response, to prevent duplicate rows.
   const insertInFlightRef = useRef(false);
+  // Chains saves one after another instead of firing them concurrently — two
+  // overlapping updates (e.g. rapidly toggling hide-form on then off) would
+  // otherwise race at the network level, and whichever request happened to
+  // reach the DB last would win, regardless of which click was actually more
+  // recent. Awaiting the previous save before starting the next one
+  // guarantees writes land in the order the user made them.
+  const savePromiseRef = useRef<Promise<void>>(Promise.resolve());
   // Workspace this event belongs to. Comes from the ?workspace= param for a new
   // event, or from the stored row when editing an existing one. Held in a ref so
   // it never counts as an edit in the autosave snapshot.
@@ -72,6 +184,12 @@ export default function CalendarBuilderPage() {
   // second save firing before React re-renders would otherwise still see null
   // and insert a duplicate row.
   const currentEventIdRef = useRef<number | null>(null);
+  // Set right before a discrete, one-shot selection (e.g. picking a meeting
+  // link type from its menu) updates state, so the autosave effect below
+  // saves it right away instead of behind the usual typing-debounce — a
+  // refresh within that debounce window would otherwise cancel the pending
+  // save entirely and silently revert the selection.
+  const saveImmediatelyRef = useRef(false);
 
   // Real, working embed snippets for public/booking-widget.js and the raw
   // iframe alternative — both point at the public /book/[id] page, which
@@ -95,6 +213,16 @@ export default function CalendarBuilderPage() {
     return `<iframe src="${origin}/book/${currentEventId}" width="100%" height="650" style="border:none;" title="Book a meeting"></iframe>`;
   }, [currentEventId]);
 
+  // Paste this into a third-party form's webhook/POST-URL field (e.g.
+  // Framer's Webhook action) to have its submissions land as leads on this
+  // event — the api_key in the path is what ties it to this event, so
+  // nothing else needs to be configured on their end.
+  const webhookUrl = useMemo(() => {
+    if (!apiKey) return "";
+    const origin = typeof window !== "undefined" ? window.location.origin : "https://your-domain.com";
+    return `${origin}/api/webhook/${apiKey}`;
+  }, [apiKey]);
+
   useEffect(() => {
     const loadUserProfile = async () => {
       try {
@@ -102,6 +230,13 @@ export default function CalendarBuilderPage() {
         const idParam = params.get("id");
         // Set for a brand-new event arriving from a workspace's "Create event".
         workspaceNameRef.current = params.get("workspace") || null;
+
+        // Restore whichever preview page (Main/Form/Success) was selected,
+        // so a refresh doesn't silently drop the user back to Main page.
+        const pageParam = params.get("page");
+        if (pageParam && availablePages.includes(pageParam)) {
+          setSelectedPage(pageParam);
+        }
 
         const { data: { session } } = await supabase.auth.getSession();
         if (session?.user) {
@@ -114,6 +249,7 @@ export default function CalendarBuilderPage() {
           }
           setUserName(fullName);
           setOwnerName(fullName);
+          setOwnerEmail(session.user.email || "");
 
           // Check if user has OAuth providers linked
           const { data: providers } = await supabase.auth.getUserIdentities();
@@ -146,6 +282,7 @@ export default function CalendarBuilderPage() {
             if (eventData) {
               currentEventIdRef.current = eventData.id;
               setCurrentEventId(eventData.id);
+              setApiKey(eventData.api_key);
               // Keep the event in the workspace it was created in, rather than
               // whatever the URL happens to say.
               workspaceNameRef.current = eventData.workspace_name ?? workspaceNameRef.current;
@@ -159,10 +296,14 @@ export default function CalendarBuilderPage() {
                 setSlug(slugify(eventData.event_title || eventData.title || ""));
               }
               setDescription(eventData.description || "");
-              setOwnerName(eventData.owner_name || fullName);
+              // ?? not || — an existing event's owner_name can be a
+              // deliberately-cleared empty string, which must stay empty
+              // rather than falling back to the session's name.
+              setOwnerName(eventData.owner_name ?? fullName);
               setMeetingLink(eventData.meeting_link || "Link");
               setMeetingLinkUrl(eventData.meeting_link_url || "");
               setDurations(eventData.durations || ["15 min"]);
+              setIsFormPageHidden(eventData.hide_form_page || false);
             }
 
             if (eventError) {
@@ -180,13 +321,59 @@ export default function CalendarBuilderPage() {
     loadUserProfile();
   }, []);
 
+  // Loads this event's real guest bookings whenever the Results tab is
+  // opened, so it always reflects whatever's come in since the tab was last viewed.
+  useEffect(() => {
+    if (tabIndex !== 4 || !currentEventId) return;
+    setIsLoadingBookings(true);
+    (async () => {
+      const { data, error } = await supabase
+        .from("bookings")
+        .select("id, guest_name, guest_email, guest_phone, guest_notes, booking_date, booking_time, created_at, extra_fields, source")
+        .eq("event_id", currentEventId)
+        .order("created_at", { ascending: false });
+      if (error) {
+        console.error("Error loading bookings:", error);
+      } else {
+        setBookings(data || []);
+      }
+      setIsLoadingBookings(false);
+    })();
+  }, [tabIndex, currentEventId]);
+
+  // Live slug-uniqueness check, debounced. Runs whenever the slug changes for
+  // any reason — typed by hand or auto-derived from the title — so a
+  // collision (e.g. two events both defaulting to "demo-call") surfaces as
+  // soon as it exists, not just when a save happens to fail.
+  useEffect(() => {
+    if (isLoading || !slug) {
+      updateSlugCheck({ checking: false, taken: false });
+      return;
+    }
+    let active = true;
+    updateSlugCheck({ checking: true, taken: false });
+    const timer = setTimeout(async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.user) return;
+      let query = supabase
+        .from("calendar_events")
+        .select("id")
+        .eq("user_id", session.user.id)
+        .eq("slug", slug);
+      if (currentEventIdRef.current) query = query.neq("id", currentEventIdRef.current);
+      const { data } = await query.maybeSingle();
+      if (active) updateSlugCheck({ checking: false, taken: !!data });
+    }, 400);
+    return () => { active = false; clearTimeout(timer); };
+  }, [slug, currentEventId, isLoading]);
+
   // Serialised view of every persisted field. The autosave effect and the back
   // button both compare against lastSavedSnapshotRef using this, so they can't
   // disagree about whether the user changed anything.
   const buildSnapshot = () =>
     JSON.stringify({
       formName, title, description, ownerName, slug,
-      meetingLink, meetingLinkUrl, durations, userAvatar,
+      meetingLink, meetingLinkUrl, durations, userAvatar, isFormPageHidden,
     });
 
   useEffect(() => {
@@ -208,13 +395,15 @@ export default function CalendarBuilderPage() {
     // A real edit. For an existing event this updates it; for a brand-new one
     // saveEventToDatabase inserts a row and remembers its id, so it shows up
     // in the calendar listing straight away.
+    const delay = saveImmediatelyRef.current ? 0 : 1000;
+    saveImmediatelyRef.current = false;
     const saveTimer = setTimeout(() => {
       lastSavedSnapshotRef.current = snapshot;
-      saveEventToDatabase();
-    }, 1000);
+      savePromiseRef.current = savePromiseRef.current.then(() => saveEventToDatabase());
+    }, delay);
 
     return () => clearTimeout(saveTimer);
-  }, [formName, title, description, ownerName, slug, meetingLink, meetingLinkUrl, durations, userAvatar, currentEventId, isLoading]);
+  }, [formName, title, description, ownerName, slug, meetingLink, meetingLinkUrl, durations, userAvatar, isFormPageHidden, currentEventId, isLoading]);
 
   const handleTitleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const val = e.target.value;
@@ -250,27 +439,40 @@ export default function CalendarBuilderPage() {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session?.user) return;
 
-      const payload: Record<string, unknown> = {
+      const buildPayload = (includeSlug: boolean): Record<string, unknown> => ({
         user_id: session.user.id,
         workspace_name: workspaceNameRef.current,
         title: formName,
         event_title: title,
         description: description,
         owner_name: ownerName,
-        slug: slug || null,
+        // Omitted (not set to null) when taken, so an update leaves whatever
+        // slug the row already had untouched — the taken value the user
+        // typed is never accepted, but their other edits still save.
+        ...(includeSlug ? { slug: slug || null } : {}),
         meeting_link: meetingLink,
         meeting_link_url: meetingLinkUrl,
         durations: durations,
         avatar_url: userAvatar,
+        hide_form_page: isFormPageHidden,
         updated_at: new Date().toISOString(),
-      };
+      });
 
       if (currentEventIdRef.current) {
         // Update the existing event
-        const { error } = await supabase
+        let { error } = await supabase
           .from("calendar_events")
-          .update(payload)
+          .update(buildPayload(!slugCheckRef.current.taken))
           .eq("id", currentEventIdRef.current);
+        if (error?.code === "23505") {
+          // The live check missed a race (e.g. another tab just claimed it) —
+          // flag it the same way and retry once, saving everything else.
+          updateSlugCheck({ checking: false, taken: true });
+          ({ error } = await supabase
+            .from("calendar_events")
+            .update(buildPayload(false))
+            .eq("id", currentEventIdRef.current));
+        }
         if (error) {
           console.error("Error updating event:", error);
           toast({
@@ -288,11 +490,19 @@ export default function CalendarBuilderPage() {
         if (insertInFlightRef.current) return;
         insertInFlightRef.current = true;
         try {
-          const { data, error } = await supabase
+          let { data, error } = await supabase
             .from("calendar_events")
-            .insert(payload)
-            .select("id")
+            .insert(buildPayload(!slugCheckRef.current.taken))
+            .select("id, api_key")
             .single();
+          if (error?.code === "23505") {
+            updateSlugCheck({ checking: false, taken: true });
+            ({ data, error } = await supabase
+              .from("calendar_events")
+              .insert(buildPayload(false))
+              .select("id, api_key")
+              .single());
+          }
           if (error) {
             console.error("Error creating event:", error);
             toast({
@@ -306,6 +516,13 @@ export default function CalendarBuilderPage() {
             // row we just created instead of inserting another.
             currentEventIdRef.current = data.id;
             setCurrentEventId(data.id);
+            setApiKey(data.api_key);
+            // Reflect the new id in the URL so a refresh loads this row
+            // instead of starting a second brand-new event (which would
+            // reset every field, including meetingLink, back to defaults).
+            const params = new URLSearchParams(window.location.search);
+            params.set("id", String(data.id));
+            router.replace(`/calendar-builder?${params.toString()}`);
           }
         } finally {
           insertInFlightRef.current = false;
@@ -321,8 +538,7 @@ export default function CalendarBuilderPage() {
   };
 
   const removeDurationField = (index: number) => {
-    const updated = durations.filter((_, i) => i !== index);
-    setDurations(updated.length > 0 ? updated : ["15 min"]);
+    setDurations(durations.filter((_, i) => i !== index));
   };
 
   const updateDurationValue = (index: number, val: string) => {
@@ -423,6 +639,20 @@ export default function CalendarBuilderPage() {
         position: "top",
       });
     }
+  };
+
+  const addAvailabilityRange = (day: string) => {
+    setWeeklyHours((prev) => ({
+      ...prev,
+      [day]: [...prev[day], { start: 9 * 60, end: 17 * 60 }],
+    }));
+  };
+
+  const updateAvailabilityRange = (day: string, index: number, field: "start" | "end", minutes: number) => {
+    setWeeklyHours((prev) => ({
+      ...prev,
+      [day]: prev[day].map((range, i) => (i === index ? { ...range, [field]: minutes } : range)),
+    }));
   };
 
   if (isLoading) {
@@ -528,6 +758,18 @@ export default function CalendarBuilderPage() {
               >
                 Workflow
               </Text>
+              <Text
+                fontSize="14px"
+                color={tabIndex === 4 ? "customGray.800" : "customGray.600"}
+                fontWeight={tabIndex === 4 ? "500" : "400"}
+                cursor="pointer"
+                onClick={() => setTabIndex(4)}
+                pb="2px"
+                borderBottom={tabIndex === 4 ? "2px solid" : "none"}
+                borderBottomColor={tabIndex === 4 ? "customGray.800" : "transparent"}
+              >
+                Results
+              </Text>
             </HStack>
 
             <HStack spacing="8px" position="absolute" right="16px">
@@ -562,9 +804,173 @@ export default function CalendarBuilderPage() {
             </HStack>
           </Box>
 
+          {tabIndex === 4 ? (
+            <Box flex="1" w="100%" overflowY="auto" p="30px">
+              <Text fontSize="18px" fontWeight="600" color="customGray.800" mb="20px">Results</Text>
+              {!currentEventId ? (
+                <Text fontSize="14px" color="customGray.500">Save this event before it can receive bookings.</Text>
+              ) : isLoadingBookings ? (
+                <Text fontSize="14px" color="customGray.500">Loading...</Text>
+              ) : bookings.length === 0 ? (
+                <Text fontSize="14px" color="customGray.500">No one has booked this event yet.</Text>
+              ) : (
+                <VStack spacing="12px" align="stretch" maxW="700px">
+                  {bookings.map((booking) => (
+                    <Box key={booking.id} border="1px solid" borderColor="customGray.200" borderRadius="8px" p="16px" bg="white">
+                      <HStack justify="space-between" mb="8px">
+                        <HStack spacing="8px">
+                          <Text fontSize="14px" fontWeight="600" color="customGray.800">{booking.guest_name || "No name provided"}</Text>
+                          {booking.source === "webhook" && (
+                            <Badge fontSize="10px" colorScheme="purple" borderRadius="4px">Webhook</Badge>
+                          )}
+                        </HStack>
+                        <Text fontSize="13px" color="customGray.500">{booking.booking_date} · {booking.booking_time}</Text>
+                      </HStack>
+                      <Text fontSize="13px" color="customGray.600">{booking.guest_email || "No email provided"}</Text>
+                      {booking.guest_phone && <Text fontSize="13px" color="customGray.600">{booking.guest_phone}</Text>}
+                      {booking.guest_notes && <Text fontSize="13px" color="customGray.600" mt="8px">"{booking.guest_notes}"</Text>}
+                      {booking.extra_fields && Object.keys(booking.extra_fields).length > 0 && (
+                        <VStack align="stretch" spacing="2px" mt="8px" pt="8px" borderTop="1px solid" borderColor="customGray.100">
+                          {Object.entries(booking.extra_fields).map(([key, value]) => (
+                            <Text key={key} fontSize="12px" color="customGray.500">
+                              <Text as="span" fontWeight="600">{key}:</Text> {String(value)}
+                            </Text>
+                          ))}
+                        </VStack>
+                      )}
+                    </Box>
+                  ))}
+                </VStack>
+              )}
+            </Box>
+          ) : tabIndex === 2 ? (
+            <HStack align="stretch" flex="1" w="100%" overflowY="auto" p="0px" bg="customGray.50" spacing="0px">
+            <HStack align="stretch" flex="1" spacing="0px" overflow="hidden">
+              <Box w="255px" flexShrink={0} h="100%" bg="white" overflow="hidden">
+                <VStack align="stretch" spacing="4px" px="12px" pb="12px">
+                  <Text fontSize="11px" fontWeight="500" textTransform="uppercase" letterSpacing="0.04em" color="customGray.800" px="16px" pt="16px" pb="8px">
+                    Configure
+                  </Text>
+                  {["Availability", "Reschedule and cancel", "Limits & buffers", "Privacy and security"].map((label, i) => (
+                    <Box
+                      key={i}
+                      h="32px"
+                      px="14px"
+                      display="flex"
+                      alignItems="center"
+                      borderRadius="8px"
+                      bg={i === 0 ? "customGray.100" : "transparent"}
+                      cursor="pointer"
+                      _hover={{ bg: "customGray.50" }}
+                    >
+                      <Text fontSize="14px" fontWeight={i === 0 ? "500" : "400"} color={i === 0 ? "customGray.800" : "customGray.500"}>{label}</Text>
+                    </Box>
+                  ))}
+                </VStack>
+              </Box>
+
+              <Box flex="1" h="100%" bg="white" borderLeft="1px solid" borderColor="customGray.200" overflow="hidden" display="flex" flexDirection="column">
+                <Box flex="1" overflowY="auto" bg="customGray.50">
+                <Box w="688px" mx="auto" pt="48px" pb="40px">
+                  <Box>
+                    <Text fontSize="22px" fontWeight="500" color="customGray.800" mb="2px">Availability</Text>
+                    <Text fontSize="14px" color="customGray.500" mb="48px">Weekly hours, buffers, and booking limits</Text>
+                  </Box>
+
+
+                  {isAvailabilityOpen && (
+                    <>
+                    <Text fontSize="18px" fontWeight="500" color="customGray.800">Weekly hours</Text>
+                    <Box bg="white" border="1px solid" borderColor="customGray.200" borderRadius="16px" p="0px" mt="24px" mb="16px">
+                      <VStack align="stretch" spacing="0px">
+                        {(() => {
+                          type Row = { day: string; range: { start: number; end: number } | null; rangeIndex: number };
+                          const rows = WEEK_DAYS.flatMap<Row>((day) => {
+                            const ranges = weeklyHours[day];
+                            return ranges.length === 0
+                              ? [{ day, range: null, rangeIndex: -1 }]
+                              : ranges.map((range, rangeIndex) => ({ day, range, rangeIndex }));
+                          });
+                          return rows.map((row, i) => (
+                            <Box key={`${row.day}-${row.rangeIndex}`} borderBottom={i < rows.length - 1 ? "1px solid" : "none"} borderColor="customGray.200">
+                              <HStack align="center" spacing="16px" px="24px" py="16px">
+                                <Text fontSize="14px" fontWeight="600" color="customGray.800" w="90px" flexShrink={0}>
+                                  {row.day}
+                                </Text>
+                                {row.range === null ? (
+                                  <Text flex="1" fontSize="14px" color="customGray.400">Unavailable</Text>
+                                ) : (
+                                  <HStack flex="1" spacing="8px">
+                                    <TimeTextInput
+                                      minutes={row.range.start}
+                                      onCommit={(minutes) => updateAvailabilityRange(row.day, row.rangeIndex, "start", minutes)}
+                                      bg="customGray.100"
+                                      border="none"
+                                      borderRadius="8px"
+                                      size="sm"
+                                      w="140px"
+                                    />
+                                    <Text color="customGray.400">-</Text>
+                                    <TimeTextInput
+                                      minutes={row.range.end}
+                                      onCommit={(minutes) => updateAvailabilityRange(row.day, row.rangeIndex, "end", minutes)}
+                                      bg="customGray.100"
+                                      border="none"
+                                      borderRadius="8px"
+                                      size="sm"
+                                      w="140px"
+                                    />
+                                  </HStack>
+                                )}
+                                <Tooltip label="Add time" placement="top">
+                                  <IconButton
+                                    aria-label={`Add a time range for ${row.day}`}
+                                    icon={<AddIcon w="12px" h="12px" />}
+                                    size="sm"
+                                    variant="ghost"
+                                    color="customGray.500"
+                                    onClick={() => addAvailabilityRange(row.day)}
+                                  />
+                                </Tooltip>
+                              </HStack>
+                            </Box>
+                          ));
+                        })()}
+                      </VStack>
+                    </Box>
+                    </>
+                  )}
+
+                </Box>
+                </Box>
+              </Box>
+            </HStack>
+            </HStack>
+          ) : (
           <HStack spacing="0px" flex="1" align="stretch" w="100%" overflow="hidden">
             {/* Left Sidebar */}
-            <Box w="380px" bg="white" borderRight="1px solid" borderColor="customGray.200" p="0px" overflowY="auto">
+            <Box
+              w={selectedPage === "Form page" && isFormPageHidden ? "0px" : "380px"}
+              flexShrink={0}
+              overflow="hidden"
+              pointerEvents={selectedPage === "Form page" && isFormPageHidden ? "none" : "auto"}
+              transition="width 0.4s cubic-bezier(0.4, 0, 0.2, 1)"
+              bg="white"
+              borderRight="1px solid"
+              borderColor="customGray.200"
+            >
+              {/* Fixed width so it never reflows as the outer container's
+                  width animates. Sliding this by the same amount, on the
+                  same timing, as the outer width collapses makes it read as
+                  the panel sliding out to the left rather than being
+                  squeezed/clipped in place. */}
+              <Box
+                w="380px"
+                h="100%"
+                overflowY="auto"
+                transform={selectedPage === "Form page" && isFormPageHidden ? "translateX(-380px)" : "translateX(0)"}
+                transition="transform 0.4s cubic-bezier(0.4, 0, 0.2, 1)"
+              >
               <VStack spacing="0px" align="stretch">
                 <HStack spacing="8px" py="20px" px="30px">
                   <Text fontSize="14px" fontWeight="bold">📅</Text>
@@ -691,16 +1097,16 @@ export default function CalendarBuilderPage() {
                     h="40px"
                     px="12px"
                     border="1px solid"
-                    borderColor="customGray.300"
+                    borderColor={slugCheck.taken ? "red.500" : "customGray.300"}
                     borderRadius="md"
                     bg="customGray.50"
-                    _hover={{ borderColor: "customGray.400" }}
+                    _hover={{ borderColor: slugCheck.taken ? "red.500" : "customGray.400" }}
                   >
                     <Text fontSize="14px" color="customGray.600" whiteSpace="nowrap" flexShrink={0}>
-                      formsparrow.com/
+                      webforms.com/
                     </Text>
                     {username ? (
-                      <Text fontSize="14px" color="customGray.800" whiteSpace="nowrap" flexShrink={0}>
+                      <Text fontSize="14px" color="customGray.600" whiteSpace="nowrap" flexShrink={0}>
                         {username}/
                       </Text>
                     ) : (
@@ -735,6 +1141,11 @@ export default function CalendarBuilderPage() {
                       />
                     )}
                   </HStack>
+                  {slugCheck.taken && (
+                    <Text fontSize="xs" color="red.500" fontWeight="500">
+                      This scheduling link is already taken. Please add a unique slug name.
+                    </Text>
+                  )}
                 </VStack>
 
                 <UsernameModal
@@ -838,10 +1249,10 @@ export default function CalendarBuilderPage() {
                         </Box>
                       </MenuButton>
                       <MenuList fontSize="14px">
-                        <MenuItem onClick={() => setMeetingLink("G-meet")}>G-meet</MenuItem>
-                        <MenuItem onClick={() => setMeetingLink("Zoom")}>Zoom</MenuItem>
-                        <MenuItem onClick={() => setMeetingLink("In person")}>In person</MenuItem>
-                        <MenuItem onClick={() => setMeetingLink("Link")}>Link</MenuItem>
+                        <MenuItem onClick={() => { saveImmediatelyRef.current = true; setMeetingLink("G-meet"); }}>G-meet</MenuItem>
+                        <MenuItem onClick={() => { saveImmediatelyRef.current = true; setMeetingLink("Zoom"); }}>Zoom</MenuItem>
+                        <MenuItem onClick={() => { saveImmediatelyRef.current = true; setMeetingLink("In person"); }}>In person</MenuItem>
+                        <MenuItem onClick={() => { saveImmediatelyRef.current = true; setMeetingLink("Link"); }}>Link</MenuItem>
                       </MenuList>
                     </Menu>
                     <Box w="1px" h="24px" bg="customGray.300" flexShrink={0} />
@@ -947,6 +1358,11 @@ export default function CalendarBuilderPage() {
                         _focus={{ borderColor: "customGray.500", boxShadow: "0 0 0 3px rgba(39, 39, 42, 0.1)" }}
                         _focusWithin={{ borderColor: "customGray.500", boxShadow: "0 0 0 3px rgba(39, 39, 42, 0.1)" }}
                       >
+                        {durations.length === 0 && (
+                          <Text fontSize="14px" color="customGray.400" mb="8px">
+                            Enter the duration
+                          </Text>
+                        )}
                         {durations.map((dur, index) => (
                           <Tag
                             key={index}
@@ -979,6 +1395,7 @@ export default function CalendarBuilderPage() {
                   </Box>
                 </VStack>
               </VStack>
+              </Box>
             </Box>
 
             {/* Center Preview */}
@@ -1007,6 +1424,37 @@ export default function CalendarBuilderPage() {
                   borderColor="customGray.200"
                   boxShadow="0 2px 4px rgba(0,0,0,0.04)"
                 >
+                  <IconButton
+                    aria-label={selectedPage === "Main page" ? "Go to Form page" : "Go back"}
+                    size="sm"
+                    variant="ghost"
+                    icon={
+                      selectedPage === "Main page" ? (
+                        <ArrowForwardIcon w="16px" h="16px" />
+                      ) : (
+                        <ArrowBackIcon w="16px" h="16px" />
+                      )
+                    }
+                    _hover={{ bg: "customGray.100" }}
+                    onClick={
+                      selectedPage === "Main page"
+                        ? () => setSelectedPage("Form page")
+                        : selectedPage === "Form page"
+                        ? () => setSelectedPage("Main page")
+                        : () => setSelectedPage("Form page")
+                    }
+                  />
+                  {selectedPage === "Form page" && (
+                    <IconButton
+                      aria-label="Go to Success page"
+                      size="sm"
+                      variant="ghost"
+                      icon={<ArrowForwardIcon w="16px" h="16px" />}
+                      _hover={{ bg: "customGray.100" }}
+                      onClick={() => setSelectedPage("Success page")}
+                    />
+                  )}
+                  <Box w="1px" h="16px" bg="customGray.200" mx="2px" />
                   <Menu>
                     <MenuButton
                       as={Button}
@@ -1024,7 +1472,14 @@ export default function CalendarBuilderPage() {
                     <MenuList fontSize="14px">
                       {availablePages.map((page) => (
                         <Box key={page}>
-                          <MenuItem onClick={() => setSelectedPage(page)}>
+                          <MenuItem
+                            onClick={() => {
+                              setSelectedPage(page);
+                              const params = new URLSearchParams(window.location.search);
+                              params.set("page", page);
+                              router.replace(`/calendar-builder?${params.toString()}`);
+                            }}
+                          >
                             {page}
                           </MenuItem>
                           {page === "Main page" && <Divider my="0px" />}
@@ -1039,10 +1494,40 @@ export default function CalendarBuilderPage() {
                       <IconButton
                         size="sm"
                         variant="ghost"
-                        aria-label="Form page icon"
-                        icon={<ViewIcon boxSize="12px" />}
+                        aria-label={isFormPageHidden ? "Show form page" : "Hide form page"}
+                        icon={
+                          isFormPageHidden ? (
+                            <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
+                              <g clipPath="url(#clip0_470_1664)">
+                                <path d="M7.91313 15.4212C8.59563 15.6853 9.29813 15.8337 9.99979 15.8337C12.9123 15.8337 15.8248 13.3062 17.4015 10.3903C17.5323 10.1478 17.5323 9.85366 17.4015 9.61116C16.9865 8.84366 16.4748 8.10866 15.899 7.43449M4.16646 15.8337L15.8331 4.16699M8.14396 11.8562C7.11896 10.8312 7.11896 9.16866 8.14396 8.14366C9.16896 7.11866 10.8315 7.11866 11.8565 8.14366M14.2031 5.79699C12.914 4.79949 11.4565 4.16699 9.99979 4.16699C7.08729 4.16699 4.17479 6.69449 2.59813 9.61116C2.46729 9.85366 2.46729 10.1478 2.59813 10.3903C3.38646 11.8478 4.50813 13.2078 5.79646 14.2045" stroke="#52525B" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                              </g>
+                              <defs>
+                                <clipPath id="clip0_470_1664">
+                                  <rect width="20" height="20" fill="white"/>
+                                </clipPath>
+                              </defs>
+                            </svg>
+                          ) : (
+                            <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
+                              <g clipPath="url(#clip0_470_1648)">
+                                <path d="M11.7683 8.23366C12.7442 9.20949 12.7442 10.7937 11.7683 11.7712C10.7925 12.747 9.20833 12.747 8.23083 11.7712C7.255 10.7953 7.255 9.21116 8.23083 8.23366C9.20833 7.25616 10.7917 7.25616 11.7683 8.23366Z" stroke="#52525B" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                                <path d="M2.5 10.0003C2.5 9.45116 2.62667 8.90783 2.87167 8.40699C4.13417 5.82616 6.92417 4.16699 10 4.16699C13.0758 4.16699 15.8658 5.82616 17.1283 8.40699C17.3733 8.90783 17.5 9.45116 17.5 10.0003C17.5 10.5495 17.3733 11.0928 17.1283 11.5937C15.8658 14.1745 13.0758 15.8337 10 15.8337C6.92417 15.8337 4.13417 14.1745 2.87167 11.5937C2.62667 11.0928 2.5 10.5495 2.5 10.0003Z" stroke="#52525B" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                              </g>
+                              <defs>
+                                <clipPath id="clip0_470_1648">
+                                  <rect width="20" height="20" fill="white"/>
+                                </clipPath>
+                              </defs>
+                            </svg>
+                          )
+                        }
                         color="customGray.600"
+                        bg={isFormPageHidden ? "customGray.100" : "transparent"}
                         _hover={{ bg: "customGray.100" }}
+                        onClick={() => {
+                          saveImmediatelyRef.current = true;
+                          setIsFormPageHidden((prev) => !prev);
+                        }}
                       />
                     </>
                   )}
@@ -1051,10 +1536,19 @@ export default function CalendarBuilderPage() {
                 </HStack>
 
                 {/* Preview Card */}
-                <Box w="fit-content" h={selectedPage === "Success page" ? "580px" : "460px"} bg="white" borderRadius="12px" p="0px" border="1px solid" borderColor="customGray.200" boxShadow="0 2px 8px rgba(0,0,0,0.08), 0 1px 2px rgba(0,0,0,0.04)" _focusWithin={{ boxShadow: "0 0 0 3px rgba(91, 95, 255, 0.1), 0 2px 8px rgba(0,0,0,0.08), 0 1px 2px rgba(0,0,0,0.04)" }}>
-                <HStack spacing="0px" align="stretch" w="100%" h="100%">
+                <Box w="fit-content" h={selectedPage === "Success page" ? "580px" : "484px"} p={selectedPage === "Success page" ? "0px" : "12px"} bg="white" border="1px solid" borderColor="customGray.200" boxShadow="0 2px 8px rgba(0, 0, 0, 0.08), 0 1px 2px rgba(0, 0, 0, 0.04)" borderRadius="20px" position="relative" overflow="hidden">
+                <HStack
+                  spacing="0px"
+                  align="stretch"
+                  w="100%"
+                  h="100%"
+                  filter={selectedPage === "Form page" && isFormPageHidden ? "blur(4px)" : "none"}
+                  pointerEvents={selectedPage === "Form page" && isFormPageHidden ? "none" : "auto"}
+                  userSelect={selectedPage === "Form page" && isFormPageHidden ? "none" : "auto"}
+                  transition="filter 0.4s cubic-bezier(0.4, 0, 0.2, 1)"
+                >
                   {selectedPage !== "Success page" && (
-                    <VStack spacing="16px" align="start" flex="0 0 280px" p="24px" overflowY="auto" maxH="100%">
+                    <VStack spacing="16px" align="start" w="280px" flexShrink={0} pl="16px" pr="24px" pt="24px" pb="24px" overflowY="auto" maxH="100%">
                       <HStack spacing="12px">
                         <Avatar name={ownerName} src={userAvatar || undefined} size="sm" flexShrink={0} bg="customGray.300" color="customGray.800" />
                         <VStack spacing="2px" align="start">
@@ -1076,22 +1570,30 @@ export default function CalendarBuilderPage() {
                         </HStack>
                         <HStack spacing="8px" fontSize="14px" color="customGray.700">
                           <Box>🌍</Box>
-                          <Text>Asia/Kolkata</Text>
+                          <Text>{Intl.DateTimeFormat().resolvedOptions().timeZone}</Text>
                         </HStack>
                       </VStack>
                     </VStack>
                   )}
 
                   {selectedPage === "Main page" ? (
-                    <>
-                      <Box flex="0 0 440px" display="flex" alignItems="flex-start" justifyContent="center" borderLeft="1px solid" borderColor="customGray.200" px="30px" pt="24px">
-                        <CalendarPicker />
+                    <Box display="flex" border="1px solid" borderColor="customGray.200" borderRadius="8px" overflow="hidden">
+                      <Box w="440px" flexShrink={0} display="flex" alignItems="flex-start" justifyContent="center" bg="customGray.50" px="30px" pt="24px">
+                        <CalendarPicker value={previewDate} onChange={(date) => { setPreviewDate(date); setPreviewTime(null); }} />
                       </Box>
 
-                      <VStack spacing="0px" flex="0 0 260px" borderLeft="1px solid" borderColor="customGray.200" p="0px">
+                      <VStack spacing="0px" w="260px" flexShrink={0} borderLeft="1px solid" borderColor="customGray.200" bg="customGray.50" p="0px">
                         <HStack w="100%" justify="space-between" px="30px" pt="24px" pb="12px">
-                          <Text fontSize="14px" fontWeight="600" color="customGray.800">Thu 23</Text>
-                          <Tabs variant="soft-rounded" colorScheme="gray" size="sm">
+                          <Text fontSize="14px" fontWeight="600" color="customGray.800">
+                            {previewDate.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })}
+                          </Text>
+                          <Tabs
+                            variant="soft-rounded"
+                            colorScheme="gray"
+                            size="sm"
+                            index={previewIs24Hour ? 1 : 0}
+                            onChange={(index) => setPreviewIs24Hour(index === 1)}
+                          >
                             <TabList bg="customGray.100" borderRadius="9999px" p="4px">
                               <Tab fontSize="12px" _selected={{ bg: "white", color: "customGray.800" }}>12h</Tab>
                               <Tab fontSize="12px" _selected={{ bg: "white", color: "customGray.800" }}>24h</Tab>
@@ -1099,29 +1601,58 @@ export default function CalendarBuilderPage() {
                           </Tabs>
                         </HStack>
                         <VStack spacing="12px" w="100%" overflowY="auto" maxH="380px" align="stretch" px="30px" pt="4px" pb="16px" sx={{ "&::-webkit-scrollbar": { w: "0px" }, "&::-webkit-scrollbar-track": { bg: "transparent" }, "&::-webkit-scrollbar-thumb": { bg: "transparent" } }}>
-                          {["09:00 AM", "09:15 AM", "09:30 AM", "09:45 AM", "10:00 AM", "10:15 AM", "10:30 AM", "10:45 AM", "11:00 AM"].map((time) => (
-                            <Button
-                              key={time}
-                              w="100%"
-                              h="36px"
-                              p="0px"
-                              flexShrink={0}
-                              fontSize="14px"
-                              fontWeight="400"
-                              variant="outline"
-                              borderColor="customGray.200"
-                              boxShadow="0 1px 2px rgba(0,0,0,0.05)"
-                              bg={time === "09:30 AM" ? "customGray.800" : "white"}
-                              color={time === "09:30 AM" ? "white" : "customGray.500"}
-                              _hover={{ bg: time === "09:30 AM" ? "customGray.700" : "customGray.50", borderColor: "customGray.300" }}>
-                              {time}
-                            </Button>
-                          ))}
+                          {buildTimeSlots(parseDurationMinutes(durations[0])).map((minutes) => {
+                            const label = formatTime(Math.floor(minutes / 60), minutes % 60, previewIs24Hour);
+                            const isSelected = minutes === previewTime;
+                            if (isSelected) {
+                              const compactDateLabel = previewDate.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+                              return (
+                                <Box key={minutes} w="100%" flexShrink={0} borderRadius="8px" overflow="hidden">
+                                  <Box bg="customGray.700" color="white" minH="40px" px="16px" py="8px" display="flex" flexWrap="wrap" alignItems="center" justifyContent="center" fontSize="12px" fontWeight="700" textAlign="center">
+                                    {compactDateLabel} {label}<Text as="span" fontSize="10px" fontWeight="500" ml="4px">({Intl.DateTimeFormat().resolvedOptions().timeZone})</Text>
+                                  </Box>
+                                  <Button
+                                    w="100%"
+                                    h="40px"
+                                    bg="customGray.800"
+                                    color="white"
+                                    fontSize="15px"
+                                    fontWeight="600"
+                                    borderRadius="0"
+                                    _hover={{ bg: "customGray.900" }}
+                                    onClick={() => setSelectedPage(isFormPageHidden ? "Success page" : "Form page")}
+                                  >
+                                    Confirm
+                                  </Button>
+                                </Box>
+                              );
+                            }
+                            return (
+                              <Button
+                                key={minutes}
+                                w="100%"
+                                h="36px"
+                                p="0px"
+                                flexShrink={0}
+                                fontSize="14px"
+                                fontWeight="400"
+                                variant="outline"
+                                borderColor="customGray.200"
+                                boxShadow="0 1px 2px rgba(0,0,0,0.05)"
+                                bg="white"
+                                color="customGray.500"
+                                _hover={{ bg: "customGray.50", borderColor: "customGray.300" }}
+                                onClick={() => setPreviewTime(minutes)}
+                              >
+                                {label}
+                              </Button>
+                            );
+                          })}
                         </VStack>
                       </VStack>
-                    </>
+                    </Box>
                   ) : selectedPage === "Form page" ? (
-                    <VStack spacing="16px" flex="1" align="stretch" borderLeft="1px solid" borderColor="customGray.200" p="24px" overflowY="auto">
+                    <VStack spacing="16px" flex="1" align="stretch" bg="customGray.50" border="1px solid" borderColor="customGray.200" borderRadius="8px" p="24px" overflowY="auto">
                       <VStack spacing="8px" align="stretch">
                         <Text fontSize="14px" fontWeight="600" color="customGray.800">Your name <Text as="span" color="red.500">*</Text></Text>
                         <Input
@@ -1223,10 +1754,13 @@ export default function CalendarBuilderPage() {
                           <VStack spacing="4px" align="start">
                             <Text fontSize="14px" fontWeight="600" color="customGray.800">Who</Text>
                             <VStack spacing="8px" align="start">
-                              <HStack spacing="4px">
-                                <Text fontSize="14px" color="customGray.700">{ownerName}</Text>
-                                <Text fontSize="xs" fontWeight="500" bg="blue.100" color="blue.700" px="6px" py="2px" borderRadius="4px">Host</Text>
-                              </HStack>
+                              <VStack spacing="2px" align="start">
+                                <HStack spacing="4px">
+                                  <Text fontSize="14px" color="customGray.700">{ownerName || userName}</Text>
+                                  <Text fontSize="xs" fontWeight="500" bg="blue.100" color="blue.700" px="6px" py="2px" borderRadius="4px">Host</Text>
+                                </HStack>
+                                {ownerEmail && <Text fontSize="14px" color="customGray.600">{ownerEmail}</Text>}
+                              </VStack>
                               <VStack spacing="2px" align="start">
                                 <HStack spacing="4px">
                                   <Text fontSize="14px" color="customGray.700">Jane Doe</Text>
@@ -1264,10 +1798,38 @@ export default function CalendarBuilderPage() {
                     </VStack>
                   )}
                 </HStack>
+                {selectedPage === "Form page" && (
+                  <Box
+                    position="absolute"
+                    inset="0"
+                    display="flex"
+                    alignItems="center"
+                    justifyContent="center"
+                    bg="rgba(255, 255, 255, 0.5)"
+                    opacity={isFormPageHidden ? 1 : 0}
+                    pointerEvents="none"
+                    transition="opacity 0.4s cubic-bezier(0.4, 0, 0.2, 1)"
+                  >
+                    <VStack spacing="12px">
+                      <svg width="63" height="63" viewBox="0 0 126 126" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <rect x="8" y="8" width="110" height="110" rx="34.9206" fill="#18181B"/>
+                        <rect x="4.5" y="4.5" width="117" height="117" rx="38.4206" stroke="#27272A" strokeOpacity="0.08" strokeWidth="7"/>
+                        <path d="M62.9994 88.4998C77.0829 88.4998 88.4998 77.0829 88.4998 62.9994C88.4998 48.9159 77.0829 37.499 62.9994 37.499C48.9159 37.499 37.499 48.9159 37.499 62.9994C37.499 77.0829 48.9159 88.4998 62.9994 88.4998Z" fill="#F4F4F5"/>
+                        <path d="M58.749 75.0418H67.2491M63.4496 74.6877V60.875H59.8115" stroke="#18181B" strokeWidth="3.18755" strokeLinecap="round" strokeLinejoin="round"/>
+                        <circle cx="62.4678" cy="52.9063" r="1.59377" fill="#18181B" stroke="#18181B" strokeWidth="2.12503"/>
+                      </svg>
+                      <VStack spacing="4px">
+                        <Text fontSize="16px" fontWeight="600" color="customGray.800">This flow is hidden.</Text>
+                        <Text fontSize="14px" color="customGray.700">Select the eye icon to show it again.</Text>
+                      </VStack>
+                    </VStack>
+                  </Box>
+                )}
               </Box>
               </VStack>
             </Box>
           </HStack>
+          )}
         </VStack>
       </Box>
 
@@ -1279,12 +1841,12 @@ export default function CalendarBuilderPage() {
         setSelectedPage={setSelectedPage}
       />
 
-      <Modal isOpen={isShareOpen} onClose={onShareClose} size="lg">
+      <Modal isOpen={isShareOpen} onClose={onShareClose} size="lg" scrollBehavior="inside">
         <ModalOverlay />
-        <ModalContent>
+        <ModalContent maxH="85vh">
           <ModalHeader fontSize="16px" fontWeight="600">Share this booking page</ModalHeader>
           <ModalCloseButton />
-          <ModalBody pb="24px">
+          <ModalBody pb="24px" overflowY="auto">
             <VStack align="stretch" spacing="20px">
               <Box>
                 <Text fontSize="sm" fontWeight="600" color="customGray.800" mb="4px">Widget</Text>
@@ -1331,6 +1893,33 @@ export default function CalendarBuilderPage() {
                     onClick={() => {
                       navigator.clipboard.writeText(iframeEmbedCode);
                       toast({ title: "Iframe code copied", status: "success", duration: 1500 });
+                    }}
+                  />
+                </Box>
+              </Box>
+
+              <Box>
+                <Text fontSize="sm" fontWeight="600" color="customGray.800" mb="4px">Webhook</Text>
+                <Text fontSize="xs" color="customGray.500" mb="10px">
+                  Paste this into a third-party form&apos;s webhook/POST-URL field (e.g. Framer&apos;s Webhook action) to have its submissions show up as leads on this event&apos;s Results tab. Leave any &quot;Secret&quot; field on their side blank — this URL is the only credential needed.
+                </Text>
+                <Box position="relative" bg="customGray.50" border="1px solid" borderColor="customGray.200" borderRadius="8px" p="12px" pr="36px" maxH="140px" overflowY="auto">
+                  <Text as="pre" fontSize="xs" fontFamily="mono" color="customGray.700" whiteSpace="pre-wrap" wordBreak="break-all">
+                    {webhookUrl}
+                  </Text>
+                  <IconButton
+                    aria-label="Copy webhook URL"
+                    icon={<CopyIcon w="12px" h="12px" />}
+                    size="xs"
+                    variant="ghost"
+                    position="absolute"
+                    top="8px"
+                    right="8px"
+                    color="customGray.500"
+                    _hover={{ bg: "customGray.200" }}
+                    onClick={() => {
+                      navigator.clipboard.writeText(webhookUrl);
+                      toast({ title: "Webhook URL copied", status: "success", duration: 1500 });
                     }}
                   />
                 </Box>

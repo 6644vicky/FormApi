@@ -83,6 +83,30 @@ const theme = extendTheme({
       800: "#822727",
       900: "#63171B",
     },
+    yellow: {
+      50: "#FFFFF0",
+      100: "#FEFCBF",
+      200: "#FAF089",
+      300: "#F6E05E",
+      400: "#ECC94B",
+      500: "#D69E2E",
+      600: "#B7791F",
+      700: "#975A16",
+      800: "#744210",
+      900: "#5F370E",
+    },
+    orange: {
+      50: "#FFFAF0",
+      100: "#FEEBC8",
+      200: "#FBD38D",
+      300: "#F6AD55",
+      400: "#ED8936",
+      500: "#DD6B20",
+      600: "#C05621",
+      700: "#9C4221",
+      800: "#7B341E",
+      900: "#652B19",
+    },
     // Single-shade semantic accents, pulled from what's actually used
     // across the app (not full 50-900 scales — these only ever appear as
     // one shade each).

@@ -178,6 +178,7 @@ export default function BuilderPage() {
     handler: () => { if (searchQuery === "") setIsSearchExpanded(false); },
   });
   const [calendarEvents, setCalendarEvents] = useState<Array<{ id: number; title: string; meeting_link: string; slug: string; updated_at: string; status: string }>>([]);
+  const [bookingCounts, setBookingCounts] = useState<Record<number, number>>({});
   const [chatbotAgents, setChatbotAgents] = useState<Array<{ id: number; name: string; status: string; updated_at: string }>>([]);
   const [selectedEventIds, setSelectedEventIds] = useState<Set<number>>(new Set());
   const [isBulkDeleting, setIsBulkDeleting] = useState(false);
@@ -383,6 +384,7 @@ export default function BuilderPage() {
       // scope the listing to, so show an empty list rather than every event.
       if (!selectedAgent) {
         setCalendarEvents([]);
+        setBookingCounts({});
         return;
       }
 
@@ -433,6 +435,26 @@ export default function BuilderPage() {
         setCalendarEvents(
           rows.map((r) => ({ ...r, title: numbered.get(r.id) ?? r.title }))
         );
+
+        // One count per event, from the real bookings guests have made.
+        const eventIds = rows.map((r) => r.id);
+        if (eventIds.length > 0) {
+          const { data: bookingRows, error: bookingError } = await supabase
+            .from("bookings")
+            .select("event_id")
+            .in("event_id", eventIds);
+          if (bookingError) {
+            console.log("Error loading booking counts:", bookingError);
+          } else {
+            const counts: Record<number, number> = {};
+            (bookingRows || []).forEach((b) => {
+              counts[b.event_id] = (counts[b.event_id] ?? 0) + 1;
+            });
+            setBookingCounts(counts);
+          }
+        } else {
+          setBookingCounts({});
+        }
       }
     } catch (error) {
       console.error("Error loading calendar events:", error);
@@ -895,7 +917,20 @@ export default function BuilderPage() {
       >
 
         <HStack flex={1} h="100%" align="stretch" spacing={0} bg="white" borderRadius="12px" border="1px solid" borderColor="customGray.200" overflow="hidden">
-          <VStack w={agents.length === 0 ? "0px" : isWorkspaceListCollapsed ? "0px" : "255px"} h="100%" align="stretch" spacing={0} borderRight={agents.length === 0 || isWorkspaceListCollapsed ? "none" : "1px solid"} borderColor="customGray.200" overflow="hidden" transition={enableSidebarTransition ? "width 0.3s ease-in-out" : "none"}>
+          <VStack w={agents.length === 0 ? "0px" : isWorkspaceListCollapsed ? "0px" : "255px"} h="100%" align="stretch" spacing={0} borderRight={agents.length === 0 || isWorkspaceListCollapsed ? "none" : "1px solid"} borderColor="customGray.200" overflow="hidden" transition={enableSidebarTransition ? "width 0.4s cubic-bezier(0.4, 0, 0.2, 1)" : "none"}>
+            {/* Fixed width so it never reflows as the outer container's width
+                animates. Sliding this by the same amount, on the same
+                timing, as the outer width collapses makes it read as the
+                panel sliding out to the left rather than being squeezed. */}
+            <VStack
+              w="255px"
+              h="100%"
+              flexShrink={0}
+              align="stretch"
+              spacing={0}
+              transform={isWorkspaceListCollapsed ? "translateX(-255px)" : "translateX(0)"}
+              transition={enableSidebarTransition ? "transform 0.4s cubic-bezier(0.4, 0, 0.2, 1)" : "none"}
+            >
             <HStack h="64px" align="center" justify="space-between" pl="20px" pr="16px" pt="14px" pb="16px">
               <Text fontSize="base" fontWeight="medium" color="customGray.800">
                 Workspace
@@ -960,6 +995,7 @@ export default function BuilderPage() {
                   </Text>
                 </Box>
               ))}
+            </VStack>
             </VStack>
           </VStack>
           <VStack flex={1} h="100%" align="stretch" spacing={0} overflow="hidden">
@@ -1308,7 +1344,7 @@ export default function BuilderPage() {
                           <Td h="50px" py="0" px="0" borderBottomColor="customGray.200">
                             {username && event.slug ? (
                               <Tooltip
-                                label={`formsparrow.com/${username}/${event.slug}`}
+                                label={`webforms.com/${username}/${event.slug}`}
                                 placement="top"
                                 hasArrow
                                 bg="customGray.800"
@@ -1326,7 +1362,7 @@ export default function BuilderPage() {
                                     window.open(`/${username}/${event.slug}`, "_blank");
                                   }}
                                 >
-                                  formsparrow.com/{username}/{event.slug}
+                                  webforms.com/{username}/{event.slug}
                                 </Text>
                               </Tooltip>
                             ) : (
@@ -1339,7 +1375,7 @@ export default function BuilderPage() {
                             </Box>
                           </Td>
                           <Td h="50px" py="0" px="0" borderBottomColor="customGray.200">
-                            <Text fontSize="sm" color="customGray.600">0</Text>
+                            <Text fontSize="sm" color="customGray.600">{bookingCounts[event.id] ?? 0}</Text>
                           </Td>
                           <Td h="50px" py="0" pr="24px" pl="0" borderBottomColor="customGray.200">
                             <Text fontSize="sm" color="customGray.600">{updatedLabel}</Text>

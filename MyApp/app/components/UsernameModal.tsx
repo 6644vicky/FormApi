@@ -88,7 +88,7 @@ export default function UsernameModal({ isOpen, onClose, currentUsername, onSave
         </ModalHeader>
         <ModalBody pt="md">
           <Text fontSize="sm" color="customGray.600" mb="12px">
-            This is the public link people use to book time with you: formsparrow.com/{value || "username"}/...
+            This is the public link people use to book time with you: webforms.com/{value || "username"}/...
           </Text>
           <UsernameField
             value={value}

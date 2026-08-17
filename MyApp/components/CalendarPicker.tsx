@@ -81,8 +81,18 @@ export function CalendarPicker({ value = new Date(), onChange }: CalendarPickerP
     );
   };
 
+  const isToday = (day: number | null) => {
+    if (!day) return false;
+    const today = new Date();
+    return (
+      day === today.getDate() &&
+      currentDate.getMonth() === today.getMonth() &&
+      currentDate.getFullYear() === today.getFullYear()
+    );
+  };
+
   return (
-    <VStack spacing="14px" w="fit-content" alignItems="center">
+    <VStack spacing="14px" w="100%" alignItems="center">
       {/* Header */}
       <HStack w="100%" justify="space-between" align="center">
         <Button
@@ -125,7 +135,7 @@ export function CalendarPicker({ value = new Date(), onChange }: CalendarPickerP
       </HStack>
 
       {/* Weekday headers */}
-      <Grid templateColumns="repeat(7, 1fr)" gap="10px" w="100%">
+      <Grid templateColumns="repeat(7, 1fr)" gap="8px" w="100%">
         {dayNames.map((day) => (
           <Text
             key={day}
@@ -141,30 +151,35 @@ export function CalendarPicker({ value = new Date(), onChange }: CalendarPickerP
       </Grid>
 
       {/* Calendar days */}
-      <Grid templateColumns="repeat(7, 1fr)" gap="10px" w="100%">
+      <Grid templateColumns="repeat(7, 1fr)" gap="8px" w="100%" justifyItems="center">
         {days.map((day, index) => {
           const isPast = day ? isPastDate(currentDate.getFullYear(), currentDate.getMonth(), day) : false;
           return (
             <Box
               key={index}
-              w="46px"
-              h="46px"
+              position="relative"
+              w="100%"
+              maxW="60px"
+              aspectRatio="1"
               display="flex"
               alignItems="center"
               justifyContent="center"
               textAlign="center"
               fontSize="xs"
-              fontWeight="500"
+              fontWeight={isSelected(day) ? "600" : "500"}
               borderRadius="4px"
               cursor={day && !isPast ? "pointer" : isPast ? "not-allowed" : "default"}
-              bg={isSelected(day) ? "#5B5FFF" : isPast ? "customGray.50" : "customGray.100"}
+              bg={isSelected(day) ? "customGray.800" : isPast || isToday(day) ? "transparent" : "customGray.100"}
               color={isSelected(day) ? "white" : isPast ? "customGray.400" : "customGray.900"}
-              _hover={day && !isPast ? { bg: isSelected(day) ? "#4D52F0" : "customGray.200" } : {}}
+              _hover={day && !isPast && !isSelected(day) ? { bg: "customGray.200" } : {}}
               onClick={() => day && !isPast && handleDateClick(day)}
-              opacity={!day ? 0 : isPast ? 0.5 : 1}
+              opacity={!day ? 0 : 1}
               pointerEvents={isPast ? "none" : "auto"}
             >
               {day}
+              {isToday(day) && !isSelected(day) && (
+                <Box position="absolute" bottom="4px" w="4px" h="4px" borderRadius="full" bg="customGray.800" />
+              )}
             </Box>
           );
         })}

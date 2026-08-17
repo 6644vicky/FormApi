@@ -5,6 +5,8 @@ import { useSearchParams } from "next/navigation";
 import { Box, VStack, HStack, Text, Button, Input, Textarea, Avatar, Tabs, TabList, Tab } from "@chakra-ui/react";
 import { CalendarPicker } from "@/components/CalendarPicker";
 import { supabase } from "@/lib/supabase";
+import { parseDurationMinutes, formatTime, buildTimeSlots } from "@/lib/bookingTime";
+import FullPageLoader from "@/app/components/FullPageLoader";
 
 type EventInfo = {
   id: number;
@@ -16,38 +18,6 @@ type EventInfo = {
   durations: string[];
   hideFormPage: boolean;
 };
-
-// Duration strings are stored as e.g. "15 min", "30 min", "1 hour" — this
-// only needs the leading number to lay out the day's slots.
-function parseDurationMinutes(duration: string | undefined): number {
-  if (!duration) return 30;
-  const match = duration.match(/\d+/);
-  const value = match ? parseInt(match[0], 10) : 30;
-  return duration.toLowerCase().includes("hour") ? value * 60 : value;
-}
-
-function formatTime(hour: number, minute: number, is24Hour: boolean): string {
-  if (is24Hour) {
-    return `${hour.toString().padStart(2, "0")}:${minute.toString().padStart(2, "0")}`;
-  }
-  const period = hour >= 12 ? "PM" : "AM";
-  const displayHour = hour % 12 === 0 ? 12 : hour % 12;
-  return `${displayHour}:${minute.toString().padStart(2, "0")} ${period}`;
-}
-
-// Slots are minutes-since-midnight rather than pre-formatted strings, so
-// toggling 12h/24h can reformat the label without losing which slot is
-// selected (a formatted string would stop matching once the format changes).
-function buildTimeSlots(stepMinutes: number): number[] {
-  const slots: number[] = [];
-  let totalMinutes = 9 * 60; // 9:00 AM
-  const endMinutes = 17 * 60; // 5:00 PM
-  while (totalMinutes < endMinutes) {
-    slots.push(totalMinutes);
-    totalMinutes += stepMinutes;
-  }
-  return slots;
-}
 
 // Renders the public booking flow for a resolved event. Used by both
 // /book/[id] (looks up by numeric id) and /[username]/[slug] (looks up by
@@ -95,7 +65,7 @@ export function PublicBookingView({ fetchUrl }: { fetchUrl: string }) {
   }, [searchParams]);
 
   useEffect(() => {
-    fetch(fetchUrl)
+    fetch(fetchUrl, { cache: "no-store" })
       .then((res) => {
         if (!res.ok) throw new Error("not found");
         return res.json();
@@ -106,11 +76,7 @@ export function PublicBookingView({ fetchUrl }: { fetchUrl: string }) {
   }, [fetchUrl]);
 
   if (isLoading) {
-    return (
-      <Box h="100vh" display="flex" alignItems="center" justifyContent="center">
-        <Text fontSize="sm" color="customGray.500">Loading...</Text>
-      </Box>
-    );
+    return <FullPageLoader />;
   }
 
   if (notFound || !event) {
@@ -178,7 +144,7 @@ export function PublicBookingView({ fetchUrl }: { fetchUrl: string }) {
           )}
 
           {step === "main" && (
-            <Box display="flex" borderRadius="8px" overflow="hidden">
+            <Box display="flex" border="1px solid" borderColor="customGray.200" borderRadius="8px" overflow="hidden">
               <Box w="440px" flexShrink={0} display="flex" alignItems="flex-start" justifyContent="center" bg="customGray.50" px="24px" pt="24px" pb="24px" overflowY="hidden">
                 <CalendarPicker value={selectedDate} onChange={(date) => { setSelectedDate(date); setSelectedTime(null); }} />
               </Box>
@@ -214,12 +180,12 @@ export function PublicBookingView({ fetchUrl }: { fetchUrl: string }) {
                       >
                         {isSelected ? (
                           <Box>
-                            <Box bg="customGray.700" color="white" px="16px" py="10px" fontSize="14px" fontWeight="700" textAlign="center">
-                              {compactDateLabel} {label} <Text as="span" fontWeight="500">({guestTimezone})</Text>
+                            <Box bg="customGray.700" color="white" minH="40px" px="16px" py="8px" display="flex" flexWrap="wrap" alignItems="center" justifyContent="center" fontSize="12px" fontWeight="700" textAlign="center">
+                              {compactDateLabel} {label}<Text as="span" fontSize="10px" fontWeight="500" ml="4px">({guestTimezone})</Text>
                             </Box>
                             <Button
                               w="100%"
-                              h="44px"
+                              h="40px"
                               bg="customGray.800"
                               color="white"
                               fontSize="15px"
@@ -267,7 +233,7 @@ export function PublicBookingView({ fetchUrl }: { fetchUrl: string }) {
           )}
 
           {step === "form" && (
-            <VStack spacing="16px" flex="1" minW="416px" align="stretch" bg="customGray.50" borderRadius="8px" p="24px" overflowY="auto">
+            <VStack spacing="16px" flex="1" minW="416px" align="stretch" bg="customGray.50" border="1px solid" borderColor="customGray.200" borderRadius="8px" p="24px" overflowY="auto">
               <Text fontSize="14px" color="customGray.600">{fullDateLabel} · {selectedTimeLabel}</Text>
               <VStack spacing="8px" align="stretch">
                 <Text fontSize="14px" fontWeight="600" color="customGray.800">Your name <Text as="span" color="red.500">*</Text></Text>

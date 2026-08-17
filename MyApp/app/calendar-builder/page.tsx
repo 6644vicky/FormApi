@@ -1,12 +1,13 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { Box, VStack, HStack, Text, Button, Heading, IconButton, Input, Textarea, useToast, Tabs, TabList, Tab, Avatar, Menu, MenuButton, MenuList, MenuItem, Modal, ModalOverlay, ModalContent, ModalHeader, ModalBody, ModalCloseButton, useDisclosure, Checkbox, Badge, Divider, Tag, TagLabel, TagCloseButton, Progress, Tooltip } from "@chakra-ui/react";
-import { ArrowBackIcon, DeleteIcon, AddIcon, ChevronDownIcon, DragHandleIcon, CloseIcon, CopyIcon, InfoOutlineIcon } from "@chakra-ui/icons";
-import { useState, useEffect, useRef, useMemo } from "react";
+import { Box, VStack, HStack, Text, Button, Heading, IconButton, Input, Textarea, useToast, Tabs, TabList, Tab, Avatar, Menu, MenuButton, MenuList, MenuItem, Modal, ModalOverlay, ModalContent, ModalHeader, ModalBody, ModalCloseButton, useDisclosure, Badge, Divider, Tag, TagLabel, TagCloseButton, Progress, Tooltip } from "@chakra-ui/react";
+import { ArrowBackIcon, ArrowForwardIcon, DeleteIcon, AddIcon, ChevronDownIcon, DragHandleIcon, CopyIcon, InfoOutlineIcon } from "@chakra-ui/icons";
+import { useState, useEffect, useRef, useMemo, ComponentProps } from "react";
 import { CalendarPicker } from "@/components/CalendarPicker";
 import { AddPage } from "@/components/AddPage";
 import { supabase } from "@/lib/supabase";
+import { parseDurationMinutes, formatTime, buildTimeSlots } from "@/lib/bookingTime";
 import FullPageLoader from "@/app/components/FullPageLoader";
 import UsernameModal from "@/app/components/UsernameModal";
 
@@ -23,6 +24,58 @@ function slugify(text: string): string {
     .replace(/^-|-$/g, "");
 }
 
+const WEEK_DAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+
+// Parses freeform text like "9:00 AM" / "09:00pm" back into minutes-since-
+// midnight. Returns null when it doesn't look like a time yet, so the field
+// below can hold an in-progress edit instead of snapping back on every
+// keystroke.
+function parseTimeText(text: string): number | null {
+  const match = text.trim().match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/i);
+  if (!match) return null;
+  const hour12 = parseInt(match[1], 10);
+  const minute = parseInt(match[2], 10);
+  if (hour12 < 1 || hour12 > 12 || minute > 59) return null;
+  const isPM = match[3].toUpperCase() === "PM";
+  const hour24 = (hour12 % 12) + (isPM ? 12 : 0);
+  return hour24 * 60 + minute;
+}
+
+// Plain text field for a time value — no native picker, no dropdown. Holds
+// its own draft text so the user can type freely; commits back to the
+// parent's minutes-since-midnight value on blur, or reverts if what's typed
+// still isn't a valid time.
+function TimeTextInput({
+  minutes,
+  onCommit,
+  ...inputProps
+}: {
+  minutes: number;
+  onCommit: (minutes: number) => void;
+} & Omit<ComponentProps<typeof Input>, "value" | "onChange" | "onBlur">) {
+  const [text, setText] = useState(formatTime(Math.floor(minutes / 60), minutes % 60, false));
+
+  useEffect(() => {
+    setText(formatTime(Math.floor(minutes / 60), minutes % 60, false));
+  }, [minutes]);
+
+  return (
+    <Input
+      {...inputProps}
+      value={text}
+      onChange={(e) => setText(e.target.value)}
+      onBlur={() => {
+        const parsed = parseTimeText(text);
+        if (parsed !== null) {
+          onCommit(parsed);
+        } else {
+          setText(formatTime(Math.floor(minutes / 60), minutes % 60, false));
+        }
+      }}
+    />
+  );
+}
+
 export default function CalendarBuilderPage() {
   const router = useRouter();
   // Default every toast on this page to the top; individual calls can override.
@@ -33,6 +86,25 @@ export default function CalendarBuilderPage() {
   const [tabIndex, setTabIndex] = useState(0);
   const [selectedPage, setSelectedPage] = useState("Main page");
   const [isFormPageHidden, setIsFormPageHidden] = useState(false);
+  // Weekly hours summary, revealed by "Edit availability". Read-only display
+  // for now — each day holds a list of {start, end} ranges in
+  // minutes-since-midnight, empty meaning unavailable that day.
+  const isAvailabilityOpen = true;
+  const [weeklyHours, setWeeklyHours] = useState<Record<string, { start: number; end: number }[]>>({
+    Sunday: [],
+    Monday: [{ start: 9 * 60, end: 17 * 60 }],
+    Tuesday: [{ start: 9 * 60, end: 17 * 60 }],
+    Wednesday: [{ start: 9 * 60, end: 17 * 60 }],
+    Thursday: [{ start: 9 * 60, end: 17 * 60 }],
+    Friday: [{ start: 9 * 60, end: 17 * 60 }],
+    Saturday: [],
+  });
+  // Drives the "Main page" preview's calendar/time-slot list — the same
+  // state shape PublicBookingView uses, so the preview behaves like the real
+  // booking flow instead of a static mockup with hardcoded slots.
+  const [previewDate, setPreviewDate] = useState(new Date());
+  const [previewTime, setPreviewTime] = useState<number | null>(null);
+  const [previewIs24Hour, setPreviewIs24Hour] = useState(false);
   const [bookings, setBookings] = useState<Array<{
     id: number;
     guest_name: string;
@@ -96,6 +168,13 @@ export default function CalendarBuilderPage() {
   const lastSavedSnapshotRef = useRef<string | null>(null);
   // True while an insert is awaiting a response, to prevent duplicate rows.
   const insertInFlightRef = useRef(false);
+  // Chains saves one after another instead of firing them concurrently — two
+  // overlapping updates (e.g. rapidly toggling hide-form on then off) would
+  // otherwise race at the network level, and whichever request happened to
+  // reach the DB last would win, regardless of which click was actually more
+  // recent. Awaiting the previous save before starting the next one
+  // guarantees writes land in the order the user made them.
+  const savePromiseRef = useRef<Promise<void>>(Promise.resolve());
   // Workspace this event belongs to. Comes from the ?workspace= param for a new
   // event, or from the stored row when editing an existing one. Held in a ref so
   // it never counts as an edit in the autosave snapshot.
@@ -320,7 +399,7 @@ export default function CalendarBuilderPage() {
     saveImmediatelyRef.current = false;
     const saveTimer = setTimeout(() => {
       lastSavedSnapshotRef.current = snapshot;
-      saveEventToDatabase();
+      savePromiseRef.current = savePromiseRef.current.then(() => saveEventToDatabase());
     }, delay);
 
     return () => clearTimeout(saveTimer);
@@ -562,6 +641,20 @@ export default function CalendarBuilderPage() {
     }
   };
 
+  const addAvailabilityRange = (day: string) => {
+    setWeeklyHours((prev) => ({
+      ...prev,
+      [day]: [...prev[day], { start: 9 * 60, end: 17 * 60 }],
+    }));
+  };
+
+  const updateAvailabilityRange = (day: string, index: number, field: "start" | "end", minutes: number) => {
+    setWeeklyHours((prev) => ({
+      ...prev,
+      [day]: prev[day].map((range, i) => (i === index ? { ...range, [field]: minutes } : range)),
+    }));
+  };
+
   if (isLoading) {
     return <FullPageLoader />;
   }
@@ -750,6 +843,109 @@ export default function CalendarBuilderPage() {
                 </VStack>
               )}
             </Box>
+          ) : tabIndex === 2 ? (
+            <HStack align="stretch" flex="1" w="100%" overflowY="auto" p="0px" bg="customGray.50" spacing="0px">
+            <HStack align="stretch" flex="1" spacing="0px" overflow="hidden">
+              <Box w="255px" flexShrink={0} h="100%" bg="white" overflow="hidden">
+                <VStack align="stretch" spacing="4px" px="12px" pb="12px">
+                  <Text fontSize="11px" fontWeight="500" textTransform="uppercase" letterSpacing="0.04em" color="customGray.800" px="16px" pt="16px" pb="8px">
+                    Configure
+                  </Text>
+                  {["Availability", "Reschedule and cancel", "Limits & buffers", "Privacy and security"].map((label, i) => (
+                    <Box
+                      key={i}
+                      h="32px"
+                      px="14px"
+                      display="flex"
+                      alignItems="center"
+                      borderRadius="8px"
+                      bg={i === 0 ? "customGray.100" : "transparent"}
+                      cursor="pointer"
+                      _hover={{ bg: "customGray.50" }}
+                    >
+                      <Text fontSize="14px" fontWeight={i === 0 ? "500" : "400"} color={i === 0 ? "customGray.800" : "customGray.500"}>{label}</Text>
+                    </Box>
+                  ))}
+                </VStack>
+              </Box>
+
+              <Box flex="1" h="100%" bg="white" borderLeft="1px solid" borderColor="customGray.200" overflow="hidden" display="flex" flexDirection="column">
+                <Box flex="1" overflowY="auto" bg="customGray.50">
+                <Box w="688px" mx="auto" pt="48px" pb="40px">
+                  <Box>
+                    <Text fontSize="22px" fontWeight="500" color="customGray.800" mb="2px">Availability</Text>
+                    <Text fontSize="14px" color="customGray.500" mb="48px">Weekly hours, buffers, and booking limits</Text>
+                  </Box>
+
+
+                  {isAvailabilityOpen && (
+                    <>
+                    <Text fontSize="18px" fontWeight="500" color="customGray.800">Weekly hours</Text>
+                    <Box bg="white" border="1px solid" borderColor="customGray.200" borderRadius="16px" p="0px" mt="24px" mb="16px">
+                      <VStack align="stretch" spacing="0px">
+                        {(() => {
+                          type Row = { day: string; range: { start: number; end: number } | null; rangeIndex: number };
+                          const rows = WEEK_DAYS.flatMap<Row>((day) => {
+                            const ranges = weeklyHours[day];
+                            return ranges.length === 0
+                              ? [{ day, range: null, rangeIndex: -1 }]
+                              : ranges.map((range, rangeIndex) => ({ day, range, rangeIndex }));
+                          });
+                          return rows.map((row, i) => (
+                            <Box key={`${row.day}-${row.rangeIndex}`} borderBottom={i < rows.length - 1 ? "1px solid" : "none"} borderColor="customGray.200">
+                              <HStack align="center" spacing="16px" px="24px" py="16px">
+                                <Text fontSize="14px" fontWeight="600" color="customGray.800" w="90px" flexShrink={0}>
+                                  {row.day}
+                                </Text>
+                                {row.range === null ? (
+                                  <Text flex="1" fontSize="14px" color="customGray.400">Unavailable</Text>
+                                ) : (
+                                  <HStack flex="1" spacing="8px">
+                                    <TimeTextInput
+                                      minutes={row.range.start}
+                                      onCommit={(minutes) => updateAvailabilityRange(row.day, row.rangeIndex, "start", minutes)}
+                                      bg="customGray.100"
+                                      border="none"
+                                      borderRadius="8px"
+                                      size="sm"
+                                      w="140px"
+                                    />
+                                    <Text color="customGray.400">-</Text>
+                                    <TimeTextInput
+                                      minutes={row.range.end}
+                                      onCommit={(minutes) => updateAvailabilityRange(row.day, row.rangeIndex, "end", minutes)}
+                                      bg="customGray.100"
+                                      border="none"
+                                      borderRadius="8px"
+                                      size="sm"
+                                      w="140px"
+                                    />
+                                  </HStack>
+                                )}
+                                <Tooltip label="Add time" placement="top">
+                                  <IconButton
+                                    aria-label={`Add a time range for ${row.day}`}
+                                    icon={<AddIcon w="12px" h="12px" />}
+                                    size="sm"
+                                    variant="ghost"
+                                    color="customGray.500"
+                                    onClick={() => addAvailabilityRange(row.day)}
+                                  />
+                                </Tooltip>
+                              </HStack>
+                            </Box>
+                          ));
+                        })()}
+                      </VStack>
+                    </Box>
+                    </>
+                  )}
+
+                </Box>
+                </Box>
+              </Box>
+            </HStack>
+            </HStack>
           ) : (
           <HStack spacing="0px" flex="1" align="stretch" w="100%" overflow="hidden">
             {/* Left Sidebar */}
@@ -1228,6 +1424,37 @@ export default function CalendarBuilderPage() {
                   borderColor="customGray.200"
                   boxShadow="0 2px 4px rgba(0,0,0,0.04)"
                 >
+                  <IconButton
+                    aria-label={selectedPage === "Main page" ? "Go to Form page" : "Go back"}
+                    size="sm"
+                    variant="ghost"
+                    icon={
+                      selectedPage === "Main page" ? (
+                        <ArrowForwardIcon w="16px" h="16px" />
+                      ) : (
+                        <ArrowBackIcon w="16px" h="16px" />
+                      )
+                    }
+                    _hover={{ bg: "customGray.100" }}
+                    onClick={
+                      selectedPage === "Main page"
+                        ? () => setSelectedPage("Form page")
+                        : selectedPage === "Form page"
+                        ? () => setSelectedPage("Main page")
+                        : () => setSelectedPage("Form page")
+                    }
+                  />
+                  {selectedPage === "Form page" && (
+                    <IconButton
+                      aria-label="Go to Success page"
+                      size="sm"
+                      variant="ghost"
+                      icon={<ArrowForwardIcon w="16px" h="16px" />}
+                      _hover={{ bg: "customGray.100" }}
+                      onClick={() => setSelectedPage("Success page")}
+                    />
+                  )}
+                  <Box w="1px" h="16px" bg="customGray.200" mx="2px" />
                   <Menu>
                     <MenuButton
                       as={Button}
@@ -1295,8 +1522,12 @@ export default function CalendarBuilderPage() {
                           )
                         }
                         color="customGray.600"
+                        bg={isFormPageHidden ? "customGray.100" : "transparent"}
                         _hover={{ bg: "customGray.100" }}
-                        onClick={() => setIsFormPageHidden((prev) => !prev)}
+                        onClick={() => {
+                          saveImmediatelyRef.current = true;
+                          setIsFormPageHidden((prev) => !prev);
+                        }}
                       />
                     </>
                   )}
@@ -1339,22 +1570,30 @@ export default function CalendarBuilderPage() {
                         </HStack>
                         <HStack spacing="8px" fontSize="14px" color="customGray.700">
                           <Box>🌍</Box>
-                          <Text>Asia/Kolkata</Text>
+                          <Text>{Intl.DateTimeFormat().resolvedOptions().timeZone}</Text>
                         </HStack>
                       </VStack>
                     </VStack>
                   )}
 
                   {selectedPage === "Main page" ? (
-                    <Box display="flex" borderRadius="8px" overflow="hidden">
+                    <Box display="flex" border="1px solid" borderColor="customGray.200" borderRadius="8px" overflow="hidden">
                       <Box w="440px" flexShrink={0} display="flex" alignItems="flex-start" justifyContent="center" bg="customGray.50" px="30px" pt="24px">
-                        <CalendarPicker />
+                        <CalendarPicker value={previewDate} onChange={(date) => { setPreviewDate(date); setPreviewTime(null); }} />
                       </Box>
 
                       <VStack spacing="0px" w="260px" flexShrink={0} borderLeft="1px solid" borderColor="customGray.200" bg="customGray.50" p="0px">
                         <HStack w="100%" justify="space-between" px="30px" pt="24px" pb="12px">
-                          <Text fontSize="14px" fontWeight="600" color="customGray.800">Thu 23</Text>
-                          <Tabs variant="soft-rounded" colorScheme="gray" size="sm">
+                          <Text fontSize="14px" fontWeight="600" color="customGray.800">
+                            {previewDate.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })}
+                          </Text>
+                          <Tabs
+                            variant="soft-rounded"
+                            colorScheme="gray"
+                            size="sm"
+                            index={previewIs24Hour ? 1 : 0}
+                            onChange={(index) => setPreviewIs24Hour(index === 1)}
+                          >
                             <TabList bg="customGray.100" borderRadius="9999px" p="4px">
                               <Tab fontSize="12px" _selected={{ bg: "white", color: "customGray.800" }}>12h</Tab>
                               <Tab fontSize="12px" _selected={{ bg: "white", color: "customGray.800" }}>24h</Tab>
@@ -1362,14 +1601,27 @@ export default function CalendarBuilderPage() {
                           </Tabs>
                         </HStack>
                         <VStack spacing="12px" w="100%" overflowY="auto" maxH="380px" align="stretch" px="30px" pt="4px" pb="16px" sx={{ "&::-webkit-scrollbar": { w: "0px" }, "&::-webkit-scrollbar-track": { bg: "transparent" }, "&::-webkit-scrollbar-thumb": { bg: "transparent" } }}>
-                          {["09:00 AM", "09:15 AM", "09:30 AM", "09:45 AM", "10:00 AM", "10:15 AM", "10:30 AM", "10:45 AM", "11:00 AM"].map((time) => {
-                            if (time === "09:30 AM") {
+                          {buildTimeSlots(parseDurationMinutes(durations[0])).map((minutes) => {
+                            const label = formatTime(Math.floor(minutes / 60), minutes % 60, previewIs24Hour);
+                            const isSelected = minutes === previewTime;
+                            if (isSelected) {
+                              const compactDateLabel = previewDate.toLocaleDateString("en-US", { month: "short", day: "numeric" });
                               return (
-                                <Box key={time} w="100%" flexShrink={0} borderRadius="8px" overflow="hidden">
-                                  <Box bg="customGray.700" color="white" px="16px" py="10px" fontSize="14px" fontWeight="700" textAlign="center">
-                                    Aug 23 9:30 AM <Text as="span" fontWeight="500">(Asia/Kolkata)</Text>
+                                <Box key={minutes} w="100%" flexShrink={0} borderRadius="8px" overflow="hidden">
+                                  <Box bg="customGray.700" color="white" minH="40px" px="16px" py="8px" display="flex" flexWrap="wrap" alignItems="center" justifyContent="center" fontSize="12px" fontWeight="700" textAlign="center">
+                                    {compactDateLabel} {label}<Text as="span" fontSize="10px" fontWeight="500" ml="4px">({Intl.DateTimeFormat().resolvedOptions().timeZone})</Text>
                                   </Box>
-                                  <Button w="100%" h="44px" bg="customGray.800" color="white" fontSize="15px" fontWeight="600" borderRadius="0" _hover={{ bg: "customGray.900" }}>
+                                  <Button
+                                    w="100%"
+                                    h="40px"
+                                    bg="customGray.800"
+                                    color="white"
+                                    fontSize="15px"
+                                    fontWeight="600"
+                                    borderRadius="0"
+                                    _hover={{ bg: "customGray.900" }}
+                                    onClick={() => setSelectedPage(isFormPageHidden ? "Success page" : "Form page")}
+                                  >
                                     Confirm
                                   </Button>
                                 </Box>
@@ -1377,7 +1629,7 @@ export default function CalendarBuilderPage() {
                             }
                             return (
                               <Button
-                                key={time}
+                                key={minutes}
                                 w="100%"
                                 h="36px"
                                 p="0px"
@@ -1389,8 +1641,10 @@ export default function CalendarBuilderPage() {
                                 boxShadow="0 1px 2px rgba(0,0,0,0.05)"
                                 bg="white"
                                 color="customGray.500"
-                                _hover={{ bg: "customGray.50", borderColor: "customGray.300" }}>
-                                {time}
+                                _hover={{ bg: "customGray.50", borderColor: "customGray.300" }}
+                                onClick={() => setPreviewTime(minutes)}
+                              >
+                                {label}
                               </Button>
                             );
                           })}
@@ -1398,7 +1652,7 @@ export default function CalendarBuilderPage() {
                       </VStack>
                     </Box>
                   ) : selectedPage === "Form page" ? (
-                    <VStack spacing="16px" flex="1" align="stretch" bg="customGray.50" borderRadius="8px" p="24px" overflowY="auto">
+                    <VStack spacing="16px" flex="1" align="stretch" bg="customGray.50" border="1px solid" borderColor="customGray.200" borderRadius="8px" p="24px" overflowY="auto">
                       <VStack spacing="8px" align="stretch">
                         <Text fontSize="14px" fontWeight="600" color="customGray.800">Your name <Text as="span" color="red.500">*</Text></Text>
                         <Input

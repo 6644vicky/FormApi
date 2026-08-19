@@ -16,7 +16,6 @@ import {
 } from "@chakra-ui/react";
 import { useState } from "react";
 import { supabase } from "@/lib/supabase";
-import { checkEmailExists } from "@/app/actions/checkEmailExists";
 
 export default function ForgotPasswordPage() {
   const [email, setEmail] = useState("");
@@ -41,16 +40,10 @@ export default function ForgotPasswordPage() {
     setIsLoading(true);
 
     try {
-      // Check if the email exists in auth users
-      const userExists = await checkEmailExists(email);
-
-      if (!userExists) {
-        setEmailError("This email is new. Please sign up first.");
-        setIsLoading(false);
-        return;
-      }
-
-      // Email exists, send reset email
+      // Always attempt the reset and show the same "check your inbox" result
+      // whether or not the email is registered — telling the caller which
+      // emails exist would let anyone enumerate your user base. Supabase
+      // already no-ops safely server-side for an email with no account.
       const { error } = await supabase.auth.resetPasswordForEmail(email, {
         redirectTo: `${window.location.origin}/reset-password`,
       });

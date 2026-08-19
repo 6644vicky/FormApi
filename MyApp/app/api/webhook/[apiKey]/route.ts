@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/publicEvent";
+import { isRateLimited } from "@/lib/rateLimit";
 
 // Field names third-party form builders commonly use for the same thing —
 // tried in order before giving up and treating a value as a custom field.
@@ -19,6 +20,10 @@ function pickString(body: Record<string, unknown>, keys: string[]): string | nul
 // attach a lead straight to this event, keyed by the api_key in the URL —
 // no session, no calendar step, no separate secret to configure.
 export async function POST(request: NextRequest, { params }: { params: { apiKey: string } }) {
+  if (isRateLimited(`webhook:${params.apiKey}`, 20, 60_000)) {
+    return NextResponse.json({ error: "Too many requests. Please slow down." }, { status: 429 });
+  }
+
   const { data: event, error: eventError } = await supabaseAdmin
     .from("calendar_events")
     .select("id")
@@ -59,7 +64,8 @@ export async function POST(request: NextRequest, { params }: { params: { apiKey:
   });
 
   if (insertError) {
-    return NextResponse.json({ error: insertError.message }, { status: 500 });
+    console.error("Webhook booking insert failed:", insertError);
+    return NextResponse.json({ error: "Failed to record this submission." }, { status: 500 });
   }
 
   return NextResponse.json({ success: true });

@@ -20,16 +20,43 @@ export function formatTime(hour: number, minute: number, is24Hour: boolean): str
   return `${displayHour}:${minute.toString().padStart(2, "0")} ${period}`;
 }
 
+export type AvailabilityRange = { start: number; end: number };
+export type WeeklyAvailability = Record<string, AvailabilityRange[]>;
+
+export const WEEK_DAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+
+// Falls back to Mon-Fri 9-5 for events saved before the Availability editor
+// existed (their `availability` column is null) — same hours buildTimeSlots
+// used to hardcode, so nothing changes for them until the owner edits it.
+export const DEFAULT_AVAILABILITY: WeeklyAvailability = {
+  Sunday: [],
+  Monday: [{ start: 9 * 60, end: 17 * 60 }],
+  Tuesday: [{ start: 9 * 60, end: 17 * 60 }],
+  Wednesday: [{ start: 9 * 60, end: 17 * 60 }],
+  Thursday: [{ start: 9 * 60, end: 17 * 60 }],
+  Friday: [{ start: 9 * 60, end: 17 * 60 }],
+  Saturday: [],
+};
+
+export function getDayRanges(availability: WeeklyAvailability | null | undefined, date: Date): AvailabilityRange[] {
+  const source = availability || DEFAULT_AVAILABILITY;
+  return source[WEEK_DAYS[date.getDay()]] ?? [];
+}
+
 // Slots are minutes-since-midnight rather than pre-formatted strings, so
 // toggling 12h/24h can reformat the label without losing which slot is
 // selected (a formatted string would stop matching once the format changes).
-export function buildTimeSlots(stepMinutes: number): number[] {
+// Each configured range for the day is stepped independently, so a split
+// day (e.g. a morning block and an evening block) lays out slots in both
+// without spilling a step across the gap between them.
+export function buildTimeSlots(stepMinutes: number, ranges: AvailabilityRange[] = [{ start: 9 * 60, end: 17 * 60 }]): number[] {
   const slots: number[] = [];
-  let totalMinutes = 9 * 60; // 9:00 AM
-  const endMinutes = 17 * 60; // 5:00 PM
-  while (totalMinutes < endMinutes) {
-    slots.push(totalMinutes);
-    totalMinutes += stepMinutes;
+  for (const range of ranges) {
+    let totalMinutes = range.start;
+    while (totalMinutes + stepMinutes <= range.end) {
+      slots.push(totalMinutes);
+      totalMinutes += stepMinutes;
+    }
   }
   return slots;
 }

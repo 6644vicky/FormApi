@@ -5,7 +5,7 @@ import { useSearchParams } from "next/navigation";
 import { Box, VStack, HStack, Text, Button, Input, Textarea, Avatar, Tabs, TabList, Tab } from "@chakra-ui/react";
 import { CalendarPicker } from "@/components/CalendarPicker";
 import { supabase } from "@/lib/supabase";
-import { parseDurationMinutes, formatTime, buildTimeSlots } from "@/lib/bookingTime";
+import { parseDurationMinutes, formatTime, buildTimeSlots, getDayRanges, type WeeklyAvailability } from "@/lib/bookingTime";
 import FullPageLoader from "@/app/components/FullPageLoader";
 
 type EventInfo = {
@@ -17,6 +17,7 @@ type EventInfo = {
   meetingLink: string;
   durations: string[];
   hideFormPage: boolean;
+  availability: WeeklyAvailability;
 };
 
 // Renders the public booking flow for a resolved event. Used by both
@@ -88,7 +89,8 @@ export function PublicBookingView({ fetchUrl }: { fetchUrl: string }) {
   }
 
   const durationMinutes = parseDurationMinutes(event.durations[0]);
-  const timeSlots = buildTimeSlots(durationMinutes);
+  const dayRanges = getDayRanges(event.availability, selectedDate);
+  const timeSlots = buildTimeSlots(durationMinutes, dayRanges);
   const dateLabel = selectedDate.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
   const fullDateLabel = selectedDate.toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric", year: "numeric" });
   const selectedTimeLabel = selectedTime !== null ? formatTime(Math.floor(selectedTime / 60), selectedTime % 60, is24Hour) : "";
@@ -146,7 +148,11 @@ export function PublicBookingView({ fetchUrl }: { fetchUrl: string }) {
           {step === "main" && (
             <Box display="flex" border="1px solid" borderColor="customGray.200" borderRadius="8px" overflow="hidden">
               <Box w="440px" flexShrink={0} display="flex" alignItems="flex-start" justifyContent="center" bg="customGray.50" px="24px" pt="24px" pb="24px" overflowY="hidden">
-                <CalendarPicker value={selectedDate} onChange={(date) => { setSelectedDate(date); setSelectedTime(null); }} />
+                <CalendarPicker
+                  value={selectedDate}
+                  onChange={(date) => { setSelectedDate(date); setSelectedTime(null); }}
+                  isDateDisabled={(date) => getDayRanges(event.availability, date).length === 0}
+                />
               </Box>
               <VStack spacing="0px" w="259px" flexShrink={0} borderLeft="1px solid" borderColor="customGray.200" bg="customGray.50" p="0px">
                 <HStack w="100%" justify="space-between" px="20px" pt="24px" pb="12px">
@@ -165,6 +171,9 @@ export function PublicBookingView({ fetchUrl }: { fetchUrl: string }) {
                   </Tabs>
                 </HStack>
                 <VStack spacing="10px" w="100%" overflowY="auto" maxH="450px" align="stretch" px="20px" pb="16px">
+                  {dayRanges.length === 0 && (
+                    <Text fontSize="13px" color="customGray.500" textAlign="center" pt="16px">No availability this day.</Text>
+                  )}
                   {timeSlots.map((minutes) => {
                     const label = formatTime(Math.floor(minutes / 60), minutes % 60, is24Hour);
                     const isSelected = minutes === selectedTime;

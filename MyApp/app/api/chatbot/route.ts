@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { isRateLimited, getClientIp } from "@/lib/rateLimit";
 
 // Free-tier OpenRouter model. Swap this if it gets deprecated or you'd
 // rather point at a paid model. Verified against the account's live
@@ -38,6 +39,12 @@ export async function OPTIONS() {
 }
 
 export async function POST(request: NextRequest) {
+  // Anonymous, open-CORS endpoint proxying to a paid, shared OpenRouter key
+  // — rate-limit per visitor IP so one abusive client can't run up the bill.
+  if (isRateLimited(`chatbot:${getClientIp(request)}`, 20, 60_000)) {
+    return jsonWithCors({ error: "Too many requests. Please slow down." }, 429);
+  }
+
   const apiKey = process.env.CHATBOT_API_KEY;
   if (!apiKey) {
     return jsonWithCors({ error: "Chatbot is not configured." }, 500);

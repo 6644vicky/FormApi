@@ -1,0 +1,26 @@
+diff --git a/node_modules/@chakra-ui/styled-system/dist/cjs/utils/parse-gradient.cjs b/node_modules/@chakra-ui/styled-system/dist/cjs/utils/parse-gradient.cjs
+index 470e721..68aea00 100644
+--- a/node_modules/@chakra-ui/styled-system/dist/cjs/utils/parse-gradient.cjs
++++ b/node_modules/@chakra-ui/styled-system/dist/cjs/utils/parse-gradient.cjs
+@@ -45,7 +45,7 @@ function parseGradient(value, theme) {
+     const [_color, _stop] = firstStop !== -1 ? [stop.substr(0, firstStop), stop.substr(firstStop + 1)] : [stop];
+     const _stopOrFunc = isCSSFunction(_stop) ? _stop : _stop && _stop.split(" ");
+     const key = `colors.${_color}`;
+-    const color = key in theme.__cssMap ? theme.__cssMap[key].varRef : _color;
++    const color = theme.__cssMap && key in theme.__cssMap ? theme.__cssMap[key].varRef : _color;
+     return _stopOrFunc ? [
+       color,
+       ...Array.isArray(_stopOrFunc) ? _stopOrFunc : [_stopOrFunc]
+diff --git a/node_modules/@chakra-ui/styled-system/dist/esm/utils/parse-gradient.mjs b/node_modules/@chakra-ui/styled-system/dist/esm/utils/parse-gradient.mjs
+index 7227082..b46bb4a 100644
+--- a/node_modules/@chakra-ui/styled-system/dist/esm/utils/parse-gradient.mjs
++++ b/node_modules/@chakra-ui/styled-system/dist/esm/utils/parse-gradient.mjs
+@@ -43,7 +43,7 @@ function parseGradient(value, theme) {
+     const [_color, _stop] = firstStop !== -1 ? [stop.substr(0, firstStop), stop.substr(firstStop + 1)] : [stop];
+     const _stopOrFunc = isCSSFunction(_stop) ? _stop : _stop && _stop.split(" ");
+     const key = `colors.${_color}`;
+-    const color = key in theme.__cssMap ? theme.__cssMap[key].varRef : _color;
++    const color = theme.__cssMap && key in theme.__cssMap ? theme.__cssMap[key].varRef : _color;
+     return _stopOrFunc ? [
+       color,
+       ...Array.isArray(_stopOrFunc) ? _stopOrFunc : [_stopOrFunc]

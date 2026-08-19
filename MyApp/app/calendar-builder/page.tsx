@@ -2,12 +2,12 @@
 
 import { useRouter } from "next/navigation";
 import { Box, VStack, HStack, Text, Button, Heading, IconButton, Input, Textarea, useToast, Tabs, TabList, Tab, Avatar, Menu, MenuButton, MenuList, MenuItem, Modal, ModalOverlay, ModalContent, ModalHeader, ModalBody, ModalCloseButton, useDisclosure, Badge, Divider, Tag, TagLabel, TagCloseButton, Progress, Tooltip } from "@chakra-ui/react";
-import { ArrowBackIcon, ArrowForwardIcon, DeleteIcon, AddIcon, ChevronDownIcon, DragHandleIcon, CopyIcon, InfoOutlineIcon } from "@chakra-ui/icons";
+import { ArrowBackIcon, ArrowForwardIcon, AddIcon, CloseIcon, ChevronDownIcon, DragHandleIcon, CopyIcon, InfoOutlineIcon } from "@chakra-ui/icons";
 import { useState, useEffect, useRef, useMemo, ComponentProps } from "react";
 import { CalendarPicker } from "@/components/CalendarPicker";
 import { AddPage } from "@/components/AddPage";
 import { supabase } from "@/lib/supabase";
-import { parseDurationMinutes, formatTime, buildTimeSlots } from "@/lib/bookingTime";
+import { parseDurationMinutes, formatTime, buildTimeSlots, WEEK_DAYS, DEFAULT_AVAILABILITY, getDayRanges, type WeeklyAvailability } from "@/lib/bookingTime";
 import FullPageLoader from "@/app/components/FullPageLoader";
 import UsernameModal from "@/app/components/UsernameModal";
 
@@ -23,8 +23,6 @@ function slugify(text: string): string {
     .replace(/-+/g, "-")
     .replace(/^-|-$/g, "");
 }
-
-const WEEK_DAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 
 // Parses freeform text like "9:00 AM" / "09:00pm" back into minutes-since-
 // midnight. Returns null when it doesn't look like a time yet, so the field
@@ -86,19 +84,12 @@ export default function CalendarBuilderPage() {
   const [tabIndex, setTabIndex] = useState(0);
   const [selectedPage, setSelectedPage] = useState("Main page");
   const [isFormPageHidden, setIsFormPageHidden] = useState(false);
-  // Weekly hours summary, revealed by "Edit availability". Read-only display
-  // for now — each day holds a list of {start, end} ranges in
-  // minutes-since-midnight, empty meaning unavailable that day.
+  // Weekly hours editor in the Configure tab. Each day holds a list of
+  // {start, end} ranges in minutes-since-midnight, empty meaning
+  // unavailable that day. Drives both the Main-page preview and (once
+  // saved) the live booking page's actual time slots.
   const isAvailabilityOpen = true;
-  const [weeklyHours, setWeeklyHours] = useState<Record<string, { start: number; end: number }[]>>({
-    Sunday: [],
-    Monday: [{ start: 9 * 60, end: 17 * 60 }],
-    Tuesday: [{ start: 9 * 60, end: 17 * 60 }],
-    Wednesday: [{ start: 9 * 60, end: 17 * 60 }],
-    Thursday: [{ start: 9 * 60, end: 17 * 60 }],
-    Friday: [{ start: 9 * 60, end: 17 * 60 }],
-    Saturday: [],
-  });
+  const [weeklyHours, setWeeklyHours] = useState<WeeklyAvailability>(DEFAULT_AVAILABILITY);
   // Drives the "Main page" preview's calendar/time-slot list — the same
   // state shape PublicBookingView uses, so the preview behaves like the real
   // booking flow instead of a static mockup with hardcoded slots.
@@ -304,6 +295,7 @@ export default function CalendarBuilderPage() {
               setMeetingLinkUrl(eventData.meeting_link_url || "");
               setDurations(eventData.durations || ["15 min"]);
               setIsFormPageHidden(eventData.hide_form_page || false);
+              setWeeklyHours(eventData.availability || DEFAULT_AVAILABILITY);
             }
 
             if (eventError) {
@@ -373,7 +365,7 @@ export default function CalendarBuilderPage() {
   const buildSnapshot = () =>
     JSON.stringify({
       formName, title, description, ownerName, slug,
-      meetingLink, meetingLinkUrl, durations, userAvatar, isFormPageHidden,
+      meetingLink, meetingLinkUrl, durations, userAvatar, isFormPageHidden, weeklyHours,
     });
 
   useEffect(() => {
@@ -403,7 +395,7 @@ export default function CalendarBuilderPage() {
     }, delay);
 
     return () => clearTimeout(saveTimer);
-  }, [formName, title, description, ownerName, slug, meetingLink, meetingLinkUrl, durations, userAvatar, isFormPageHidden, currentEventId, isLoading]);
+  }, [formName, title, description, ownerName, slug, meetingLink, meetingLinkUrl, durations, userAvatar, isFormPageHidden, weeklyHours, currentEventId, isLoading]);
 
   const handleTitleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const val = e.target.value;
@@ -455,6 +447,7 @@ export default function CalendarBuilderPage() {
         durations: durations,
         avatar_url: userAvatar,
         hide_form_page: isFormPageHidden,
+        availability: weeklyHours,
         updated_at: new Date().toISOString(),
       });
 
@@ -653,6 +646,21 @@ export default function CalendarBuilderPage() {
       ...prev,
       [day]: prev[day].map((range, i) => (i === index ? { ...range, [field]: minutes } : range)),
     }));
+  };
+
+  const removeAvailabilityRange = (day: string, index: number) => {
+    setWeeklyHours((prev) => ({
+      ...prev,
+      [day]: prev[day].filter((_, i) => i !== index),
+    }));
+  };
+
+  const duplicateAvailabilityRange = (day: string, index: number) => {
+    setWeeklyHours((prev) => {
+      const ranges = [...prev[day]];
+      ranges.splice(index + 1, 0, { ...ranges[index] });
+      return { ...prev, [day]: ranges };
+    });
   };
 
   if (isLoading) {
@@ -880,62 +888,112 @@ export default function CalendarBuilderPage() {
 
                   {isAvailabilityOpen && (
                     <>
-                    <Text fontSize="18px" fontWeight="500" color="customGray.800">Weekly hours</Text>
+                    <Text fontSize="16px" fontWeight="500" color="customGray.800">Weekly hours</Text>
                     <Box bg="white" border="1px solid" borderColor="customGray.200" borderRadius="16px" p="0px" mt="24px" mb="16px">
                       <VStack align="stretch" spacing="0px">
-                        {(() => {
-                          type Row = { day: string; range: { start: number; end: number } | null; rangeIndex: number };
-                          const rows = WEEK_DAYS.flatMap<Row>((day) => {
-                            const ranges = weeklyHours[day];
-                            return ranges.length === 0
-                              ? [{ day, range: null, rangeIndex: -1 }]
-                              : ranges.map((range, rangeIndex) => ({ day, range, rangeIndex }));
-                          });
-                          return rows.map((row, i) => (
-                            <Box key={`${row.day}-${row.rangeIndex}`} borderBottom={i < rows.length - 1 ? "1px solid" : "none"} borderColor="customGray.200">
-                              <HStack align="center" spacing="16px" px="24px" py="16px">
-                                <Text fontSize="14px" fontWeight="600" color="customGray.800" w="90px" flexShrink={0}>
-                                  {row.day}
+                        {WEEK_DAYS.map((day, dayIndex) => {
+                          const ranges = weeklyHours[day];
+                          return (
+                            <Box key={day} borderBottom={dayIndex < WEEK_DAYS.length - 1 ? "1px solid" : "none"} borderColor="customGray.200">
+                              <HStack align="flex-start" spacing="16px" px="24px" py="16px">
+                                <Text fontSize="14px" fontWeight="600" color="customGray.800" w="90px" flexShrink={0} pt="6px">
+                                  {day}
                                 </Text>
-                                {row.range === null ? (
-                                  <Text flex="1" fontSize="14px" color="customGray.400">Unavailable</Text>
-                                ) : (
-                                  <HStack flex="1" spacing="8px">
-                                    <TimeTextInput
-                                      minutes={row.range.start}
-                                      onCommit={(minutes) => updateAvailabilityRange(row.day, row.rangeIndex, "start", minutes)}
-                                      bg="customGray.100"
-                                      border="none"
-                                      borderRadius="8px"
-                                      size="sm"
-                                      w="140px"
-                                    />
-                                    <Text color="customGray.400">-</Text>
-                                    <TimeTextInput
-                                      minutes={row.range.end}
-                                      onCommit={(minutes) => updateAvailabilityRange(row.day, row.rangeIndex, "end", minutes)}
-                                      bg="customGray.100"
-                                      border="none"
-                                      borderRadius="8px"
-                                      size="sm"
-                                      w="140px"
-                                    />
-                                  </HStack>
-                                )}
-                                <Tooltip label="Add time" placement="top">
-                                  <IconButton
-                                    aria-label={`Add a time range for ${row.day}`}
-                                    icon={<AddIcon w="12px" h="12px" />}
-                                    size="sm"
-                                    variant="ghost"
-                                    color="customGray.500"
-                                    onClick={() => addAvailabilityRange(row.day)}
-                                  />
-                                </Tooltip>
+                                <VStack align="stretch" spacing="10px" flex="1">
+                                  {ranges.length === 0 ? (
+                                    <HStack>
+                                      <Text w="140px" fontSize="14px" color="customGray.400">Unavailable</Text>
+                                      <HStack spacing="2px" p="3px" border="1px solid" borderColor="customGray.200" borderRadius="12px" overflow="hidden" boxShadow="0 1px 8px 0 rgba(0, 0, 0, 0.08)">
+                                        <IconButton
+                                          aria-label={`Add a time range for ${day}`}
+                                          icon={<AddIcon w="12px" h="12px" />}
+                                          size="sm"
+                                          variant="ghost"
+                                          borderRadius="8px"
+                                          color="customGray.600"
+                                          _hover={{ bg: "customGray.800", color: "white" }}
+                                          onClick={() => addAvailabilityRange(day)}
+                                        />
+                                      </HStack>
+                                    </HStack>
+                                  ) : (
+                                    ranges.map((range, rangeIndex) => (
+                                      <HStack key={rangeIndex} spacing="14px">
+                                        <TimeTextInput
+                                          minutes={range.start}
+                                          onCommit={(minutes) => updateAvailabilityRange(day, rangeIndex, "start", minutes)}
+                                          bg="customGray.100"
+                                          border="none"
+                                          borderRadius="8px"
+                                          size="sm"
+                                          fontSize="14px"
+                                          w="140px"
+                                        />
+                                        <Text color="customGray.400">-</Text>
+                                        <TimeTextInput
+                                          minutes={range.end}
+                                          onCommit={(minutes) => updateAvailabilityRange(day, rangeIndex, "end", minutes)}
+                                          bg="customGray.100"
+                                          border="none"
+                                          borderRadius="8px"
+                                          size="sm"
+                                          fontSize="14px"
+                                          w="140px"
+                                        />
+                                        <HStack spacing="2px" p="3px" border="1px solid" borderColor="customGray.200" borderRadius="12px" overflow="hidden" boxShadow="0 1px 8px 0 rgba(0, 0, 0, 0.08)">
+                                          {rangeIndex === 0 && (
+                                            <IconButton
+                                              aria-label={`Add a time range for ${day}`}
+                                              icon={<AddIcon w="12px" h="12px" />}
+                                              size="sm"
+                                              variant="ghost"
+                                              borderRadius="8px"
+                                              color="customGray.600"
+                                              isDisabled={ranges.length >= 10}
+                                              _hover={ranges.length >= 10 ? undefined : { bg: "customGray.800", color: "white" }}
+                                              onClick={() => addAvailabilityRange(day)}
+                                            />
+                                          )}
+                                          <IconButton
+                                            aria-label={`Delete this time slot for ${day}`}
+                                            icon={
+                                              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                                <path d="M17.4166 7.83333V17.8333C17.4166 18.2754 17.2411 18.6993 16.9285 19.0118C16.6159 19.3244 16.192 19.5 15.75 19.5H8.24998C7.80795 19.5 7.38403 19.3244 7.07147 19.0118C6.75891 18.6993 6.58331 18.2754 6.58331 17.8333V7.83333M18.6666 7.83333H5.33331M9.08331 7.83333V7.41667C9.08331 6.64312 9.3906 5.90125 9.93758 5.35427C10.4846 4.80729 11.2264 4.5 12 4.5C12.7735 4.5 13.5154 4.80729 14.0624 5.35427C14.6094 5.90125 14.9166 6.64312 14.9166 7.41667V7.83333M10.3333 15.3333V12M13.6667 15.3333V12" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                                              </svg>
+                                            }
+                                            size="sm"
+                                            variant="ghost"
+                                            borderRadius="8px"
+                                            color="customGray.600"
+                                            _hover={{ bg: "customGray.800", color: "white" }}
+                                            onClick={() => removeAvailabilityRange(day, rangeIndex)}
+                                          />
+                                          {rangeIndex === 0 && (
+                                            <IconButton
+                                              aria-label={`Duplicate this time slot for ${day}`}
+                                              icon={
+                                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                                  <rect x="7.8316" y="7.83203" width="11.6715" height="11.6715" rx="1.66667" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                                                  <path d="M7.83161 16.1686H6.16425C5.24339 16.1686 4.49689 15.4221 4.49689 14.5012V6.16443C4.49689 5.24357 5.24339 4.49707 6.16425 4.49707H14.5011C15.4219 4.49707 16.1684 5.24357 16.1684 6.16443V7.83179" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                                                </svg>
+                                              }
+                                              size="sm"
+                                              variant="ghost"
+                                              borderRadius="8px"
+                                              color="customGray.600"
+                                              _hover={{ bg: "customGray.800", color: "white" }}
+                                              onClick={() => duplicateAvailabilityRange(day, rangeIndex)}
+                                            />
+                                          )}
+                                        </HStack>
+                                      </HStack>
+                                    ))
+                                  )}
+                                </VStack>
                               </HStack>
                             </Box>
-                          ));
-                        })()}
+                          );
+                        })}
                       </VStack>
                     </Box>
                     </>
@@ -1579,7 +1637,11 @@ export default function CalendarBuilderPage() {
                   {selectedPage === "Main page" ? (
                     <Box display="flex" border="1px solid" borderColor="customGray.200" borderRadius="8px" overflow="hidden">
                       <Box w="440px" flexShrink={0} display="flex" alignItems="flex-start" justifyContent="center" bg="customGray.50" px="30px" pt="24px">
-                        <CalendarPicker value={previewDate} onChange={(date) => { setPreviewDate(date); setPreviewTime(null); }} />
+                        <CalendarPicker
+                          value={previewDate}
+                          onChange={(date) => { setPreviewDate(date); setPreviewTime(null); }}
+                          isDateDisabled={(date) => getDayRanges(weeklyHours, date).length === 0}
+                        />
                       </Box>
 
                       <VStack spacing="0px" w="260px" flexShrink={0} borderLeft="1px solid" borderColor="customGray.200" bg="customGray.50" p="0px">
@@ -1601,7 +1663,10 @@ export default function CalendarBuilderPage() {
                           </Tabs>
                         </HStack>
                         <VStack spacing="12px" w="100%" overflowY="auto" maxH="380px" align="stretch" px="30px" pt="4px" pb="16px" sx={{ "&::-webkit-scrollbar": { w: "0px" }, "&::-webkit-scrollbar-track": { bg: "transparent" }, "&::-webkit-scrollbar-thumb": { bg: "transparent" } }}>
-                          {buildTimeSlots(parseDurationMinutes(durations[0])).map((minutes) => {
+                          {getDayRanges(weeklyHours, previewDate).length === 0 && (
+                            <Text fontSize="13px" color="customGray.500" textAlign="center" pt="16px">No availability this day.</Text>
+                          )}
+                          {buildTimeSlots(parseDurationMinutes(durations[0]), getDayRanges(weeklyHours, previewDate)).map((minutes) => {
                             const label = formatTime(Math.floor(minutes / 60), minutes % 60, previewIs24Hour);
                             const isSelected = minutes === previewTime;
                             if (isSelected) {

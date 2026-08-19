@@ -1,9 +1,19 @@
 "use server";
 
 import { createClient } from "@supabase/supabase-js";
+import { getVerifiedUserId } from "@/lib/serverAuth";
 
 export async function deleteUserAccount(userId: string) {
   try {
+    // This is called with the caller's own session-derived id from the UI,
+    // but a Server Action is a callable endpoint regardless of who called
+    // it — without this check, anyone could pass a different user's id and
+    // have their account (and all their data) deleted.
+    const verifiedUserId = await getVerifiedUserId();
+    if (!verifiedUserId || verifiedUserId !== userId) {
+      throw new Error("You can only delete your own account.");
+    }
+
     // Use the service_role key ONLY on the server
     const supabaseAdmin = createClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,

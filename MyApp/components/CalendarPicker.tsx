@@ -7,9 +7,12 @@ import { ChevronLeftIcon, ChevronRightIcon } from "@chakra-ui/icons";
 interface CalendarPickerProps {
   value?: Date;
   onChange?: (date: Date) => void;
+  // For days with no configured availability (e.g. a fully "Unavailable"
+  // weekday) — styled and blocked the same way a past date already is.
+  isDateDisabled?: (date: Date) => boolean;
 }
 
-export function CalendarPicker({ value = new Date(), onChange }: CalendarPickerProps) {
+export function CalendarPicker({ value = new Date(), onChange, isDateDisabled }: CalendarPickerProps) {
   const [currentDate, setCurrentDate] = useState(new Date(value.getFullYear(), value.getMonth(), 1));
 
   const daysInMonth = (date: Date) => new Date(date.getFullYear(), date.getMonth() + 1, 0).getDate();
@@ -50,10 +53,10 @@ export function CalendarPicker({ value = new Date(), onChange }: CalendarPickerP
   };
 
   const handleDateClick = (day: number) => {
-    if (isPastDate(currentDate.getFullYear(), currentDate.getMonth(), day)) {
+    const newDate = new Date(currentDate.getFullYear(), currentDate.getMonth(), day);
+    if (isPastDate(currentDate.getFullYear(), currentDate.getMonth(), day) || isDateDisabled?.(newDate)) {
       return;
     }
-    const newDate = new Date(currentDate.getFullYear(), currentDate.getMonth(), day);
     onChange?.(newDate);
   };
 
@@ -154,6 +157,8 @@ export function CalendarPicker({ value = new Date(), onChange }: CalendarPickerP
       <Grid templateColumns="repeat(7, 1fr)" gap="8px" w="100%" justifyItems="center">
         {days.map((day, index) => {
           const isPast = day ? isPastDate(currentDate.getFullYear(), currentDate.getMonth(), day) : false;
+          const isUnavailable = day && !isPast ? !!isDateDisabled?.(new Date(currentDate.getFullYear(), currentDate.getMonth(), day)) : false;
+          const isBlocked = isPast || isUnavailable;
           return (
             <Box
               key={index}
@@ -168,13 +173,13 @@ export function CalendarPicker({ value = new Date(), onChange }: CalendarPickerP
               fontSize="xs"
               fontWeight={isSelected(day) ? "600" : "500"}
               borderRadius="4px"
-              cursor={day && !isPast ? "pointer" : isPast ? "not-allowed" : "default"}
-              bg={isSelected(day) ? "customGray.800" : isPast || isToday(day) ? "transparent" : "customGray.100"}
-              color={isSelected(day) ? "white" : isPast ? "customGray.400" : "customGray.900"}
-              _hover={day && !isPast && !isSelected(day) ? { bg: "customGray.200" } : {}}
-              onClick={() => day && !isPast && handleDateClick(day)}
+              cursor={day && !isBlocked ? "pointer" : isBlocked ? "not-allowed" : "default"}
+              bg={isSelected(day) ? "customGray.800" : isBlocked || isToday(day) ? "transparent" : "customGray.100"}
+              color={isSelected(day) ? "white" : isBlocked ? "customGray.400" : "customGray.900"}
+              _hover={day && !isBlocked && !isSelected(day) ? { bg: "customGray.200" } : {}}
+              onClick={() => day && !isBlocked && handleDateClick(day)}
               opacity={!day ? 0 : 1}
-              pointerEvents={isPast ? "none" : "auto"}
+              pointerEvents={isBlocked ? "none" : "auto"}
             >
               {day}
               {isToday(day) && !isSelected(day) && (

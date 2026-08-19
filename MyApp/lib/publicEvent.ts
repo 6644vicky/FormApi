@@ -1,4 +1,5 @@
 import { createClient } from "@supabase/supabase-js";
+import { DEFAULT_AVAILABILITY, type WeeklyAvailability } from "@/lib/bookingTime";
 
 // Shared by the /book/[id] and /[username]/[slug] public resolvers — both
 // need to reach calendar_events without being signed in as its owner, so
@@ -10,7 +11,7 @@ export const supabaseAdmin = createClient(
 );
 
 const EVENT_COLUMNS =
-  "id, title, event_title, description, owner_name, avatar_url, meeting_link, meeting_link_url, durations, hide_form_page";
+  "id, title, event_title, description, owner_name, avatar_url, meeting_link, meeting_link_url, durations, hide_form_page, availability";
 
 export function formatPublicEvent(data: {
   id: number;
@@ -22,6 +23,7 @@ export function formatPublicEvent(data: {
   meeting_link: string | null;
   durations: string[] | null;
   hide_form_page: boolean | null;
+  availability: WeeklyAvailability | null;
 }) {
   return {
     id: data.id,
@@ -32,6 +34,7 @@ export function formatPublicEvent(data: {
     meetingLink: data.meeting_link || "Link",
     durations: data.durations || ["15 min"],
     hideFormPage: data.hide_form_page || false,
+    availability: data.availability || DEFAULT_AVAILABILITY,
   };
 }
 

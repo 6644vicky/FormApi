@@ -1,5 +1,9 @@
 import { createClient } from "@supabase/supabase-js";
-import { DEFAULT_AVAILABILITY, type WeeklyAvailability } from "@/lib/bookingTime";
+import {
+  DEFAULT_AVAILABILITY,
+  isMissingAvailabilityColumnError,
+  type WeeklyAvailability,
+} from "@/lib/bookingTime";
 
 // Shared by the /book/[id] and /[username]/[slug] public resolvers — both
 // need to reach calendar_events without being signed in as its owner, so
@@ -12,6 +16,8 @@ export const supabaseAdmin = createClient(
 
 const EVENT_COLUMNS =
   "id, title, event_title, description, owner_name, avatar_url, meeting_link, meeting_link_url, durations, hide_form_page, availability";
+const LEGACY_EVENT_COLUMNS =
+  "id, title, event_title, description, owner_name, avatar_url, meeting_link, meeting_link_url, durations, hide_form_page";
 
 export function formatPublicEvent(data: {
   id: number;
@@ -23,7 +29,7 @@ export function formatPublicEvent(data: {
   meeting_link: string | null;
   durations: string[] | null;
   hide_form_page: boolean | null;
-  availability: WeeklyAvailability | null;
+  availability?: WeeklyAvailability | null;
 }) {
   return {
     id: data.id,
@@ -39,11 +45,22 @@ export function formatPublicEvent(data: {
 }
 
 export async function getPublicEventById(id: string) {
-  const { data, error } = await supabaseAdmin
+  let { data, error } = await supabaseAdmin
     .from("calendar_events")
     .select(EVENT_COLUMNS)
     .eq("id", id)
     .single();
+
+  // Keep older environments usable while the availability migration is being
+  // deployed. New environments use the first query and persist configured
+  // weekly hours normally.
+  if (isMissingAvailabilityColumnError(error)) {
+    ({ data, error } = await supabaseAdmin
+      .from("calendar_events")
+      .select(LEGACY_EVENT_COLUMNS)
+      .eq("id", id)
+      .single());
+  }
 
   if (error || !data) return null;
   return formatPublicEvent(data);
@@ -58,12 +75,21 @@ export async function getPublicEventBySlug(username: string, slug: string) {
 
   if (profileError || !profile) return null;
 
-  const { data, error } = await supabaseAdmin
+  let { data, error } = await supabaseAdmin
     .from("calendar_events")
     .select(EVENT_COLUMNS)
     .eq("user_id", profile.id)
     .eq("slug", slug)
     .single();
+
+  if (isMissingAvailabilityColumnError(error)) {
+    ({ data, error } = await supabaseAdmin
+      .from("calendar_events")
+      .select(LEGACY_EVENT_COLUMNS)
+      .eq("user_id", profile.id)
+      .eq("slug", slug)
+      .single());
+  }
 
   if (error || !data) return null;
   return formatPublicEvent(data);

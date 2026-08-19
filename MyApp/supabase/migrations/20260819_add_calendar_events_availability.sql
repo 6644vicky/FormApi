@@ -5,3 +5,7 @@
 -- falls back to the same Mon-Fri 9-5 default in that case, so nothing
 -- changes for existing events until their owner edits Availability.
 alter table calendar_events add column if not exists availability jsonb;
+
+-- PostgREST may keep the old table definition in its schema cache after the
+-- DDL succeeds. Reload it so the API can see availability immediately.
+notify pgrst, 'reload schema';

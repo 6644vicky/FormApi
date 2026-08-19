@@ -7,7 +7,7 @@ import { useState, useEffect, useRef, useMemo, ComponentProps } from "react";
 import { CalendarPicker } from "@/components/CalendarPicker";
 import { AddPage } from "@/components/AddPage";
 import { supabase } from "@/lib/supabase";
-import { parseDurationMinutes, formatTime, buildTimeSlots, WEEK_DAYS, DEFAULT_AVAILABILITY, getDayRanges, type WeeklyAvailability } from "@/lib/bookingTime";
+import { parseDurationMinutes, formatTime, buildTimeSlots, WEEK_DAYS, DEFAULT_AVAILABILITY, getDayRanges, isMissingAvailabilityColumnError, type WeeklyAvailability } from "@/lib/bookingTime";
 import FullPageLoader from "@/app/components/FullPageLoader";
 import UsernameModal from "@/app/components/UsernameModal";
 
@@ -431,7 +431,7 @@ export default function CalendarBuilderPage() {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session?.user) return;
 
-      const buildPayload = (includeSlug: boolean): Record<string, unknown> => ({
+      const buildPayload = (includeSlug: boolean, includeAvailability = true): Record<string, unknown> => ({
         user_id: session.user.id,
         workspace_name: workspaceNameRef.current,
         title: formName,
@@ -447,7 +447,7 @@ export default function CalendarBuilderPage() {
         durations: durations,
         avatar_url: userAvatar,
         hide_form_page: isFormPageHidden,
-        availability: weeklyHours,
+        ...(includeAvailability ? { availability: weeklyHours } : {}),
         updated_at: new Date().toISOString(),
       });
 
@@ -465,6 +465,19 @@ export default function CalendarBuilderPage() {
             .from("calendar_events")
             .update(buildPayload(false))
             .eq("id", currentEventIdRef.current));
+        }
+        if (isMissingAvailabilityColumnError(error)) {
+          ({ error } = await supabase
+            .from("calendar_events")
+            .update(buildPayload(!slugCheckRef.current.taken, false))
+            .eq("id", currentEventIdRef.current));
+          if (error?.code === "23505") {
+            updateSlugCheck({ checking: false, taken: true });
+            ({ error } = await supabase
+              .from("calendar_events")
+              .update(buildPayload(false, false))
+              .eq("id", currentEventIdRef.current));
+          }
         }
         if (error) {
           console.error("Error updating event:", error);
@@ -495,6 +508,21 @@ export default function CalendarBuilderPage() {
               .insert(buildPayload(false))
               .select("id, api_key")
               .single());
+          }
+          if (isMissingAvailabilityColumnError(error)) {
+            ({ data, error } = await supabase
+              .from("calendar_events")
+              .insert(buildPayload(!slugCheckRef.current.taken, false))
+              .select("id, api_key")
+              .single());
+            if (error?.code === "23505") {
+              updateSlugCheck({ checking: false, taken: true });
+              ({ data, error } = await supabase
+                .from("calendar_events")
+                .insert(buildPayload(false, false))
+                .select("id, api_key")
+                .single());
+            }
           }
           if (error) {
             console.error("Error creating event:", error);

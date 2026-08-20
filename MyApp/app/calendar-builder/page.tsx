@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { Box, VStack, HStack, Text, Button, Heading, IconButton, Input, Textarea, useToast, Tabs, TabList, Tab, Avatar, Menu, MenuButton, MenuList, MenuItem, Modal, ModalOverlay, ModalContent, ModalHeader, ModalBody, ModalCloseButton, useDisclosure, Badge, Divider, Tag, TagLabel, TagCloseButton, Progress, Tooltip } from "@chakra-ui/react";
-import { ArrowBackIcon, ArrowForwardIcon, AddIcon, CloseIcon, ChevronDownIcon, DragHandleIcon, CopyIcon, InfoOutlineIcon } from "@chakra-ui/icons";
+import { ArrowBackIcon, ArrowForwardIcon, AddIcon, CloseIcon, ChevronDownIcon, DragHandleIcon, CopyIcon, InfoOutlineIcon, RepeatClockIcon } from "@chakra-ui/icons";
 import { useState, useEffect, useRef, useMemo, ComponentProps } from "react";
 import { CalendarPicker } from "@/components/CalendarPicker";
 import { AddPage } from "@/components/AddPage";
@@ -81,6 +81,8 @@ export default function CalendarBuilderPage() {
   const { isOpen, onOpen, onClose } = useDisclosure();
   const { isOpen: isShareOpen, onOpen: onShareOpen, onClose: onShareClose } = useDisclosure();
   const { isOpen: isUsernameOpen, onOpen: onUsernameOpen, onClose: onUsernameClose } = useDisclosure();
+  const { isOpen: isDateOverridesOpen, onOpen: onDateOverridesOpen, onClose: onDateOverridesClose } = useDisclosure();
+  const [overrideDate, setOverrideDate] = useState<Date | undefined>(undefined);
   const [tabIndex, setTabIndex] = useState(0);
   const [selectedPage, setSelectedPage] = useState("Main page");
   const [isFormPageHidden, setIsFormPageHidden] = useState(false);
@@ -907,17 +909,16 @@ export default function CalendarBuilderPage() {
 
               <Box flex="1" h="100%" bg="white" borderLeft="1px solid" borderColor="customGray.200" overflow="hidden" display="flex" flexDirection="column">
                 <Box flex="1" overflowY="auto" bg="customGray.50">
-                <Box w="688px" mx="auto" pt="48px" pb="40px">
+                <Box w="688px" mx="auto" pt="64px" pb="64px">
                   <Box>
                     <Text fontSize="22px" fontWeight="500" color="customGray.800" mb="2px">Availability</Text>
-                    <Text fontSize="14px" color="customGray.500" mb="48px">Weekly hours, buffers, and booking limits</Text>
+                    <Text fontSize="14px" color="customGray.500" mb="32px">Weekly hours, buffers, and booking limits</Text>
                   </Box>
 
 
                   {isAvailabilityOpen && (
                     <>
-                    <Text fontSize="16px" fontWeight="500" color="customGray.800">Weekly hours</Text>
-                    <Box bg="white" border="1px solid" borderColor="customGray.200" borderRadius="16px" p="0px" mt="24px" mb="16px">
+                    <Box bg="white" border="1px solid" borderColor="customGray.200" borderRadius="16px" p="0px" mt="0px" mb="16px">
                       <VStack align="stretch" spacing="0px">
                         {WEEK_DAYS.map((day, dayIndex) => {
                           const ranges = weeklyHours[day];
@@ -931,8 +932,9 @@ export default function CalendarBuilderPage() {
                                   {ranges.length === 0 ? (
                                     <HStack>
                                       <Text w="140px" fontSize="14px" color="customGray.400">Unavailable</Text>
-                                      <HStack spacing="2px" p="3px" border="1px solid" borderColor="customGray.200" borderRadius="12px" overflow="hidden" boxShadow="0 1px 8px 0 rgba(0, 0, 0, 0.08)">
-                                        <IconButton
+                                      <HStack spacing="2px" p="3px" border="1px solid" borderColor="customGray.200" borderRadius="12px" overflow="hidden" boxShadow="0 1px 2px rgba(0,0,0,0.05)">
+                                        <Tooltip label="Add time range" hasArrow placement="top">
+                                          <IconButton
                                           aria-label={`Add a time range for ${day}`}
                                           icon={<AddIcon w="12px" h="12px" />}
                                           size="sm"
@@ -941,12 +943,13 @@ export default function CalendarBuilderPage() {
                                           color="customGray.600"
                                           _hover={{ bg: "customGray.800", color: "white" }}
                                           onClick={() => addAvailabilityRange(day)}
-                                        />
+                                          />
+                                        </Tooltip>
                                       </HStack>
                                     </HStack>
                                   ) : (
                                     ranges.map((range, rangeIndex) => (
-                                      <HStack key={rangeIndex} spacing="14px">
+                                      <HStack key={rangeIndex} spacing="16px">
                                         <TimeTextInput
                                           minutes={range.start}
                                           onCommit={(minutes) => updateAvailabilityRange(day, rangeIndex, "start", minutes)}
@@ -968,9 +971,10 @@ export default function CalendarBuilderPage() {
                                           fontSize="14px"
                                           w="140px"
                                         />
-                                        <HStack spacing="2px" p="3px" border="1px solid" borderColor="customGray.200" borderRadius="12px" overflow="hidden" boxShadow="0 1px 8px 0 rgba(0, 0, 0, 0.08)">
+                                        <HStack spacing="2px" p="3px" border="1px solid" borderColor="customGray.200" borderRadius="12px" overflow="hidden" boxShadow="0 1px 2px rgba(0,0,0,0.05)">
                                           {rangeIndex === 0 && (
-                                            <IconButton
+                                            <Tooltip label="Add time range" hasArrow placement="top">
+                                              <IconButton
                                               aria-label={`Add a time range for ${day}`}
                                               icon={<AddIcon w="12px" h="12px" />}
                                               size="sm"
@@ -980,9 +984,11 @@ export default function CalendarBuilderPage() {
                                               isDisabled={ranges.length >= 10}
                                               _hover={ranges.length >= 10 ? undefined : { bg: "customGray.800", color: "white" }}
                                               onClick={() => addAvailabilityRange(day)}
-                                            />
+                                              />
+                                            </Tooltip>
                                           )}
-                                          <IconButton
+                                          <Tooltip label="Delete time slot" hasArrow placement="top">
+                                            <IconButton
                                             aria-label={`Delete this time slot for ${day}`}
                                             icon={
                                               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -995,9 +1001,11 @@ export default function CalendarBuilderPage() {
                                             color="customGray.600"
                                             _hover={{ bg: "customGray.800", color: "white" }}
                                             onClick={() => removeAvailabilityRange(day, rangeIndex)}
-                                          />
+                                            />
+                                          </Tooltip>
                                           {rangeIndex === 0 && (
-                                            <IconButton
+                                            <Tooltip label="Duplicate time slot" hasArrow placement="top">
+                                              <IconButton
                                               aria-label={`Duplicate this time slot for ${day}`}
                                               icon={
                                                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -1011,7 +1019,8 @@ export default function CalendarBuilderPage() {
                                               color="customGray.600"
                                               _hover={{ bg: "customGray.800", color: "white" }}
                                               onClick={() => duplicateAvailabilityRange(day, rangeIndex)}
-                                            />
+                                              />
+                                            </Tooltip>
                                           )}
                                         </HStack>
                                       </HStack>
@@ -1026,6 +1035,47 @@ export default function CalendarBuilderPage() {
                     </Box>
                     </>
                   )}
+
+                  <Text fontSize="15px" fontWeight="500" color="customGray.800" mt="48px" mb="16px">More settings</Text>
+                  <Box bg="white" border="1px solid" borderColor="customGray.200" borderRadius="14px" overflow="hidden">
+                    {[
+                      { icon: RepeatClockIcon, title: "Date overrides", description: "Add dates when your availability changes from your daily hours." },
+                    ].map((item) => (
+                      <HStack
+                        key={item.title}
+                        spacing="16px"
+                        px="20px"
+                        py="16px"
+                        borderBottom="none"
+                        borderColor="customGray.200"
+                        cursor="pointer"
+                      >
+                        <Box w="40px" h="40px" flexShrink={0} bg="customGray.800" borderRadius="12px" display="flex" alignItems="center" justifyContent="center">
+                          <item.icon color="white" w="16px" h="16px" />
+                        </Box>
+                        <VStack align="start" spacing="2px" flex="1">
+                          <Text fontSize="14px" fontWeight="500" color="customGray.800">{item.title}</Text>
+                          <Text fontSize="13px" color="customGray.500">{item.description}</Text>
+                        </VStack>
+                        <Button
+                          size="sm"
+                          fontSize="14px"
+                          fontWeight="400"
+                          color="customGray.800"
+                          bg="white"
+                          border="1px solid"
+                          borderColor="customGray.200"
+                          borderRadius="8px"
+                          boxShadow="0 1px 2px rgba(0,0,0,0.05)"
+                          _hover={{ bg: "customGray.100", borderColor: "customGray.300" }}
+                          leftIcon={<AddIcon w="10px" h="10px" />}
+                          onClick={onDateOverridesOpen}
+                        >
+                          Add an override
+                        </Button>
+                      </HStack>
+                    ))}
+                  </Box>
 
                 </Box>
                 </Box>
@@ -1933,6 +1983,17 @@ export default function CalendarBuilderPage() {
         setAvailablePages={setAvailablePages}
         setSelectedPage={setSelectedPage}
       />
+
+      <Modal isOpen={isDateOverridesOpen} onClose={onDateOverridesClose} size="md">
+        <ModalOverlay />
+        <ModalContent>
+          <ModalHeader>Date overrides</ModalHeader>
+          <ModalCloseButton />
+          <ModalBody pb="24px">
+            <CalendarPicker value={overrideDate} onChange={setOverrideDate} />
+          </ModalBody>
+        </ModalContent>
+      </Modal>
 
       <Modal isOpen={isShareOpen} onClose={onShareClose} size="lg" scrollBehavior="inside">
         <ModalOverlay />

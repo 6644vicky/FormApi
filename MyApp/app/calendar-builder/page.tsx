@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { Box, VStack, HStack, Text, Button, Heading, IconButton, Input, Textarea, useToast, Tabs, TabList, Tab, Avatar, Menu, MenuButton, MenuList, MenuItem, Modal, ModalOverlay, ModalContent, ModalHeader, ModalBody, ModalCloseButton, useDisclosure, Badge, Divider, Tag, TagLabel, TagCloseButton, Progress, Tooltip } from "@chakra-ui/react";
+import { Box, VStack, HStack, Text, Button, Heading, IconButton, Input, Textarea, useToast, Tabs, TabList, Tab, Avatar, Menu, MenuButton, MenuList, MenuItem, Modal, ModalOverlay, ModalContent, ModalHeader, ModalBody, ModalCloseButton, useDisclosure, Badge, Divider, Tag, TagLabel, TagCloseButton, Progress, Tooltip, Switch, Radio, RadioGroup } from "@chakra-ui/react";
 import { ArrowBackIcon, ArrowForwardIcon, AddIcon, CloseIcon, ChevronDownIcon, DragHandleIcon, CopyIcon, InfoOutlineIcon, RepeatClockIcon } from "@chakra-ui/icons";
 import { useState, useEffect, useRef, useMemo, ComponentProps } from "react";
 import { CalendarPicker } from "@/components/CalendarPicker";
@@ -91,6 +91,21 @@ export default function CalendarBuilderPage() {
   // unavailable that day. Drives both the Main-page preview and (once
   // saved) the live booking page's actual time slots.
   const isAvailabilityOpen = true;
+  // Which item is selected in the Configure tab's left nav. Only
+  // "Availability" has real settings behind it right now — the other three
+  // show a lightweight placeholder until their own settings are built.
+  const [configSection, setConfigSection] = useState("Availability");
+  // Reschedule and cancel — local UI-only for now, same as the rest of Configure.
+  const [requireCancellationReason, setRequireCancellationReason] = useState(true);
+  const [cancellationReasonMode, setCancellationReasonMode] = useState("Mandatory for host only");
+  const [disableCancelling, setDisableCancelling] = useState(false);
+  const [disableCancellingScope, setDisableCancellingScope] = useState("Host and attendee");
+  const [disableRescheduling, setDisableRescheduling] = useState(false);
+  const [disableReschedulingScope, setDisableReschedulingScope] = useState("Host and attendee");
+  const [disableReschedulingTiming, setDisableReschedulingTiming] = useState("always");
+  const [disableReschedulingMinutes, setDisableReschedulingMinutes] = useState(60);
+  const [allowReschedulingPastEvents, setAllowReschedulingPastEvents] = useState(false);
+  const [allowBookingThroughRescheduleLink, setAllowBookingThroughRescheduleLink] = useState(false);
   const [weeklyHours, setWeeklyHours] = useState<WeeklyAvailability>(DEFAULT_AVAILABILITY);
   // Drives the "Main page" preview's calendar/time-slot list — the same
   // state shape PublicBookingView uses, so the preview behaves like the real
@@ -889,19 +904,20 @@ export default function CalendarBuilderPage() {
                   <Text fontSize="11px" fontWeight="500" textTransform="uppercase" letterSpacing="0.04em" color="customGray.800" px="16px" pt="16px" pb="8px">
                     Configure
                   </Text>
-                  {["Availability", "Reschedule and cancel", "Limits & buffers", "Privacy and security"].map((label, i) => (
+                  {["Availability", "Reschedule and cancel", "Limits & buffers", "Privacy and security"].map((label) => (
                     <Box
-                      key={i}
+                      key={label}
                       h="32px"
                       px="14px"
                       display="flex"
                       alignItems="center"
                       borderRadius="8px"
-                      bg={i === 0 ? "customGray.100" : "transparent"}
+                      bg={configSection === label ? "customGray.100" : "transparent"}
                       cursor="pointer"
                       _hover={{ bg: "customGray.50" }}
+                      onClick={() => setConfigSection(label)}
                     >
-                      <Text fontSize="14px" fontWeight={i === 0 ? "500" : "400"} color={i === 0 ? "customGray.800" : "customGray.500"}>{label}</Text>
+                      <Text fontSize="14px" fontWeight={configSection === label ? "500" : "400"} color={configSection === label ? "customGray.800" : "customGray.500"}>{label}</Text>
                     </Box>
                   ))}
                 </VStack>
@@ -909,9 +925,10 @@ export default function CalendarBuilderPage() {
 
               <Box flex="1" h="100%" bg="white" borderLeft="1px solid" borderColor="customGray.200" overflow="hidden" display="flex" flexDirection="column">
                 <Box flex="1" overflowY="auto" bg="customGray.50">
+                {configSection === "Availability" ? (
                 <Box w="688px" mx="auto" pt="64px" pb="64px">
                   <Box>
-                    <Text fontSize="22px" fontWeight="500" color="customGray.800" mb="2px">Availability</Text>
+                    <Text fontSize="20px" fontWeight="500" color="customGray.800" mb="2px">Availability</Text>
                     <Text fontSize="14px" color="customGray.500" mb="32px">Weekly hours, buffers, and booking limits</Text>
                   </Box>
 
@@ -1078,6 +1095,204 @@ export default function CalendarBuilderPage() {
                   </Box>
 
                 </Box>
+                ) : configSection === "Reschedule and cancel" ? (
+                <Box w="688px" mx="auto" pt="64px" pb="64px">
+                  <Text fontSize="20px" fontWeight="500" color="customGray.800" mb="2px">Reschedule and cancel</Text>
+                  <Text fontSize="14px" color="customGray.500" mb="32px">Rules for guests rescheduling or cancelling a booking</Text>
+
+                  <Box bg="white" border="1px solid" borderColor="customGray.200" borderRadius="16px" overflow="hidden">
+                    <Box px="24px" py="20px" borderBottom="1px solid" borderColor="customGray.200">
+                      <HStack justify="space-between" align="flex-start">
+                        <VStack align="start" spacing="2px">
+                          <Text fontSize="14px" fontWeight="600" color="customGray.800">Require cancellation reason</Text>
+                          <Text fontSize="13px" color="customGray.500">Ask for a reason when someone cancels a booking</Text>
+                        </VStack>
+                        <Switch
+                          isChecked={requireCancellationReason}
+                          onChange={(e) => setRequireCancellationReason(e.target.checked)}
+                          sx={{ "span.chakra-switch__track[data-checked]": { bg: "customGray.800" } }}
+                        />
+                      </HStack>
+                      {requireCancellationReason && (
+                        <Menu matchWidth>
+                          <MenuButton
+                            as={Button}
+                            mt="16px"
+                            w="260px"
+                            size="sm"
+                            variant="outline"
+                            fontWeight="400"
+                            borderRadius="full"
+                            rightIcon={<ChevronDownIcon />}
+                            textAlign="left"
+                          >
+                            {cancellationReasonMode}
+                          </MenuButton>
+                          <MenuList minW="260px">
+                            {["Mandatory for host only", "Mandatory for everyone", "Optional"].map((option) => (
+                              <MenuItem key={option} fontSize="14px" py="6px" onClick={() => setCancellationReasonMode(option)}>
+                                {option}
+                              </MenuItem>
+                            ))}
+                          </MenuList>
+                        </Menu>
+                      )}
+                    </Box>
+
+                    <Box px="24px" py="20px" borderBottom="1px solid" borderColor="customGray.200">
+                      <HStack justify="space-between" align="flex-start">
+                        <VStack align="start" spacing="2px">
+                          <Text fontSize="14px" fontWeight="600" color="customGray.800">Disable cancelling</Text>
+                          <Text fontSize="13px" color="customGray.500">
+                            Disable event cancellation via calendar invite or email. <Text as="span" textDecoration="underline">Learn more</Text>
+                          </Text>
+                        </VStack>
+                        <Switch
+                          isChecked={disableCancelling}
+                          onChange={(e) => setDisableCancelling(e.target.checked)}
+                          sx={{ "span.chakra-switch__track[data-checked]": { bg: "customGray.800" } }}
+                        />
+                      </HStack>
+                      {disableCancelling && (
+                        <Menu matchWidth>
+                          <MenuButton
+                            as={Button}
+                            mt="16px"
+                            w="260px"
+                            size="sm"
+                            variant="outline"
+                            fontWeight="400"
+                            borderRadius="full"
+                            rightIcon={<ChevronDownIcon />}
+                            textAlign="left"
+                          >
+                            {disableCancellingScope}
+                          </MenuButton>
+                          <MenuList minW="260px">
+                            {["Host and attendee", "Host only", "Attendee only"].map((option) => (
+                              <MenuItem key={option} fontSize="14px" py="6px" onClick={() => setDisableCancellingScope(option)}>
+                                {option}
+                              </MenuItem>
+                            ))}
+                          </MenuList>
+                        </Menu>
+                      )}
+                    </Box>
+
+                    <Box px="24px" py="20px" borderBottom="1px solid" borderColor="customGray.200">
+                      <HStack justify="space-between" align="flex-start">
+                        <VStack align="start" spacing="2px">
+                          <Text fontSize="14px" fontWeight="600" color="customGray.800">Disable rescheduling</Text>
+                          <Text fontSize="13px" color="customGray.500">
+                            Disable rescheduling via calendar invite or email. <Text as="span" textDecoration="underline">Learn more</Text>
+                          </Text>
+                        </VStack>
+                        <Switch
+                          isChecked={disableRescheduling}
+                          onChange={(e) => setDisableRescheduling(e.target.checked)}
+                          sx={{ "span.chakra-switch__track[data-checked]": { bg: "customGray.800" } }}
+                        />
+                      </HStack>
+                      {disableRescheduling && (
+                        <VStack align="stretch" spacing="20px" mt="16px">
+                          <Menu matchWidth>
+                            <MenuButton
+                              as={Button}
+                              w="260px"
+                              size="sm"
+                              variant="outline"
+                              fontWeight="400"
+                              borderRadius="full"
+                              rightIcon={<ChevronDownIcon />}
+                              textAlign="left"
+                            >
+                              {disableReschedulingScope}
+                            </MenuButton>
+                            <MenuList minW="260px">
+                              {["Host and attendee", "Host only", "Attendee only"].map((option) => (
+                                <MenuItem key={option} fontSize="14px" py="6px" onClick={() => setDisableReschedulingScope(option)}>
+                                  {option}
+                                </MenuItem>
+                              ))}
+                            </MenuList>
+                          </Menu>
+
+                          <RadioGroup value={disableReschedulingTiming} onChange={setDisableReschedulingTiming}>
+                            <VStack align="stretch" spacing="16px">
+                              <Radio value="always" borderWidth="1px" _checked={{
+                                  bg: "white",
+                                  borderColor: "customGray.800",
+                                  borderWidth: "1px",
+                                  color: "customGray.800",
+                                  _before: { content: '""', display: "inline-block", pos: "relative", w: "50%", h: "50%", borderRadius: "50%", bg: "currentColor" },
+                                }}>
+                                <Text fontSize="14px" color="customGray.800">Always</Text>
+                              </Radio>
+                              <HStack>
+                                <Radio value="before_meeting" borderWidth="1px" _checked={{
+                                  bg: "white",
+                                  borderColor: "customGray.800",
+                                  borderWidth: "1px",
+                                  color: "customGray.800",
+                                  _before: { content: '""', display: "inline-block", pos: "relative", w: "50%", h: "50%", borderRadius: "50%", bg: "currentColor" },
+                                }}>
+                                  <Text fontSize="14px" color="customGray.800" whiteSpace="nowrap">When less than</Text>
+                                </Radio>
+                                <Input
+                                  type="number"
+                                  min={1}
+                                  w="80px"
+                                  size="sm"
+                                  value={disableReschedulingMinutes}
+                                  isDisabled={disableReschedulingTiming !== "before_meeting"}
+                                  onChange={(e) => setDisableReschedulingMinutes(Math.max(1, Number(e.target.value) || 1))}
+                                />
+                                <Text fontSize="14px" color="customGray.800" whiteSpace="nowrap">minutes before meeting</Text>
+                              </HStack>
+                            </VStack>
+                          </RadioGroup>
+                        </VStack>
+                      )}
+                    </Box>
+
+                    <HStack justify="space-between" align="flex-start" px="24px" py="20px" borderBottom="1px solid" borderColor="customGray.200">
+                      <VStack align="start" spacing="2px">
+                        <Text fontSize="14px" fontWeight="600" color="customGray.800">Allow rescheduling past events</Text>
+                        <Text fontSize="13px" color="customGray.500">
+                          Enabling this option allows for past events to be rescheduled. <Text as="span" textDecoration="underline">Learn more</Text>
+                        </Text>
+                      </VStack>
+                      <Switch
+                        isChecked={allowReschedulingPastEvents}
+                        onChange={(e) => setAllowReschedulingPastEvents(e.target.checked)}
+                        sx={{ "span.chakra-switch__track[data-checked]": { bg: "customGray.800" } }}
+                      />
+                    </HStack>
+
+                    <HStack justify="space-between" align="flex-start" px="24px" py="16px">
+                      <VStack align="start" spacing="2px">
+                        <Text fontSize="14px" fontWeight="600" color="customGray.800">Allow booking through reschedule link</Text>
+                        <Text fontSize="13px" color="customGray.500">When enabled, users will be able to create a new booking when trying to reschedule a cancelled booking</Text>
+                      </VStack>
+                      <Switch
+                        isChecked={allowBookingThroughRescheduleLink}
+                        onChange={(e) => setAllowBookingThroughRescheduleLink(e.target.checked)}
+                        sx={{ "span.chakra-switch__track[data-checked]": { bg: "customGray.800" } }}
+                      />
+                    </HStack>
+                  </Box>
+                </Box>
+                ) : (
+                <Box w="688px" mx="auto" pt="64px" pb="64px">
+                  <Text fontSize="22px" fontWeight="500" color="customGray.800" mb="2px">{configSection}</Text>
+                  <Text fontSize="14px" color="customGray.500">
+                    {configSection === "Limits & buffers"
+                      ? "Cap bookings per day and add space between meetings."
+                      : "Control who can see and book this event."}
+                  </Text>
+                  <Text fontSize="14px" color="customGray.400" mt="24px">This section isn&apos;t set up yet — check back soon.</Text>
+                </Box>
+                )}
                 </Box>
               </Box>
             </HStack>

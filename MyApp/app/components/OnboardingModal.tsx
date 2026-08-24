@@ -14,7 +14,7 @@ import {
   Button,
   VStack,
 } from "@chakra-ui/react";
-import { supabase } from "@/lib/supabase";
+import { supabase, syncServerSession } from "@/lib/supabase";
 import { validateUsernameFormat } from "@/lib/username";
 import { createAgent } from "@/app/actions/agentActions";
 import UsernameField from "@/app/components/UsernameField";
@@ -88,6 +88,11 @@ export default function OnboardingModal({ mode }: OnboardingModalProps) {
       }
 
       if (mode === "full") {
+        if (!(await syncServerSession(session))) {
+          setError("Couldn't verify your session. Please sign in again.");
+          return;
+        }
+
         const created = await createAgent(session.user.id, {
           name: workspaceName.trim(),
           services: selectedServices,

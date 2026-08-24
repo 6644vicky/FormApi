@@ -23,6 +23,20 @@ export function formatTime(hour: number, minute: number, is24Hour: boolean): str
 export type AvailabilityRange = { start: number; end: number };
 export type WeeklyAvailability = Record<string, AvailabilityRange[]>;
 
+// PostgREST can report this either as a PostgreSQL undefined-column error
+// (42703) or as a schema-cache error (PGRST204) while a deployment is still
+// waiting for the availability migration to be applied. Keeping the check in
+// one place lets callers degrade to the legacy calendar_events shape without
+// hiding unrelated database failures.
+export function isMissingAvailabilityColumnError(error: {
+  code?: string;
+  message?: string;
+} | null | undefined): boolean {
+  if (!error) return false;
+  if (error.code === "42703" || error.code === "PGRST204") return true;
+  return /availability.*(column|schema cache)|column.*availability/i.test(error.message || "");
+}
+
 export const WEEK_DAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 
 // Falls back to Mon-Fri 9-5 for events saved before the Availability editor

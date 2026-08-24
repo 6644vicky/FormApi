@@ -6,7 +6,7 @@ import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { keyframes } from "@emotion/react";
 import { motion } from "framer-motion";
-import { supabase } from "@/lib/supabase";
+import { supabase, syncServerSession } from "@/lib/supabase";
 import { deleteUserAccount } from "@/app/actions/deleteUser";
 import { getAgents, createAgent, deleteAgent } from "@/app/actions/agentActions";
 import CryptoJS from "crypto-js";
@@ -297,6 +297,10 @@ export default function BuilderPage() {
       try {
         const { data: { session } } = await supabase.auth.getSession();
         if (session?.user?.id) {
+          // Server Actions authenticate from the httpOnly session cookie. A
+          // browser session may predate that cookie (or have been restored
+          // from Supabase storage), so sync it before loading workspaces.
+          await syncServerSession(session);
           const dbAgents = await getAgents(session.user.id);
           setAgents(dbAgents);
           if (dbAgents.length > 0) {
@@ -846,8 +850,17 @@ export default function BuilderPage() {
 
     try {
       const { data: { session } } = await supabase.auth.getSession();
-      if (session?.user?.id) {
-        await createAgent(session.user.id, newAgent);
+      if (!session?.user?.id) {
+        throw new Error("User not authenticated");
+      }
+
+      if (!(await syncServerSession(session))) {
+        throw new Error("Unable to sync the authenticated session");
+      }
+
+      const created = await createAgent(session.user.id, newAgent);
+      if (!created) {
+        throw new Error("Workspace was not saved");
       }
 
       // Update local state after successful creation
@@ -1974,4 +1987,3 @@ export default function BuilderPage() {
     </Flex>
   );
 }
-

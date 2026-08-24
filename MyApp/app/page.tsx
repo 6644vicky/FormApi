@@ -260,6 +260,17 @@ export default function Home() {
                     });
                     setIsLoading(false);
                   } else if (data?.session) {
+                    // Server Actions (getAgents, deleteAgent, etc.) verify who's
+                    // calling via a cookie the OAuth path sets automatically —
+                    // password sign-in needs this extra step to get the same cookie.
+                    await fetch("/api/auth/set-session", {
+                      method: "POST",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify({
+                        access_token: data.session.access_token,
+                        refresh_token: data.session.refresh_token,
+                      }),
+                    }).catch(() => {});
                     router.push("/inbox");
                   } else {
                     toast({

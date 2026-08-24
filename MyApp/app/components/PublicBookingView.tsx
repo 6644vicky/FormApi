@@ -2,7 +2,8 @@
 
 import { useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
-import { Box, VStack, HStack, Text, Button, Input, Textarea, Avatar, Tabs, TabList, Tab } from "@chakra-ui/react";
+import { Box, VStack, HStack, Text, Button, IconButton, Input, Textarea, Avatar, Tabs, TabList, Tab } from "@chakra-ui/react";
+import { CloseIcon, RepeatIcon } from "@chakra-ui/icons";
 import { CalendarPicker } from "@/components/CalendarPicker";
 import { supabase } from "@/lib/supabase";
 import { parseDurationMinutes, formatTime, buildTimeSlots, getDayRanges, type WeeklyAvailability } from "@/lib/bookingTime";
@@ -25,6 +26,7 @@ type EventInfo = {
 // vanity URL) — each just points this at a different resolver endpoint.
 export function PublicBookingView({ fetchUrl }: { fetchUrl: string }) {
   const searchParams = useSearchParams();
+  const isWidget = searchParams.get("mode") === "widget";
   const [event, setEvent] = useState<EventInfo | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
@@ -97,6 +99,16 @@ export function PublicBookingView({ fetchUrl }: { fetchUrl: string }) {
   const compactDateLabel = selectedDate.toLocaleDateString("en-US", { month: "short", day: "numeric" });
   const guestTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
 
+  const resetBooking = () => {
+    setStep("main");
+    setSelectedDate(new Date());
+    setSelectedTime(null);
+    setGuestName("");
+    setGuestEmail("");
+    setGuestPhone("");
+    setGuestNotes("");
+  };
+
   // Shared by the Confirm button (form page hidden — no separate form step
   // to save from) and the form step's own Schedule Event button, so a
   // booking is saved on whichever path actually reaches "success".
@@ -106,17 +118,81 @@ export function PublicBookingView({ fetchUrl }: { fetchUrl: string }) {
     const bookingTime = formatTime(Math.floor(selectedTime / 60), selectedTime % 60, true);
     // Best-effort: a guest's booking should still go through even
     // if the bookings table isn't set up yet on this instance.
-    const { error: bookingError } = await supabase.from("bookings").insert({
-      event_id: event.id,
-      guest_name: guestName,
-      guest_email: guestEmail,
-      guest_phone: guestPhone || null,
-      guest_notes: guestNotes || null,
-      booking_date: bookingDate,
-      booking_time: bookingTime,
-    });
-    if (bookingError) console.error("Couldn't save booking:", bookingError.message);
+    const { data: inserted, error: bookingError } = await supabase
+      .from("bookings")
+      .insert({
+        event_id: event.id,
+        guest_name: guestName,
+        guest_email: guestEmail,
+        guest_phone: guestPhone || null,
+        guest_notes: guestNotes || null,
+        booking_date: bookingDate,
+        booking_time: bookingTime,
+        guest_timezone: guestTimezone,
+      })
+      .select("id")
+      .single();
+    if (bookingError) {
+      console.error("Couldn't save booking:", bookingError.message);
+      return;
+    }
+    // Fire-and-forget: a real Google Meet link is a nice-to-have, not
+    // something worth making the guest wait on or fail their booking over.
+    fetch("/api/bookings/generate-meet-link", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ bookingId: inserted.id }),
+    }).catch(() => {});
   };
+
+  if (isWidget && step === "main") {
+    return (
+      <Box h="100vh" bg="white" display="flex" flexDirection="column" overflow="hidden">
+        <HStack px="20px" py="14px" minH="64px" borderBottom="1px solid" borderColor="customGray.200" spacing="10px">
+          <Avatar name={event.ownerName} src={event.avatarUrl || undefined} boxSize="32px" bg="customGray.300" color="customGray.800" />
+          <Text flex="1" fontSize="15px" fontWeight="600" color="customGray.900">{event.ownerName}</Text>
+          <IconButton aria-label="Reset booking" icon={<RepeatIcon boxSize="17px" />} size="sm" variant="ghost" color="customGray.500" _hover={{ bg: "customGray.100" }} onClick={resetBooking} />
+          <IconButton aria-label="Close booking widget" icon={<CloseIcon boxSize="13px" />} size="sm" variant="ghost" color="customGray.500" _hover={{ bg: "customGray.100" }} onClick={() => window.parent.postMessage({ type: "booking-widget-close" }, "*")} />
+        </HStack>
+
+        <Box flex="1" overflowY="auto" px="20px" pt="22px">
+          <Text fontSize="19px" lineHeight="1.3" fontWeight="700" color="customGray.900">{event.title}</Text>
+          {event.description && <Text mt="12px" fontSize="15px" lineHeight="1.5" color="customGray.700">{event.description}</Text>}
+
+          <Text mt="22px" fontSize="15px" fontWeight="700" color="customGray.800">Booking Details</Text>
+          <VStack mt="10px" align="stretch" spacing="10px">
+            <HStack spacing="8px" color="customGray.600"><Text aria-hidden="true">◷</Text><Text fontSize="15px">{event.durations[0] || "15 min"}</Text></HStack>
+            <HStack spacing="8px" color="customGray.600"><Text aria-hidden="true">📹</Text><Text fontSize="15px">{event.meetingLink}</Text></HStack>
+            <HStack spacing="8px" color="customGray.600"><Text aria-hidden="true">◎</Text><Text fontSize="15px">{guestTimezone}</Text></HStack>
+          </VStack>
+
+          <Box mt="20px" bg="customGray.50" borderRadius="14px" px="14px" py="16px">
+            <CalendarPicker value={selectedDate} onChange={(date) => { setSelectedDate(date); setSelectedTime(null); }} isDateDisabled={(date) => getDayRanges(event.availability, date).length === 0} />
+          </Box>
+
+          <VStack mt="14px" spacing="8px" align="stretch" pb="20px">
+            {dayRanges.length === 0 && <Text fontSize="13px" color="customGray.500" textAlign="center">No availability this day.</Text>}
+            {timeSlots.map((minutes) => {
+              const label = formatTime(Math.floor(minutes / 60), minutes % 60, is24Hour);
+              return (
+                <Button key={minutes} h="38px" variant="outline" borderColor="customGray.200" bg="white" fontSize="14px" fontWeight="500" _hover={{ bg: "customGray.50" }} onClick={() => { setSelectedTime(minutes); if (!event.hideFormPage) setStep("form"); }}>
+                  {label}
+                </Button>
+              );
+            })}
+          </VStack>
+        </Box>
+
+        <Text px="20px" py="11px" fontSize="12px" color="customGray.500" textAlign="center" borderTop="1px solid" borderColor="customGray.100">
+          Optional footer text. Links to <Text as="span" textDecoration="underline">privacy</Text> and <Text as="span" textDecoration="underline">terms</Text>.
+        </Text>
+        <HStack justify="center" py="12px" bg="customGray.50" spacing="7px">
+          <Text fontSize="13px" fontWeight="700">▧</Text>
+          <Text fontSize="13px" color="customGray.800">Powered by Webforms</Text>
+        </HStack>
+      </Box>
+    );
+  }
 
   return (
     <Box minH="100vh" bg={isEmbedded ? "transparent" : "customGray.50"} display="flex" alignItems="center" justifyContent="center" p={isEmbedded ? "0px" : "24px"}>

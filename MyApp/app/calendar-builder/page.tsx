@@ -1,12 +1,12 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { Box, VStack, HStack, Text, Button, Heading, IconButton, Input, Textarea, useToast, Tabs, TabList, Tab, Avatar, Menu, MenuButton, MenuList, MenuItem, Modal, ModalOverlay, ModalContent, ModalHeader, ModalBody, ModalCloseButton, useDisclosure, Badge, Divider, Tag, TagLabel, TagCloseButton, Progress, Tooltip, Switch, Radio, RadioGroup } from "@chakra-ui/react";
-import { ArrowBackIcon, ArrowForwardIcon, AddIcon, CloseIcon, ChevronDownIcon, DragHandleIcon, CopyIcon, InfoOutlineIcon, RepeatClockIcon } from "@chakra-ui/icons";
+import { Box, VStack, HStack, Text, Button, Heading, Icon, IconButton, Input, Textarea, useToast, Tabs, TabList, Tab, TabPanels, TabPanel, Avatar, AvatarGroup, Menu, MenuButton, MenuList, MenuItem, MenuGroup, MenuDivider, Modal, ModalOverlay, ModalContent, ModalHeader, ModalBody, ModalCloseButton, useDisclosure, Badge, Divider, Tag, TagLabel, TagCloseButton, Progress, Tooltip, Switch, Radio, RadioGroup, Checkbox, Table, Thead, Tbody, Tr, Th, Td, Popover, PopoverTrigger, PopoverContent, PopoverBody, Portal, Collapse } from "@chakra-ui/react";
+import { ArrowBackIcon, ArrowForwardIcon, AddIcon, CloseIcon, ChevronDownIcon, DragHandleIcon, CopyIcon, InfoOutlineIcon, RepeatClockIcon, ExternalLinkIcon } from "@chakra-ui/icons";
 import { useState, useEffect, useRef, useMemo, ComponentProps } from "react";
 import { CalendarPicker } from "@/components/CalendarPicker";
 import { AddPage } from "@/components/AddPage";
-import { supabase } from "@/lib/supabase";
+import { supabase, syncServerSession } from "@/lib/supabase";
 import { parseDurationMinutes, formatTime, buildTimeSlots, WEEK_DAYS, DEFAULT_AVAILABILITY, getDayRanges, isMissingAvailabilityColumnError, type WeeklyAvailability } from "@/lib/bookingTime";
 import FullPageLoader from "@/app/components/FullPageLoader";
 import UsernameModal from "@/app/components/UsernameModal";
@@ -37,6 +37,56 @@ function parseTimeText(text: string): number | null {
   const isPM = match[3].toUpperCase() === "PM";
   const hour24 = (hour12 % 12) + (isPM ? 12 : 0);
   return hour24 * 60 + minute;
+}
+
+// The Menu-based "combo box" used throughout Configure in place of a plain
+// <Select> — matches the reference design's pill-shaped dropdown buttons.
+function ComboMenu({
+  value,
+  options,
+  onChange,
+  w = "200px",
+}: {
+  value: string;
+  options: string[];
+  onChange: (value: string) => void;
+  w?: string;
+}) {
+  return (
+    <Menu matchWidth>
+      <MenuButton
+        as={Button}
+        w={w}
+        size="md"
+        variant="outline"
+        fontSize="14px"
+        fontWeight="400"
+        borderRadius="8px"
+        px="14px"
+        bg="customGray.50"
+        borderColor="customGray.300"
+        rightIcon={<ChevronDownIcon />}
+        textAlign="left"
+        _hover={{ bg: "customGray.50", borderColor: "customGray.500", boxShadow: "none" }}
+        _active={{
+          bg: "customGray.50",
+          borderColor: "customGray.500",
+          boxShadow: "0 0 0 4px var(--chakra-colors-customDark-10)",
+        }}
+        _focus={{ bg: "customGray.50", borderColor: "customGray.300", boxShadow: "none" }}
+        _focusVisible={{ bg: "customGray.50", borderColor: "customGray.300", boxShadow: "none" }}
+      >
+        {value}
+      </MenuButton>
+      <MenuList minW={w}>
+        {options.map((option) => (
+          <MenuItem key={option} fontSize="14px" py="6px" onClick={() => onChange(option)}>
+            {option}
+          </MenuItem>
+        ))}
+      </MenuList>
+    </Menu>
+  );
 }
 
 // Plain text field for a time value — no native picker, no dropdown. Holds
@@ -74,6 +124,15 @@ function TimeTextInput({
   );
 }
 
+// Palette for the Results table's attendee avatars, keyed by booking id so
+// each person reads as a consistent color across re-renders.
+const BOOKING_AVATAR_COLORS = ["#EA8C55", "#7C3AED", "#10B981", "#F59E0B", "#EF4444", "#06B6D4", "#8B5CF6", "#EC4899"];
+
+// Top-nav tab order, mirrored into the URL's ?view= param (see tabIndex
+// below) so a refresh lands back on whichever tab was open instead of
+// always resetting to Build.
+const TAB_VIEWS = ["build", "design", "configure", "workflow", "results"];
+
 export default function CalendarBuilderPage() {
   const router = useRouter();
   // Default every toast on this page to the top; individual calls can override.
@@ -83,7 +142,18 @@ export default function CalendarBuilderPage() {
   const { isOpen: isUsernameOpen, onOpen: onUsernameOpen, onClose: onUsernameClose } = useDisclosure();
   const { isOpen: isDateOverridesOpen, onOpen: onDateOverridesOpen, onClose: onDateOverridesClose } = useDisclosure();
   const [overrideDate, setOverrideDate] = useState<Date | undefined>(undefined);
-  const [tabIndex, setTabIndex] = useState(0);
+  const [tabIndex, setTabIndex] = useState(() => {
+    if (typeof window === "undefined") return 0;
+    const view = new URLSearchParams(window.location.search).get("view");
+    const index = TAB_VIEWS.indexOf(view || "");
+    return index === -1 ? 0 : index;
+  });
+  const handleTabChange = (index: number) => {
+    setTabIndex(index);
+    const params = new URLSearchParams(window.location.search);
+    params.set("view", TAB_VIEWS[index]);
+    router.replace(`/calendar-builder?${params.toString()}`);
+  };
   const [selectedPage, setSelectedPage] = useState("Main page");
   const [isFormPageHidden, setIsFormPageHidden] = useState(false);
   // Weekly hours editor in the Configure tab. Each day holds a list of
@@ -104,6 +174,22 @@ export default function CalendarBuilderPage() {
   const [disableReschedulingScope, setDisableReschedulingScope] = useState("Host and attendee");
   const [disableReschedulingTiming, setDisableReschedulingTiming] = useState("always");
   const [disableReschedulingMinutes, setDisableReschedulingMinutes] = useState(60);
+  // Limits & buffers — local UI-only for now, same as the rest of Configure.
+  const [bufferBeforeEvent, setBufferBeforeEvent] = useState("120 Minutes");
+  const [bufferAfterEvent, setBufferAfterEvent] = useState("No buffer time");
+  const [limitBookingFrequency, setLimitBookingFrequency] = useState(true);
+  const [bookingFrequencyLimits, setBookingFrequencyLimits] = useState([{ count: 1, period: "Per Day" }]);
+  const [limitTotalDuration, setLimitTotalDuration] = useState(true);
+  const [durationLimits, setDurationLimits] = useState([{ minutes: 60, period: "Per Day" }]);
+  const [limitFutureBookings, setLimitFutureBookings] = useState(true);
+  const [futureBookingMode, setFutureBookingMode] = useState("rolling");
+  const [rollingDays, setRollingDays] = useState(30);
+  const [rollingUnit, setRollingUnit] = useState("business days");
+  const [alwaysDaysAvailable, setAlwaysDaysAvailable] = useState(false);
+  const [limitUpcomingPerBooker, setLimitUpcomingPerBooker] = useState(true);
+  const [upcomingBookingsCount, setUpcomingBookingsCount] = useState(1);
+  const [offerRescheduleLastBooking, setOfferRescheduleLastBooking] = useState(false);
+  const [showOnlyFirstSlot, setShowOnlyFirstSlot] = useState(true);
   const [allowReschedulingPastEvents, setAllowReschedulingPastEvents] = useState(false);
   const [allowBookingThroughRescheduleLink, setAllowBookingThroughRescheduleLink] = useState(false);
   const [weeklyHours, setWeeklyHours] = useState<WeeklyAvailability>(DEFAULT_AVAILABILITY);
@@ -124,8 +210,17 @@ export default function CalendarBuilderPage() {
     created_at: string;
     extra_fields: Record<string, unknown> | null;
     source: string;
+    meeting_url: string | null;
   }>>([]);
   const [isLoadingBookings, setIsLoadingBookings] = useState(false);
+  const [bookingsSearchQuery, setBookingsSearchQuery] = useState("");
+  const [resultsFilter, setResultsFilter] = useState("All");
+  // Booking shown in the right-side details drawer when a Results row is clicked.
+  const [selectedBooking, setSelectedBooking] = useState<(typeof bookings)[number] | null>(null);
+  // Keeps the last-opened booking rendered while the panel slides shut, so the
+  // close transition has content to animate instead of unmounting instantly.
+  const [panelBooking, setPanelBooking] = useState<(typeof bookings)[number] | null>(null);
+  const [isNotesExpanded, setIsNotesExpanded] = useState(true);
   // This event's key for the inbound webhook route (app/api/webhook/[apiKey]) —
   // lets a third-party form post lead data straight to this event.
   const [apiKey, setApiKey] = useState<string | null>(null);
@@ -199,15 +294,15 @@ export default function CalendarBuilderPage() {
   // save entirely and silently revert the selection.
   const saveImmediatelyRef = useRef(false);
 
-  // Real, working embed snippets for public/booking-widget.js and the raw
-  // iframe alternative — both point at the public /book/[id] page, which
-  // only exists once this event has actually been saved.
+  // Real, working embed snippets for the compact floating widget and the raw
+  // iframe alternative. The version query prevents an installed widget from
+  // reusing an older cached script after its interface changes.
   const widgetEmbedCode = useMemo(() => {
     if (!currentEventId) return "";
     const origin = typeof window !== "undefined" ? window.location.origin : "https://your-domain.com";
     const escapeAttr = (value: string) => value.replace(/&/g, "&amp;").replace(/"/g, "&quot;");
     return [
-      `<script src="${origin}/booking-widget.js"`,
+      `<script src="${origin}/booking-widget.js?v=20260823-2"`,
       `  data-event-id="${currentEventId}"`,
       `  data-label="${escapeAttr(title || "Book a meeting")}"`,
       `  defer>`,
@@ -246,8 +341,28 @@ export default function CalendarBuilderPage() {
           setSelectedPage(pageParam);
         }
 
+        // Bounced back from the Google Calendar connect flow (see
+        // app/api/auth/google-calendar/callback/route.ts).
+        const googleCalendarParam = params.get("google_calendar");
+        if (googleCalendarParam) {
+          toast({
+            title: googleCalendarParam === "connected" ? "Google Calendar connected" : "Couldn't connect Google Calendar",
+            status: googleCalendarParam === "connected" ? "success" : "error",
+            duration: 4000,
+            isClosable: true,
+            position: "top",
+          });
+          params.delete("google_calendar");
+          window.history.replaceState({}, "", `${window.location.pathname}?${params.toString()}`);
+        }
+
         const { data: { session } } = await supabase.auth.getSession();
         if (session?.user) {
+          // Password-based sign-in never touches the OAuth callback route,
+          // so the "sb-access-token" cookie the Google Calendar status/
+          // connect routes rely on (see lib/serverAuth.ts) wouldn't exist
+          // yet without this — same fix as the Server Action call sites.
+          syncServerSession(session);
           const avatarUrl = session.user.user_metadata?.avatar_url || session.user.user_metadata?.picture;
           const fullName = session.user.user_metadata?.full_name || session.user.email || "User";
 
@@ -259,15 +374,19 @@ export default function CalendarBuilderPage() {
           setOwnerName(fullName);
           setOwnerEmail(session.user.email || "");
 
-          // Check if user has OAuth providers linked
+          // "Connected" for Google now means the app's own Calendar OAuth
+          // client (see lib/googleCalendar.ts) actually holds a refresh
+          // token it can use to generate a real Meet link later — not just
+          // that the user once signed in with a Google identity.
+          fetch("/api/auth/google-calendar/status")
+            .then((res) => res.json())
+            .then((data) => setIsGoogleConnected(!!data.connected))
+            .catch(() => {});
+
           const { data: providers } = await supabase.auth.getUserIdentities();
-          const hasGoogleProvider = providers?.identities?.some(
-            (identity) => identity.provider === "google"
-          );
           const hasZoomProvider = providers?.identities?.some(
             (identity) => identity.provider === "zoom"
           );
-          setIsGoogleConnected(!!hasGoogleProvider);
           setIsZoomConnected(!!hasZoomProvider);
 
           const { data: profile } = await supabase
@@ -338,7 +457,7 @@ export default function CalendarBuilderPage() {
     (async () => {
       const { data, error } = await supabase
         .from("bookings")
-        .select("id, guest_name, guest_email, guest_phone, guest_notes, booking_date, booking_time, created_at, extra_fields, source")
+        .select("id, guest_name, guest_email, guest_phone, guest_notes, booking_date, booking_time, created_at, extra_fields, source, meeting_url")
         .eq("event_id", currentEventId)
         .order("created_at", { ascending: false });
       if (error) {
@@ -349,6 +468,50 @@ export default function CalendarBuilderPage() {
       setIsLoadingBookings(false);
     })();
   }, [tabIndex, currentEventId]);
+
+  const filteredBookings = useMemo(() => {
+    const todayStr = new Date().toISOString().slice(0, 10);
+    // "Recurring" and "Canceled" have no backing data yet (no recurrence or
+    // cancellation status is tracked on a booking), so they always come up
+    // empty rather than showing a misleading All-equivalent list.
+    let scoped = bookings;
+    if (resultsFilter === "Upcoming") scoped = bookings.filter((booking) => booking.booking_date >= todayStr);
+    else if (resultsFilter === "Past") scoped = bookings.filter((booking) => booking.booking_date < todayStr);
+    else if (resultsFilter === "Recurring" || resultsFilter === "Canceled") scoped = [];
+
+    const q = bookingsSearchQuery.trim().toLowerCase();
+    if (!q) return scoped;
+    return scoped.filter((booking) =>
+      (booking.guest_name || "").toLowerCase().includes(q) ||
+      (booking.guest_email || "").toLowerCase().includes(q) ||
+      (booking.guest_phone || "").toLowerCase().includes(q)
+    );
+  }, [bookings, bookingsSearchQuery, resultsFilter]);
+
+  const bookingStats = useMemo(() => {
+    const todayStr = new Date().toISOString().slice(0, 10);
+    const total = bookings.length;
+    const upcoming = bookings.filter((booking) => booking.booking_date >= todayStr).length;
+    const webhook = bookings.filter((booking) => booking.source === "webhook").length;
+    return { total, upcoming, direct: total - webhook, webhook };
+  }, [bookings]);
+
+  // Counts shown next to each sidebar filter — reflect the full booking set,
+  // not the search-narrowed filteredBookings, same as an inbox's unread counts.
+  const resultsFilterCounts = useMemo(() => {
+    const todayStr = new Date().toISOString().slice(0, 10);
+    const past = bookings.filter((booking) => booking.booking_date < todayStr).length;
+    return { All: bookings.length, Upcoming: bookingStats.upcoming, Past: past, Recurring: 0, Canceled: 0 };
+  }, [bookings, bookingStats.upcoming]);
+
+  const handleDeleteBooking = async (bookingId: number) => {
+    const { error } = await supabase.from("bookings").delete().eq("id", bookingId);
+    if (error) {
+      toast({ title: "Couldn't delete booking", description: error.message, status: "error" });
+      return;
+    }
+    setBookings((prev) => prev.filter((booking) => booking.id !== bookingId));
+  };
 
   // Live slug-uniqueness check, debounced. Runs whenever the slug changes for
   // any reason — typed by hand or auto-derived from the title — so a
@@ -604,42 +767,12 @@ export default function CalendarBuilderPage() {
     }
   };
 
-  const handleConnectGoogle = async () => {
-    try {
-      const { data, error } = await supabase.auth.signInWithOAuth({
-        provider: "google",
-        options: {
-          redirectTo: `${window.location.origin}/calendar-builder`,
-          scopes: "https://www.googleapis.com/auth/calendar https://www.googleapis.com/auth/meet.readonly",
-        },
-      });
-
-      if (error) {
-        toast({
-          title: "Failed to connect Google",
-          description: error.message,
-          status: "error",
-          duration: 3000,
-          isClosable: true,
-          position: "top",
-        });
-        return;
-      }
-
-      if (data?.url) {
-        window.location.href = data.url;
-      }
-    } catch (error) {
-      console.error("Error connecting Google:", error);
-      toast({
-        title: "Connection error",
-        description: "Failed to connect Google account",
-        status: "error",
-        duration: 3000,
-        isClosable: true,
-        position: "top",
-      });
-    }
+  const handleConnectGoogle = () => {
+    // A dedicated OAuth flow (not Supabase's Google sign-in) — the app needs
+    // to hold onto a refresh token itself to generate a real Meet link
+    // later, at booking time, when the owner isn't in the browser to hand
+    // over a fresh one. See lib/googleCalendar.ts.
+    window.location.href = "/api/auth/google-calendar/connect";
   };
 
   const handleConnectZoom = async () => {
@@ -708,6 +841,26 @@ export default function CalendarBuilderPage() {
     });
   };
 
+  const addFrequencyLimit = () => {
+    setBookingFrequencyLimits((prev) => [...prev, { count: 1, period: "Per Day" }]);
+  };
+  const removeFrequencyLimit = (index: number) => {
+    setBookingFrequencyLimits((prev) => prev.filter((_, i) => i !== index));
+  };
+  const updateFrequencyLimit = (index: number, field: "count" | "period", value: number | string) => {
+    setBookingFrequencyLimits((prev) => prev.map((limit, i) => (i === index ? { ...limit, [field]: value } : limit)));
+  };
+
+  const addDurationLimit = () => {
+    setDurationLimits((prev) => [...prev, { minutes: 60, period: "Per Day" }]);
+  };
+  const removeDurationLimit = (index: number) => {
+    setDurationLimits((prev) => prev.filter((_, i) => i !== index));
+  };
+  const updateDurationLimit = (index: number, field: "minutes" | "period", value: number | string) => {
+    setDurationLimits((prev) => prev.map((limit, i) => (i === index ? { ...limit, [field]: value } : limit)));
+  };
+
   if (isLoading) {
     return <FullPageLoader />;
   }
@@ -768,7 +921,7 @@ export default function CalendarBuilderPage() {
                 color={tabIndex === 0 ? "customGray.800" : "customGray.600"}
                 fontWeight={tabIndex === 0 ? "500" : "400"}
                 cursor="pointer"
-                onClick={() => setTabIndex(0)}
+                onClick={() => handleTabChange(0)}
                 pb="2px"
                 borderBottom={tabIndex === 0 ? "2px solid" : "none"}
                 borderBottomColor={tabIndex === 0 ? "customGray.800" : "transparent"}
@@ -780,7 +933,7 @@ export default function CalendarBuilderPage() {
                 color={tabIndex === 1 ? "customGray.800" : "customGray.600"}
                 fontWeight={tabIndex === 1 ? "500" : "400"}
                 cursor="pointer"
-                onClick={() => setTabIndex(1)}
+                onClick={() => handleTabChange(1)}
                 pb="2px"
                 borderBottom={tabIndex === 1 ? "2px solid" : "none"}
                 borderBottomColor={tabIndex === 1 ? "customGray.800" : "transparent"}
@@ -792,7 +945,7 @@ export default function CalendarBuilderPage() {
                 color={tabIndex === 2 ? "customGray.800" : "customGray.600"}
                 fontWeight={tabIndex === 2 ? "500" : "400"}
                 cursor="pointer"
-                onClick={() => setTabIndex(2)}
+                onClick={() => handleTabChange(2)}
                 pb="2px"
                 borderBottom={tabIndex === 2 ? "2px solid" : "none"}
                 borderBottomColor={tabIndex === 2 ? "customGray.800" : "transparent"}
@@ -804,7 +957,7 @@ export default function CalendarBuilderPage() {
                 color={tabIndex === 3 ? "customGray.800" : "customGray.600"}
                 fontWeight={tabIndex === 3 ? "500" : "400"}
                 cursor="pointer"
-                onClick={() => setTabIndex(3)}
+                onClick={() => handleTabChange(3)}
                 pb="2px"
                 borderBottom={tabIndex === 3 ? "2px solid" : "none"}
                 borderBottomColor={tabIndex === 3 ? "customGray.800" : "transparent"}
@@ -816,7 +969,7 @@ export default function CalendarBuilderPage() {
                 color={tabIndex === 4 ? "customGray.800" : "customGray.600"}
                 fontWeight={tabIndex === 4 ? "500" : "400"}
                 cursor="pointer"
-                onClick={() => setTabIndex(4)}
+                onClick={() => handleTabChange(4)}
                 pb="2px"
                 borderBottom={tabIndex === 4 ? "2px solid" : "none"}
                 borderBottomColor={tabIndex === 4 ? "customGray.800" : "transparent"}
@@ -858,43 +1011,795 @@ export default function CalendarBuilderPage() {
           </Box>
 
           {tabIndex === 4 ? (
-            <Box flex="1" w="100%" overflowY="auto" p="30px">
-              <Text fontSize="18px" fontWeight="600" color="customGray.800" mb="20px">Results</Text>
-              {!currentEventId ? (
-                <Text fontSize="14px" color="customGray.500">Save this event before it can receive bookings.</Text>
-              ) : isLoadingBookings ? (
-                <Text fontSize="14px" color="customGray.500">Loading...</Text>
-              ) : bookings.length === 0 ? (
-                <Text fontSize="14px" color="customGray.500">No one has booked this event yet.</Text>
-              ) : (
-                <VStack spacing="12px" align="stretch" maxW="700px">
-                  {bookings.map((booking) => (
-                    <Box key={booking.id} border="1px solid" borderColor="customGray.200" borderRadius="8px" p="16px" bg="white">
-                      <HStack justify="space-between" mb="8px">
-                        <HStack spacing="8px">
-                          <Text fontSize="14px" fontWeight="600" color="customGray.800">{booking.guest_name || "No name provided"}</Text>
-                          {booking.source === "webhook" && (
-                            <Badge fontSize="10px" colorScheme="purple" borderRadius="4px">Webhook</Badge>
-                          )}
-                        </HStack>
-                        <Text fontSize="13px" color="customGray.500">{booking.booking_date} · {booking.booking_time}</Text>
-                      </HStack>
-                      <Text fontSize="13px" color="customGray.600">{booking.guest_email || "No email provided"}</Text>
-                      {booking.guest_phone && <Text fontSize="13px" color="customGray.600">{booking.guest_phone}</Text>}
-                      {booking.guest_notes && <Text fontSize="13px" color="customGray.600" mt="8px">"{booking.guest_notes}"</Text>}
-                      {booking.extra_fields && Object.keys(booking.extra_fields).length > 0 && (
-                        <VStack align="stretch" spacing="2px" mt="8px" pt="8px" borderTop="1px solid" borderColor="customGray.100">
-                          {Object.entries(booking.extra_fields).map(([key, value]) => (
-                            <Text key={key} fontSize="12px" color="customGray.500">
-                              <Text as="span" fontWeight="600">{key}:</Text> {String(value)}
-                            </Text>
-                          ))}
-                        </VStack>
-                      )}
+            <Box flex="1" w="100%" overflow="hidden" p="12px">
+            <HStack align="stretch" h="100%" w="100%" spacing="0px" overflow="hidden" borderRadius="12px" border="1px solid" borderColor="customGray.200">
+              <Box w="255px" flexShrink={0} h="100%" bg="white" overflow="hidden">
+                <VStack align="stretch" spacing="4px" px="12px" pb="12px">
+                  <Text fontSize="11px" fontWeight="500" textTransform="uppercase" letterSpacing="0.04em" color="customGray.800" px="16px" pt="16px" pb="8px">
+                    Results
+                  </Text>
+                  {(["All", "Upcoming", "Past", "Recurring", "Canceled"] as const).map((label) => (
+                    <Box
+                      key={label}
+                      role="group"
+                      h="32px"
+                      px="14px"
+                      display="flex"
+                      alignItems="center"
+                      justifyContent="space-between"
+                      borderRadius="8px"
+                      bg={resultsFilter === label ? "customGray.100" : "transparent"}
+                      cursor="pointer"
+                      _hover={{ bg: "customGray.50" }}
+                      onClick={() => setResultsFilter(label)}
+                    >
+                      <Text fontSize="14px" fontWeight={resultsFilter === label ? "600" : "400"} color={resultsFilter === label ? "customGray.800" : "customGray.500"}>{label}</Text>
+                      <Text
+                        fontSize="13px"
+                        color="customGray.800"
+                        opacity={resultsFilter === label ? 1 : 0}
+                        _groupHover={{ opacity: 1 }}
+                      >
+                        {resultsFilterCounts[label]}
+                      </Text>
                     </Box>
                   ))}
                 </VStack>
-              )}
+              </Box>
+
+              <Box flex="1" h="100%" bg="white" borderLeft="1px solid" borderColor="customGray.200" overflow="hidden" position="relative">
+                <Box h="100%" overflow="hidden" bg="customGray.50">
+                  <VStack align="stretch" spacing="0px" px="0px" py="0px" h="100%" overflow="hidden">
+                    <Box flexShrink={0} borderBottom="1px solid" borderColor="customGray.200" bg="white" px="24px" py="24px">
+                      <Text fontSize="18px" fontWeight="600" color="customGray.800" mb="2px">Results</Text>
+                      <Text fontSize="14px" color="customGray.500">Bookings and leads captured for this event</Text>
+                    </Box>
+
+                    {currentEventId && !isLoadingBookings && bookings.length > 0 && (
+                      <Box flexShrink={0} overflow="hidden">
+                        <Box flexShrink={0} w="100%" bg="purple.50" py="8px" textAlign="center" borderBottom="1px solid" borderColor="customGray.200">
+                          <HStack spacing="6px" justify="center">
+                            <Text fontSize="12px" fontWeight="500" color="customGray.800">Overall summarize insights for you!</Text>
+                          </HStack>
+                        </Box>
+                        <HStack flexShrink={0} w="100%" bg="white" spacing="0px" align="stretch">
+                          {[
+                            { label: "Total bookings", value: bookingStats.total, dot: "customGray.800" },
+                            { label: "Upcoming", value: bookingStats.upcoming, dot: "green.400" },
+                            { label: "Direct", value: bookingStats.direct, dot: "green.400" },
+                            { label: "Webhook", value: bookingStats.webhook, dot: "red.400" },
+                          ].map((stat, index) => (
+                            <HStack key={stat.label} spacing="0px" flex="1" align="stretch">
+                              {index > 0 && <Box w="1px" bg="customGray.200" />}
+                              <VStack align="start" justify="center" spacing="6px" flex="1" h="84px" px="24px">
+                                <HStack spacing="6px">
+                                  <Box w="6px" h="6px" borderRadius="full" bg={stat.dot} flexShrink={0} />
+                                  <Text fontSize="sm" color="customGray.500">{stat.label}</Text>
+                                </HStack>
+                                <Text fontSize="22px" fontWeight="600" color="customGray.800">{stat.value}</Text>
+                              </VStack>
+                            </HStack>
+                          ))}
+                        </HStack>
+                      </Box>
+                    )}
+
+                    <Box flex="1" borderTop="1px solid" borderBottom="1px solid" borderColor="customGray.200" overflow="hidden" bg="white" display="flex" flexDirection="column">
+                      <Box flexShrink={0} w="100%" pl="24px" pr="30px" py="16px" display="flex" alignItems="center" justifyContent="flex-end" borderBottom="1px solid" borderColor="customGray.200">
+                        <HStack spacing="8px">
+                          <HStack spacing="0px" bg="white" border="1px solid" borderColor="customGray.200" borderRadius="full" h="32px" w="200px" px="10px">
+                            <svg width="14" height="14" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+                              <path d="M14 14L11.1 11.1M12.6667 7.33333C12.6667 10.2789 10.2789 12.6667 7.33333 12.6667C4.38781 12.6667 2 10.2789 2 7.33333C2 4.38781 4.38781 2 7.33333 2C10.2789 2 12.6667 4.38781 12.6667 7.33333Z" stroke="#71717A" strokeWidth="1.33333" strokeLinecap="round" strokeLinejoin="round" />
+                            </svg>
+                            <Input
+                              value={bookingsSearchQuery}
+                              onChange={(e) => setBookingsSearchQuery(e.target.value)}
+                              placeholder="Search..."
+                              variant="unstyled"
+                              fontSize="sm"
+                              color="customGray.800"
+                              _placeholder={{ color: "customGray.400" }}
+                              px="8px"
+                            />
+                          </HStack>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            borderRadius="8px"
+                            border="none"
+                            bg="white"
+                            color="customGray.700"
+                            fontSize="sm"
+                            fontWeight="medium"
+                            _hover={{ bg: "customGray.100" }}
+                            leftIcon={
+                              <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                <path d="M8.66667 10.667L11.3333 13.3337L14 10.667M11.3333 13.3337V2.66699M7.33333 5.33366L4.66667 2.66699L2 5.33366M4.66667 2.66699V13.3337" stroke="currentColor" strokeWidth="1.33333" strokeLinecap="round" strokeLinejoin="round" />
+                              </svg>
+                            }
+                          >
+                            Sort
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            borderRadius="8px"
+                            border="none"
+                            bg="white"
+                            color="customGray.700"
+                            fontSize="sm"
+                            fontWeight="medium"
+                            _hover={{ bg: "customGray.100" }}
+                            leftIcon={
+                              <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                <path d="M2 4H14M4.66667 8H11.3333M6.66667 12H9.33333" stroke="currentColor" strokeWidth="1.33333" strokeLinecap="round" strokeLinejoin="round" />
+                              </svg>
+                            }
+                          >
+                            Filters
+                          </Button>
+                        </HStack>
+                      </Box>
+
+                      {!currentEventId ? (
+                        <Box flex="1" py="40px" display="flex" alignItems="center" justifyContent="center">
+                          <Text fontSize="14px" color="customGray.500">Save this event before it can receive bookings.</Text>
+                        </Box>
+                      ) : isLoadingBookings ? (
+                        <Box flex="1" py="40px" display="flex" alignItems="center" justifyContent="center">
+                          <Text fontSize="14px" color="customGray.500">Loading...</Text>
+                        </Box>
+                      ) : bookings.length === 0 ? (
+                        <Box flex="1" py="40px" display="flex" alignItems="center" justifyContent="center">
+                          <Text fontSize="14px" color="customGray.500">No one has booked this event yet.</Text>
+                        </Box>
+                      ) : (
+                    <>
+                    <Box flexShrink={0} w="100%" bg="customGray.50" borderBottom="1px solid" borderColor="customGray.200">
+                    <Table w="100%" sx={{ tableLayout: "fixed" }}>
+                      <colgroup>
+                        <col style={{ width: "280px" }} />
+                        <col style={{ width: "280px" }} />
+                        <col />
+                        <col style={{ width: "180px" }} />
+                        <col style={{ width: "120px" }} />
+                        <col style={{ width: "50px" }} />
+                      </colgroup>
+                      <Thead>
+                        <Tr>
+                          <Th border="none" h="40px" py="0" pl="24px" pr="0" fontSize="sm" fontWeight="medium" color="customGray.700" textTransform="none" letterSpacing="normal" bg="customGray.50">
+                            <Box display="flex"><Box display="flex"><Text as="p">Participants</Text></Box></Box>
+                          </Th>
+                          <Th border="none" h="40px" py="0" px="0" fontSize="sm" fontWeight="medium" color="customGray.700" textTransform="none" letterSpacing="normal" bg="customGray.50">
+                            <Box display="flex"><Box display="flex"><Text as="p">Meeting</Text></Box></Box>
+                          </Th>
+                          <Th border="none" h="40px" py="0" px="0" fontSize="sm" fontWeight="medium" color="customGray.700" textTransform="none" letterSpacing="normal" bg="customGray.50">
+                            <Box display="flex"><Box display="flex"><Text as="p">Owner</Text></Box></Box>
+                          </Th>
+                          <Th border="none" h="40px" py="0" px="0" fontSize="sm" fontWeight="medium" color="customGray.700" textTransform="none" letterSpacing="normal" bg="customGray.50">
+                            <Box display="flex"><Box display="flex"><Text as="p">Status</Text></Box></Box>
+                          </Th>
+                          <Th border="none" h="40px" py="0" px="0" fontSize="sm" fontWeight="medium" color="customGray.700" textTransform="none" letterSpacing="normal" bg="customGray.50">
+                            <Box display="flex"><Box display="flex"><Text as="p">Source</Text></Box></Box>
+                          </Th>
+                          <Th border="none" h="40px" py="0" pr="24px" pl="0" bg="customGray.50" />
+                        </Tr>
+                      </Thead>
+                    </Table>
+                    </Box>
+                    <Box
+                      flex="1"
+                      w="100%"
+                      overflowY="auto"
+                      sx={{
+                        '&::-webkit-scrollbar': { width: '6px' },
+                        '&::-webkit-scrollbar-track': { bg: 'transparent' },
+                        '&::-webkit-scrollbar-thumb': { bg: 'customGray.300', borderRadius: '3px' },
+                        '&::-webkit-scrollbar-thumb:hover': { bg: 'customGray.400' },
+                      }}
+                    >
+                    <Table w="100%" sx={{ tableLayout: "fixed" }}>
+                      <colgroup>
+                        <col style={{ width: "280px" }} />
+                        <col style={{ width: "280px" }} />
+                        <col />
+                        <col style={{ width: "180px" }} />
+                        <col style={{ width: "120px" }} />
+                        <col style={{ width: "50px" }} />
+                      </colgroup>
+                      <Tbody>
+                        {filteredBookings.length === 0 ? (
+                          <Tr>
+                            <Td colSpan={6} h="80px" textAlign="center" borderBottomColor="customGray.200">
+                              <Text fontSize="sm" color="customGray.500">No results match &quot;{bookingsSearchQuery}&quot;</Text>
+                            </Td>
+                          </Tr>
+                        ) : filteredBookings.map((booking) => {
+                          const initial = (booking.guest_name || "?").charAt(0).toUpperCase();
+                          const avatarColor = BOOKING_AVATAR_COLORS[booking.id % BOOKING_AVATAR_COLORS.length];
+                          const bookingAttendees = Array.isArray(booking.extra_fields?.attendees)
+                            ? booking.extra_fields.attendees.filter(
+                                (attendee): attendee is Record<string, unknown> => Boolean(attendee) && typeof attendee === "object"
+                              )
+                            : [];
+                          const attendeeCount = Math.max(bookingAttendees.length, 1);
+                          const isWebhook = booking.source === "webhook";
+                          const [meetingYear, meetingMonth, meetingDay] = booking.booking_date.split("-").map(Number);
+                          const meetingDateLabel = new Date(meetingYear, meetingMonth - 1, meetingDay).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
+                          const [meetingHour, meetingMinute] = booking.booking_time.split(":").map(Number);
+                          const meetingTimeLabel = formatTime(meetingHour, meetingMinute, false);
+                          return (
+                            <Tr key={booking.id} bg="white" _hover={{ bg: "customGray.50" }} transition="background-color 0.2s" cursor="pointer" onClick={() => { setSelectedBooking(booking); setPanelBooking(booking); }}>
+                              <Td h="56px" py="0" px="0" borderBottomColor="customGray.200">
+                                <Box display="flex" alignItems="center" px="24px">
+                                <Popover trigger="hover" placement="bottom-start" openDelay={200}>
+                                  <PopoverTrigger>
+                                    <HStack spacing="8px" cursor="pointer">
+                                      {attendeeCount > 1 ? (
+                                        <AvatarGroup size="xs" max={3} spacing="-8px" sx={{ "--avatar-font-size": "12px" }}>
+                                          {bookingAttendees.map((attendee, index) => {
+                                            const attendeeName = typeof attendee.name === "string" ? attendee.name : "";
+                                            return (
+                                              <Avatar
+                                                key={`${typeof attendee.email === "string" ? attendee.email : attendeeName}-${index}`}
+                                                name={attendeeName || `Attendee ${index + 1}`}
+                                                getInitials={(name) => name.charAt(0).toUpperCase()}
+                                                borderWidth="1px"
+                                                bg={BOOKING_AVATAR_COLORS[(booking.id + index) % BOOKING_AVATAR_COLORS.length]}
+                                                color="white"
+                                                fontWeight="medium"
+                                                sx={{ "--avatar-font-size": "12px" }}
+                                              />
+                                            );
+                                          })}
+                                        </AvatarGroup>
+                                      ) : (
+                                        <Box w="24px" h="24px" bg={avatarColor} borderRadius="full" display="flex" alignItems="center" justifyContent="center" flexShrink={0}>
+                                          <Text fontSize="xs" fontWeight="medium" color="white">{initial}</Text>
+                                        </Box>
+                                      )}
+                                      <Text fontSize="sm" color="customGray.800" textUnderlineOffset="3px" _hover={{ textDecoration: "underline" }}>
+                                        {attendeeCount} {attendeeCount === 1 ? "attendee" : "attendees"}
+                                      </Text>
+                                    </HStack>
+                                  </PopoverTrigger>
+                                    <PopoverContent w="fit-content" borderRadius="16px" border="1px solid" borderColor="customGray.200" boxShadow="0 8px 24px rgba(0,0,0,0.12)" _focus={{ boxShadow: "0 8px 24px rgba(0,0,0,0.12)" }}>
+                                      <PopoverBody p="0px">
+                                        <HStack spacing="12px" align="center" p="12px">
+                                          <Box w="40px" h="40px" bg={avatarColor} borderRadius="full" display="flex" alignItems="center" justifyContent="center" flexShrink={0}>
+                                            <Text fontSize="sm" fontWeight="medium" color="white">{initial}</Text>
+                                          </Box>
+                                          <VStack align="start" spacing="0px" flex="1" minW="0">
+                                            <Text fontSize="sm" fontWeight="600" color="customGray.800" noOfLines={1}>{booking.guest_name || "No name provided"}</Text>
+                                            <HStack spacing="2px">
+                                              <Text fontSize="xs" color="customGray.500" noOfLines={1}>{booking.guest_email || "No email provided"}</Text>
+                                              {booking.guest_email && (
+                                                <IconButton
+                                                  aria-label="Copy email"
+                                                  icon={<CopyIcon w="10px" h="10px" />}
+                                                  size="xs"
+                                                  variant="ghost"
+                                                  minW="auto"
+                                                  h="auto"
+                                                  p="2px"
+                                                  onClick={() => navigator.clipboard.writeText(booking.guest_email)}
+                                                />
+                                              )}
+                                            </HStack>
+                                          </VStack>
+                                        </HStack>
+                                        <HStack spacing="8px" p="12px" borderTop="1px solid" borderColor="customGray.200">
+                                          <Button
+                                            w="fit-content"
+                                            size="sm"
+                                            variant="outline"
+                                            borderColor="customGray.200"
+                                            bg="customGray.50"
+                                            fontWeight="400"
+                                            leftIcon={
+                                              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                                <rect x="3" y="4" width="18" height="16" rx="2" stroke="currentColor" strokeWidth="1.5" />
+                                                <circle cx="12" cy="10" r="2.5" stroke="currentColor" strokeWidth="1.5" />
+                                                <path d="M7 17c0-2 2-3 5-3s5 1 5 3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+                                              </svg>
+                                            }
+                                          >
+                                            Profile
+                                          </Button>
+                                          <Button
+                                            w="fit-content"
+                                            size="sm"
+                                            variant="outline"
+                                            borderColor="customGray.200"
+                                            bg="customGray.50"
+                                            fontWeight="400"
+                                            leftIcon={
+                                              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                                <path d="M21 3L3 10.5L10.5 13.5L13.5 21L21 3Z" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                                                <path d="M10.5 13.5L21 3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                                              </svg>
+                                            }
+                                          >
+                                            New conversation
+                                          </Button>
+                                        </HStack>
+                                      </PopoverBody>
+                                    </PopoverContent>
+                                </Popover>
+                                </Box>
+                              </Td>
+                              <Td h="56px" py="0" px="0" borderBottomColor="customGray.200">
+                                <Box display="flex" alignItems="center" pl="0" pr="24px">
+                                <Text fontSize="sm" color="customGray.600" noOfLines={1}>{meetingDateLabel} · {meetingTimeLabel}</Text>
+                                </Box>
+                              </Td>
+                              <Td h="56px" py="0" px="0" borderBottomColor="customGray.200">
+                                <Box display="flex" alignItems="center" pl="0" pr="24px">
+                                <Popover trigger="hover" placement="bottom-start" openDelay={200}>
+                                  <PopoverTrigger>
+                                    <HStack spacing="8px" cursor="pointer">
+                                      <Avatar name={ownerName} src={userAvatar || undefined} size="xs" bg="customGray.300" color="customGray.800" flexShrink={0} />
+                                      <Text fontSize="sm" color="customGray.600" noOfLines={1} textUnderlineOffset="3px" _hover={{ textDecoration: "underline" }}>{ownerName || "—"}</Text>
+                                    </HStack>
+                                  </PopoverTrigger>
+                                  <PopoverContent w="fit-content" borderRadius="16px" border="1px solid" borderColor="customGray.200" boxShadow="0 8px 24px rgba(0,0,0,0.12)" _focus={{ boxShadow: "0 8px 24px rgba(0,0,0,0.12)" }}>
+                                    <PopoverBody p="0px">
+                                      <HStack spacing="12px" align="center" p="12px">
+                                        <Avatar name={ownerName} src={userAvatar || undefined} size="md" bg="customGray.300" color="customGray.800" flexShrink={0} />
+                                        <VStack align="start" spacing="0px" flex="1" minW="0">
+                                          <Text fontSize="sm" fontWeight="600" color="customGray.800" noOfLines={1}>{ownerName || "No name provided"}</Text>
+                                          <HStack spacing="2px">
+                                            <Text fontSize="xs" color="customGray.500" noOfLines={1}>{ownerEmail || "No email provided"}</Text>
+                                            {ownerEmail && (
+                                              <IconButton
+                                                aria-label="Copy email"
+                                                icon={<CopyIcon w="10px" h="10px" />}
+                                                size="xs"
+                                                variant="ghost"
+                                                minW="auto"
+                                                h="auto"
+                                                p="2px"
+                                                onClick={() => navigator.clipboard.writeText(ownerEmail)}
+                                              />
+                                            )}
+                                          </HStack>
+                                        </VStack>
+                                      </HStack>
+                                      <HStack spacing="8px" p="12px" borderTop="1px solid" borderColor="customGray.200">
+                                        <Button
+                                          w="fit-content"
+                                          size="sm"
+                                          variant="outline"
+                                          borderColor="customGray.200"
+                                          bg="customGray.50"
+                                          fontWeight="400"
+                                          leftIcon={
+                                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                              <rect x="3" y="4" width="18" height="16" rx="2" stroke="currentColor" strokeWidth="1.5" />
+                                              <circle cx="12" cy="10" r="2.5" stroke="currentColor" strokeWidth="1.5" />
+                                              <path d="M7 17c0-2 2-3 5-3s5 1 5 3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+                                            </svg>
+                                          }
+                                        >
+                                          Profile
+                                        </Button>
+                                        <Button
+                                          w="fit-content"
+                                          size="sm"
+                                          variant="outline"
+                                          borderColor="customGray.200"
+                                          bg="customGray.50"
+                                          fontWeight="400"
+                                          visibility="hidden"
+                                          leftIcon={
+                                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                              <path d="M21 3L3 10.5L10.5 13.5L13.5 21L21 3Z" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                                              <path d="M10.5 13.5L21 3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                                            </svg>
+                                          }
+                                        >
+                                          New conversation
+                                        </Button>
+                                      </HStack>
+                                    </PopoverBody>
+                                  </PopoverContent>
+                                </Popover>
+                                </Box>
+                              </Td>
+                              <Td h="56px" py="0" px="0" borderBottomColor="customGray.200">
+                                <Box display="flex" alignItems="center" pl="0" pr="24px">
+                                <Box px="8px" py="2px" bg="green.100" borderRadius="full" display="inline-block">
+                                  <Text fontSize="xs" fontWeight="medium" color="green.700">Confirmed</Text>
+                                </Box>
+                                </Box>
+                              </Td>
+                              <Td h="56px" py="0" px="0" borderBottomColor="customGray.200">
+                                <Box display="flex" alignItems="center" pl="0" pr="24px">
+                                <Box px="8px" py="2px" bg={isWebhook ? "purple.100" : "customGray.100"} borderRadius="full" display="inline-block">
+                                  <Text fontSize="xs" fontWeight="medium" color={isWebhook ? "purple.700" : "customGray.600"}>{isWebhook ? "Webhook" : "Direct"}</Text>
+                                </Box>
+                                </Box>
+                              </Td>
+                              <Td h="56px" py="0" px="0" borderBottomColor="customGray.200" onClick={(e) => e.stopPropagation()}>
+                                <Box display="flex" alignItems="center" justifyContent="flex-end" pl="0" pr="24px">
+                                <Menu placement="bottom-end">
+                                  <MenuButton
+                                    as={IconButton}
+                                    aria-label="More options"
+                                    icon={
+                                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                        <circle cx="12" cy="5" r="2" fill="currentColor" />
+                                        <circle cx="12" cy="12" r="2" fill="currentColor" />
+                                        <circle cx="12" cy="19" r="2" fill="currentColor" />
+                                      </svg>
+                                    }
+                                    size="sm"
+                                    variant="ghost"
+                                    color="customGray.600"
+                                    _hover={{ bg: "customGray.200" }}
+                                  />
+                                  <Portal>
+                                  <MenuList
+                                    fontSize="sm"
+                                    minW="240px"
+                                    maxH="380px"
+                                    overflowY="auto"
+                                    boxShadow="0 4px 16px rgba(0,0,0,0.08)"
+                                    sx={{
+                                      scrollbarWidth: 'thin',
+                                      scrollbarColor: 'var(--chakra-colors-customGray-400) transparent',
+                                      '&::-webkit-scrollbar': { width: '6px' },
+                                      '&::-webkit-scrollbar-track': { bg: 'transparent' },
+                                      '&::-webkit-scrollbar-thumb': { bg: 'customGray.400', borderRadius: '3px' },
+                                    }}
+                                  >
+                                    <MenuGroup title="Edit event" fontSize="xs" color="customGray.500" fontWeight="500" ml="3" mt="1">
+                                      <MenuItem
+                                        icon={
+                                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                            <circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="1.5" />
+                                            <path d="M12 7.5V12L15 14" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                                          </svg>
+                                        }
+                                      >
+                                        Reschedule booking
+                                      </MenuItem>
+                                      <MenuItem
+                                        icon={
+                                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                            <path d="M21 3L3 10.5L10.5 13.5L13.5 21L21 3Z" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                                          </svg>
+                                        }
+                                      >
+                                        Request reschedule
+                                      </MenuItem>
+                                      <MenuItem
+                                        icon={
+                                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                            <path d="M12 21s-7-6.2-7-11.5A7 7 0 0 1 19 9.5C19 14.8 12 21 12 21Z" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                                            <circle cx="12" cy="9.5" r="2.2" stroke="currentColor" strokeWidth="1.5" />
+                                          </svg>
+                                        }
+                                      >
+                                        Edit location
+                                      </MenuItem>
+                                    </MenuGroup>
+                                    <MenuDivider />
+                                    <MenuItem
+                                      icon={
+                                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                          <rect x="3.5" y="5" width="17" height="16" rx="2" stroke="currentColor" strokeWidth="1.5" />
+                                          <path d="M3.5 9.5H20.5M8 3V6M16 3V6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+                                        </svg>
+                                      }
+                                    >
+                                      <HStack spacing="0px" justify="space-between" w="100%">
+                                        <Text>Add to calendar</Text>
+                                        <ChevronDownIcon transform="rotate(-90deg)" color="customGray.400" />
+                                      </HStack>
+                                    </MenuItem>
+                                    <MenuDivider />
+                                    <MenuGroup title="After event" fontSize="xs" color="customGray.500" fontWeight="500" ml="3" mt="1">
+                                      <MenuItem
+                                        color="customGray.500"
+                                        icon={
+                                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                            <rect x="3" y="6" width="12" height="12" rx="2" stroke="currentColor" strokeWidth="1.5" />
+                                            <path d="M15 10.5L21 7.5V16.5L15 13.5" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" />
+                                          </svg>
+                                        }
+                                      >
+                                        View recordings
+                                      </MenuItem>
+                                      <MenuItem
+                                        color="customGray.500"
+                                        icon={
+                                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                            <path d="M7 3.5H14L18 7.5V19.5C18 20.05 17.55 20.5 17 20.5H7C6.45 20.5 6 20.05 6 19.5V4.5C6 3.95 6.45 3.5 7 3.5Z" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" />
+                                            <path d="M9 11H15M9 14.5H15M9 18H13" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+                                          </svg>
+                                        }
+                                      >
+                                        Check for transcripts
+                                      </MenuItem>
+                                      <MenuItem
+                                        color="customGray.500"
+                                        icon={
+                                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                            <circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="1.5" />
+                                            <path d="M12 11V16" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+                                            <circle cx="12" cy="8" r="1" fill="currentColor" />
+                                          </svg>
+                                        }
+                                      >
+                                        View session details
+                                      </MenuItem>
+                                      <MenuItem
+                                        color="customGray.500"
+                                        icon={
+                                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                            <path d="M3 12s3.5-6.5 9-6.5c1.6 0 3 .4 4.2 1.1M21 12s-1.1 2-3.2 3.7M9.9 9.9a3 3 0 0 0 4.2 4.2" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                                            <path d="M3 3L21 21" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+                                          </svg>
+                                        }
+                                      >
+                                        Mark as no-show
+                                      </MenuItem>
+                                    </MenuGroup>
+                                    <MenuDivider />
+                                    <MenuItem
+                                      color="red.500"
+                                      icon={
+                                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                          <path d="M6 4V20M6 4L16 4L14 7.5L16 11L6 11" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                                        </svg>
+                                      }
+                                    >
+                                      Report booking
+                                    </MenuItem>
+                                    <MenuDivider />
+                                    <MenuItem
+                                      color="red.500"
+                                      icon={
+                                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                          <circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="1.5" />
+                                          <path d="M9 9L15 15M15 9L9 15" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+                                        </svg>
+                                      }
+                                      onClick={() => handleDeleteBooking(booking.id)}
+                                    >
+                                      Cancel event
+                                    </MenuItem>
+                                  </MenuList>
+                                  </Portal>
+                                </Menu>
+                                </Box>
+                              </Td>
+                            </Tr>
+                          );
+                        })}
+                      </Tbody>
+                    </Table>
+                    </Box>
+                    </>
+                      )}
+                    </Box>
+                  </VStack>
+                </Box>
+                {panelBooking && (() => {
+                  const [bookingYear, bookingMonth, bookingDay] = panelBooking.booking_date.split("-").map(Number);
+                  const dateLabel = new Date(bookingYear, bookingMonth - 1, bookingDay).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", year: "numeric" });
+                  const [bookingHour, bookingMinute] = panelBooking.booking_time.split(":").map(Number);
+                  const timeLabel = formatTime(bookingHour, bookingMinute, false);
+                  const isWebhook = panelBooking.source === "webhook";
+                  const createdAtLabel = new Date(panelBooking.created_at).toLocaleString("en-US", { month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit" });
+                  const panelInitial = (panelBooking.guest_name || "?").charAt(0).toUpperCase();
+                  const panelAvatarColor = BOOKING_AVATAR_COLORS[panelBooking.id % BOOKING_AVATAR_COLORS.length];
+                  // A real per-booking Meet link (generated at booking time,
+                  // see app/api/bookings/generate-meet-link) wins when it
+                  // exists; otherwise fall back to the event-level URL,
+                  // which only ever has a real value for Link/In-person.
+                  const joinMeetingUrl = panelBooking.meeting_url || meetingLinkUrl;
+                  const storedAttendees = panelBooking.extra_fields?.attendees;
+                  const attendees = Array.isArray(storedAttendees)
+                    ? storedAttendees
+                        .filter((attendee): attendee is Record<string, unknown> => Boolean(attendee) && typeof attendee === "object")
+                        .map((attendee) => ({
+                          name: typeof attendee.name === "string" ? attendee.name : "",
+                          email: typeof attendee.email === "string" ? attendee.email : "",
+                        }))
+                        .filter((attendee) => attendee.name || attendee.email)
+                    : [];
+
+                  if (attendees.length === 0) {
+                    attendees.push({ name: panelBooking.guest_name || "", email: panelBooking.guest_email || "" });
+                  }
+                  return (
+                    <Box
+                      position="absolute"
+                      top="0"
+                      right="0"
+                      w="420px"
+                      h="100%"
+                      bg="white"
+                      borderLeft="1px solid"
+                      borderColor="customGray.200"
+                      boxShadow="-4px 0 16px rgba(0,0,0,0.08)"
+                      overflow="hidden"
+                      display="flex"
+                      flexDirection="column"
+                      zIndex={10}
+                      transform={selectedBooking ? "translateX(0)" : "translateX(420px)"}
+                      transition="transform 0.3s cubic-bezier(0.4, 0, 0.2, 1)"
+                    >
+                      <Tabs variant="unstyled" display="flex" flexDirection="column" h="100%" overflow="hidden">
+                        <HStack flexShrink={0} justify="space-between" borderBottom="1px solid" borderColor="customGray.200" px="16px">
+                          <TabList>
+                            <Tab fontSize="sm" fontWeight="500" color="customGray.500" py="16px" mr="8px" _selected={{ color: "customGray.800", borderBottom: "2px solid", borderColor: "customGray.800" }}>Details</Tab>
+                            <Tab fontSize="sm" fontWeight="500" color="customGray.500" py="16px" _selected={{ color: "customGray.800", borderBottom: "2px solid", borderColor: "customGray.800" }}>Notes</Tab>
+                          </TabList>
+                          <IconButton
+                            aria-label="Close details"
+                            icon={<CloseIcon w="10px" h="10px" />}
+                            size="sm"
+                            variant="ghost"
+                            color="customGray.500"
+                            _hover={{ bg: "customGray.100" }}
+                            onClick={() => setSelectedBooking(null)}
+                          />
+                        </HStack>
+                        <TabPanels flex="1" overflowY="auto">
+                          <TabPanel p="24px">
+                            <VStack align="stretch" spacing="0px">
+                              <HStack justify="space-between" align="center">
+                                <HStack spacing="10px">
+                                  <Box w="32px" h="32px" bg={panelAvatarColor} borderRadius="full" display="flex" alignItems="center" justifyContent="center" flexShrink={0}>
+                                    <Text fontSize="sm" fontWeight="medium" color="white">{panelInitial}</Text>
+                                  </Box>
+                                  <Text fontSize="lg" fontWeight="600" color="customGray.800">{title || "Untitled event"}</Text>
+                                </HStack>
+                                <Button
+                                  aria-label="Join meeting"
+                                  leftIcon={<ExternalLinkIcon w="14px" h="14px" />}
+                                  size="sm"
+                                  variant="ghost"
+                                  color="brand.primary"
+                                  bg="transparent"
+                                  pr="0"
+                                  isDisabled={!joinMeetingUrl}
+                                  _hover={{ bg: "transparent", color: "brand.primaryHover", textDecoration: "underline" }}
+                                  _active={{ bg: "transparent", color: "brand.primaryHover" }}
+                                  onClick={() => window.open(joinMeetingUrl, "_blank")}
+                                >
+                                  Join meeting
+                                </Button>
+                              </HStack>
+                              <Text mt="24px" fontSize="sm" fontWeight="600" color="customGray.800">
+                                Attendee details
+                              </Text>
+                              <VStack align="stretch" spacing="0px" mt="8px">
+                                {attendees.map((attendee, index) => (
+                                  <Box key={`${attendee.email}-${index}`}>
+                                    <HStack justify="space-between" py="10px" borderBottom="1px solid" borderColor="customGray.100">
+                                      <Text fontSize="sm" color="customGray.500">
+                                        {attendees.length > 1 ? `Attendee ${index + 1}` : "Attendee"}
+                                      </Text>
+                                      <Text fontSize="sm" color="customGray.800">{attendee.name || "—"}</Text>
+                                    </HStack>
+                                    <HStack justify="space-between" py="10px" borderBottom="1px solid" borderColor="customGray.100">
+                                      <Text fontSize="sm" color="customGray.500">Email</Text>
+                                      <Text fontSize="sm" color="customGray.800">{attendee.email || "—"}</Text>
+                                    </HStack>
+                                  </Box>
+                                ))}
+                                <HStack justify="space-between" py="10px" borderBottom="1px solid" borderColor="customGray.100">
+                                  <Text fontSize="sm" color="customGray.500">Phone</Text>
+                                  <Text fontSize="sm" color="customGray.800">{panelBooking.guest_phone || "—"}</Text>
+                                </HStack>
+                                <HStack justify="space-between" py="10px" borderBottom="1px solid" borderColor="customGray.100">
+                                  <Text fontSize="sm" color="customGray.500">Meeting</Text>
+                                  <Text fontSize="sm" color="customGray.800">{dateLabel} · {timeLabel}</Text>
+                                </HStack>
+                                <HStack justify="space-between" py="10px" borderBottom="1px solid" borderColor="customGray.100">
+                                  <Text fontSize="sm" color="customGray.500">Owner</Text>
+                                  <Text fontSize="sm" color="customGray.800">{ownerName || "—"}</Text>
+                                </HStack>
+                                <HStack justify="space-between" py="10px" borderBottom="1px solid" borderColor="customGray.100">
+                                  <Text fontSize="sm" color="customGray.500">Status</Text>
+                                  <Box px="8px" py="2px" bg="green.50" borderRadius="full">
+                                    <Text fontSize="xs" fontWeight="medium" color="green.700">Confirmed</Text>
+                                  </Box>
+                                </HStack>
+                                <HStack justify="space-between" py="10px" borderBottom="1px solid" borderColor="customGray.100">
+                                  <Text fontSize="sm" color="customGray.500">Source</Text>
+                                  <Box px="8px" py="2px" bg={isWebhook ? "purple.100" : "customGray.100"} borderRadius="full">
+                                    <Text fontSize="xs" fontWeight="medium" color={isWebhook ? "purple.700" : "customGray.600"}>{isWebhook ? "Webhook" : "Direct"}</Text>
+                                  </Box>
+                                </HStack>
+                                <HStack justify="space-between" py="10px">
+                                  <Text fontSize="sm" color="customGray.500">Created at</Text>
+                                  <Text fontSize="sm" color="customGray.800">{createdAtLabel}</Text>
+                                </HStack>
+                              </VStack>
+                              <VStack
+                                align="stretch"
+                                spacing="4px"
+                                mt="8px"
+                                pt="14px"
+                                pb="16px"
+                                borderTop="1px solid"
+                                borderBottom="1px solid"
+                                borderColor="customGray.100"
+                                borderRadius="md"
+                                cursor="pointer"
+                                role="button"
+                                tabIndex={0}
+                                onClick={() => setIsNotesExpanded((prev) => !prev)}
+                                onKeyDown={(event) => {
+                                  if (event.key === "Enter" || event.key === " ") {
+                                    event.preventDefault();
+                                    setIsNotesExpanded((prev) => !prev);
+                                  }
+                                }}
+                              >
+                                <HStack justify="space-between">
+                                  <Text fontSize="sm" fontWeight="600" color="customGray.800">Notes</Text>
+                                  <IconButton
+                                    aria-label={isNotesExpanded ? "Collapse notes" : "Expand notes"}
+                                    icon={
+                                      <Icon
+                                        as={ChevronDownIcon}
+                                        boxSize="16px"
+                                        transform={isNotesExpanded ? "rotate(180deg)" : "rotate(0deg)"}
+                                        transition="transform 0.3s ease-in-out"
+                                      />
+                                    }
+                                    size="sm"
+                                    variant="ghost"
+                                    color="customGray.700"
+                                    _hover={{ bg: "customGray.100" }}
+                                    onClick={(event) => {
+                                      event.stopPropagation();
+                                      setIsNotesExpanded((prev) => !prev);
+                                    }}
+                                  />
+                                </HStack>
+                                <Collapse
+                                  in={isNotesExpanded}
+                                  animateOpacity
+                                  transition={{
+                                    enter: { duration: 0.3, ease: "easeInOut" },
+                                    exit: { duration: 0.25, ease: "easeInOut" },
+                                  }}
+                                >
+                                  <Text fontSize="sm" color={panelBooking.guest_notes ? "customGray.600" : "customGray.400"}>
+                                    {panelBooking.guest_notes || "No notes added"}
+                                  </Text>
+                                </Collapse>
+                              </VStack>
+                              {panelBooking.extra_fields && Object.keys(panelBooking.extra_fields).some((key) => key !== "attendees") && (
+                                <VStack align="stretch" spacing="6px" mt="24px">
+                                  <Text fontSize="sm" fontWeight="600" color="customGray.800">Additional details</Text>
+                                  {Object.entries(panelBooking.extra_fields).filter(([key]) => key !== "attendees").map(([key, value]) => (
+                                    <HStack key={key} justify="space-between">
+                                      <Text fontSize="sm" color="customGray.500">{key}</Text>
+                                      <Text fontSize="sm" color="customGray.800">{String(value)}</Text>
+                                    </HStack>
+                                  ))}
+                                </VStack>
+                              )}
+                            </VStack>
+                          </TabPanel>
+                          <TabPanel p="24px">
+                            <Text fontSize="sm" color="customGray.500">No notes yet.</Text>
+                          </TabPanel>
+                        </TabPanels>
+                      </Tabs>
+                    </Box>
+                  );
+                })()}
+              </Box>
+            </HStack>
             </Box>
           ) : tabIndex === 2 ? (
             <HStack align="stretch" flex="1" w="100%" overflowY="auto" p="0px" bg="customGray.50" spacing="0px">
@@ -1114,28 +2019,14 @@ export default function CalendarBuilderPage() {
                         />
                       </HStack>
                       {requireCancellationReason && (
-                        <Menu matchWidth>
-                          <MenuButton
-                            as={Button}
-                            mt="16px"
+                        <Box mt="16px">
+                          <ComboMenu
+                            value={cancellationReasonMode}
+                            options={["Mandatory for host only", "Mandatory for everyone", "Optional"]}
+                            onChange={setCancellationReasonMode}
                             w="260px"
-                            size="sm"
-                            variant="outline"
-                            fontWeight="400"
-                            borderRadius="full"
-                            rightIcon={<ChevronDownIcon />}
-                            textAlign="left"
-                          >
-                            {cancellationReasonMode}
-                          </MenuButton>
-                          <MenuList minW="260px">
-                            {["Mandatory for host only", "Mandatory for everyone", "Optional"].map((option) => (
-                              <MenuItem key={option} fontSize="14px" py="6px" onClick={() => setCancellationReasonMode(option)}>
-                                {option}
-                              </MenuItem>
-                            ))}
-                          </MenuList>
-                        </Menu>
+                          />
+                        </Box>
                       )}
                     </Box>
 
@@ -1154,28 +2045,14 @@ export default function CalendarBuilderPage() {
                         />
                       </HStack>
                       {disableCancelling && (
-                        <Menu matchWidth>
-                          <MenuButton
-                            as={Button}
-                            mt="16px"
+                        <Box mt="16px">
+                          <ComboMenu
+                            value={disableCancellingScope}
+                            options={["Host and attendee", "Host only", "Attendee only"]}
+                            onChange={setDisableCancellingScope}
                             w="260px"
-                            size="sm"
-                            variant="outline"
-                            fontWeight="400"
-                            borderRadius="full"
-                            rightIcon={<ChevronDownIcon />}
-                            textAlign="left"
-                          >
-                            {disableCancellingScope}
-                          </MenuButton>
-                          <MenuList minW="260px">
-                            {["Host and attendee", "Host only", "Attendee only"].map((option) => (
-                              <MenuItem key={option} fontSize="14px" py="6px" onClick={() => setDisableCancellingScope(option)}>
-                                {option}
-                              </MenuItem>
-                            ))}
-                          </MenuList>
-                        </Menu>
+                          />
+                        </Box>
                       )}
                     </Box>
 
@@ -1195,27 +2072,12 @@ export default function CalendarBuilderPage() {
                       </HStack>
                       {disableRescheduling && (
                         <VStack align="stretch" spacing="20px" mt="16px">
-                          <Menu matchWidth>
-                            <MenuButton
-                              as={Button}
-                              w="260px"
-                              size="sm"
-                              variant="outline"
-                              fontWeight="400"
-                              borderRadius="full"
-                              rightIcon={<ChevronDownIcon />}
-                              textAlign="left"
-                            >
-                              {disableReschedulingScope}
-                            </MenuButton>
-                            <MenuList minW="260px">
-                              {["Host and attendee", "Host only", "Attendee only"].map((option) => (
-                                <MenuItem key={option} fontSize="14px" py="6px" onClick={() => setDisableReschedulingScope(option)}>
-                                  {option}
-                                </MenuItem>
-                              ))}
-                            </MenuList>
-                          </Menu>
+                          <ComboMenu
+                            value={disableReschedulingScope}
+                            options={["Host and attendee", "Host only", "Attendee only"]}
+                            onChange={setDisableReschedulingScope}
+                            w="260px"
+                          />
 
                           <RadioGroup value={disableReschedulingTiming} onChange={setDisableReschedulingTiming}>
                             <VStack align="stretch" spacing="16px">
@@ -1242,7 +2104,7 @@ export default function CalendarBuilderPage() {
                                   type="number"
                                   min={1}
                                   w="80px"
-                                  size="sm"
+                                  size="md"
                                   value={disableReschedulingMinutes}
                                   isDisabled={disableReschedulingTiming !== "before_meeting"}
                                   onChange={(e) => setDisableReschedulingMinutes(Math.max(1, Number(e.target.value) || 1))}
@@ -1282,14 +2144,348 @@ export default function CalendarBuilderPage() {
                     </HStack>
                   </Box>
                 </Box>
+                ) : configSection === "Limits & buffers" ? (
+                <Box w="688px" mx="auto" pt="64px" pb="64px">
+                  <Text fontSize="20px" fontWeight="500" color="customGray.800" mb="2px">Limits & buffers</Text>
+                  <Text fontSize="14px" color="customGray.500" mb="32px">Cap bookings per day and add space between meetings</Text>
+
+                  <Box bg="white" border="1px solid" borderColor="customGray.200" borderRadius="16px" overflow="hidden">
+                    {/* Buffer time */}
+                    <HStack spacing="24px" align="start" px="24px" py="24px" borderBottom="1px solid" borderColor="customGray.200">
+                      <VStack align="start" spacing="8px" flex="1">
+                        <HStack spacing="6px">
+                          <Text fontSize="14px" fontWeight="600" color="customGray.800">Before event</Text>
+                          <InfoOutlineIcon color="customGray.400" w="12px" h="12px" />
+                        </HStack>
+                        <ComboMenu
+                          value={bufferBeforeEvent}
+                          options={["No buffer time", "5 Minutes", "10 Minutes", "15 Minutes", "20 Minutes", "30 Minutes", "45 Minutes", "60 Minutes", "90 Minutes", "120 Minutes"]}
+                          onChange={setBufferBeforeEvent}
+                          w="100%"
+                        />
+                      </VStack>
+                      <VStack align="start" spacing="8px" flex="1">
+                        <HStack spacing="6px">
+                          <Text fontSize="14px" fontWeight="600" color="customGray.800">After event</Text>
+                          <InfoOutlineIcon color="customGray.400" w="12px" h="12px" />
+                        </HStack>
+                        <ComboMenu
+                          value={bufferAfterEvent}
+                          options={["No buffer time", "5 Minutes", "10 Minutes", "15 Minutes", "20 Minutes", "30 Minutes", "45 Minutes", "60 Minutes", "90 Minutes", "120 Minutes"]}
+                          onChange={setBufferAfterEvent}
+                          w="100%"
+                        />
+                      </VStack>
+                    </HStack>
+
+                    {/* Limit booking frequency */}
+                    <Box px="24px" py="24px" borderBottom="1px solid" borderColor="customGray.200">
+                      <HStack justify="space-between" align="flex-start">
+                        <VStack align="start" spacing="2px">
+                          <Text fontSize="14px" fontWeight="600" color="customGray.800">Limit booking frequency</Text>
+                          <Text fontSize="13px" color="customGray.500">
+                            Limit how many times this event can be booked. <Text as="span" textDecoration="underline">Learn more</Text>
+                          </Text>
+                        </VStack>
+                        <Switch
+                          isChecked={limitBookingFrequency}
+                          onChange={(e) => setLimitBookingFrequency(e.target.checked)}
+                          sx={{ "span.chakra-switch__track[data-checked]": { bg: "customGray.800" } }}
+                        />
+                      </HStack>
+                      {limitBookingFrequency && (
+                        <VStack align="stretch" spacing="16px" mt="16px">
+                          {bookingFrequencyLimits.map((limit, index) => (
+                            <HStack key={index} spacing="8px">
+                              <Input
+                                type="number"
+                                min={1}
+                                w="90px"
+                                size="md"
+                                fontSize="14px"
+                                bg="customGray.50"
+                                borderRadius="8px"
+                                borderColor="customGray.300"
+                                _hover={{ borderColor: "customGray.500" }}
+                                _focus={{
+                                  bg: "customGray.50",
+                                  borderColor: "customGray.500",
+                                  boxShadow: "0 0 0 4px var(--chakra-colors-customDark-10)",
+                                }}
+                                value={limit.count}
+                                onChange={(e) => updateFrequencyLimit(index, "count", Math.max(1, Number(e.target.value) || 1))}
+                              />
+                              <ComboMenu
+                                value={limit.period}
+                                options={["Per Day", "Per Week", "Per Month"]}
+                                onChange={(value) => updateFrequencyLimit(index, "period", value)}
+                                w="220px"
+                              />
+                              {bookingFrequencyLimits.length > 1 && (
+                                <IconButton
+                                  aria-label="Remove this limit"
+                                  icon={<CloseIcon w="10px" h="10px" />}
+                                  size="md"
+                                  variant="ghost"
+                                  color="customGray.500"
+                                  onClick={() => removeFrequencyLimit(index)}
+                                />
+                              )}
+                            </HStack>
+                          ))}
+                          <Button
+                            alignSelf="start"
+                            size="sm"
+                            fontSize="14px"
+                            fontWeight="400"
+                            color="customGray.800"
+                            bg="white"
+                            border="1px solid"
+                            borderColor="customGray.200"
+                            borderRadius="8px"
+                            boxShadow="0 1px 2px rgba(0,0,0,0.05)"
+                            _hover={{ bg: "customGray.100", borderColor: "customGray.300" }}
+                            leftIcon={<AddIcon w="10px" h="10px" />}
+                            onClick={addFrequencyLimit}
+                          >
+                            Add limit
+                          </Button>
+                        </VStack>
+                      )}
+                    </Box>
+
+                    {/* Limit total booking duration */}
+                    <Box px="24px" py="24px" borderBottom="1px solid" borderColor="customGray.200">
+                      <HStack justify="space-between" align="flex-start">
+                        <VStack align="start" spacing="2px">
+                          <Text fontSize="14px" fontWeight="600" color="customGray.800">Limit total booking duration</Text>
+                          <Text fontSize="13px" color="customGray.500">Limit total amount of time that this event can be booked</Text>
+                        </VStack>
+                        <Switch
+                          isChecked={limitTotalDuration}
+                          onChange={(e) => setLimitTotalDuration(e.target.checked)}
+                          sx={{ "span.chakra-switch__track[data-checked]": { bg: "customGray.800" } }}
+                        />
+                      </HStack>
+                      {limitTotalDuration && (
+                        <VStack align="stretch" spacing="14px" mt="16px">
+                          {durationLimits.map((limit, index) => (
+                            <HStack key={index} spacing="8px">
+                              <Box position="relative">
+                                <Input
+                                  type="number"
+                                  min={1}
+                                  w="140px"
+                                  size="md"
+                                  fontSize="14px"
+                                  bg="customGray.50"
+                                  borderRadius="8px"
+                                  borderColor="customGray.300"
+                                  _hover={{ borderColor: "customGray.500" }}
+                                  _focus={{
+                                    bg: "customGray.50",
+                                    borderColor: "customGray.500",
+                                    boxShadow: "0 0 0 4px var(--chakra-colors-customDark-10)",
+                                  }}
+                                  pr="60px"
+                                  value={limit.minutes}
+                                  onChange={(e) => updateDurationLimit(index, "minutes", Math.max(1, Number(e.target.value) || 1))}
+                                />
+                                <Text position="absolute" right="12px" top="50%" transform="translateY(-50%)" fontSize="13px" color="customGray.400" pointerEvents="none">
+                                  Minutes
+                                </Text>
+                              </Box>
+                              <ComboMenu
+                                value={limit.period}
+                                options={["Per Day", "Per Week", "Per Month"]}
+                                onChange={(value) => updateDurationLimit(index, "period", value)}
+                                w="220px"
+                              />
+                              {durationLimits.length > 1 && (
+                                <IconButton
+                                  aria-label="Remove this limit"
+                                  icon={<CloseIcon w="10px" h="10px" />}
+                                  size="md"
+                                  variant="ghost"
+                                  color="customGray.500"
+                                  onClick={() => removeDurationLimit(index)}
+                                />
+                              )}
+                            </HStack>
+                          ))}
+                          <Button
+                            alignSelf="start"
+                            size="sm"
+                            fontSize="14px"
+                            fontWeight="400"
+                            color="customGray.800"
+                            bg="white"
+                            border="1px solid"
+                            borderColor="customGray.200"
+                            borderRadius="8px"
+                            boxShadow="0 1px 2px rgba(0,0,0,0.05)"
+                            _hover={{ bg: "customGray.100", borderColor: "customGray.300" }}
+                            leftIcon={<AddIcon w="10px" h="10px" />}
+                            onClick={addDurationLimit}
+                          >
+                            Add limit
+                          </Button>
+                        </VStack>
+                      )}
+                    </Box>
+
+                    {/* Limit future bookings */}
+                    <Box px="24px" py="20px" borderBottom="1px solid" borderColor="customGray.200">
+                      <HStack justify="space-between" align="flex-start">
+                        <VStack align="start" spacing="2px">
+                          <Text fontSize="14px" fontWeight="600" color="customGray.800">Limit future bookings</Text>
+                          <Text fontSize="13px" color="customGray.500">
+                            Limit how far in the future this event can be booked. <Text as="span" textDecoration="underline">Learn more</Text>
+                          </Text>
+                        </VStack>
+                        <Switch
+                          isChecked={limitFutureBookings}
+                          onChange={(e) => setLimitFutureBookings(e.target.checked)}
+                          sx={{ "span.chakra-switch__track[data-checked]": { bg: "customGray.800" } }}
+                        />
+                      </HStack>
+                      {limitFutureBookings && (
+                        <RadioGroup value={futureBookingMode} onChange={setFutureBookingMode} mt="16px">
+                          <VStack align="stretch" spacing="16px">
+                            <VStack align="start" spacing="10px">
+                              <HStack spacing="10px">
+                                <Radio value="rolling" borderWidth="1px" _checked={{
+                                  bg: "white",
+                                  borderColor: "customGray.800",
+                                  borderWidth: "1px",
+                                  color: "customGray.800",
+                                  _before: { content: '""', display: "inline-block", pos: "relative", w: "50%", h: "50%", borderRadius: "50%", bg: "currentColor" },
+                                }} />
+                                <Input
+                                  type="number"
+                                  min={1}
+                                  w="80px"
+                                  size="md"
+                                  fontSize="14px"
+                                  bg="customGray.50"
+                                  borderRadius="8px"
+                                  borderColor="customGray.300"
+                                  _hover={{ borderColor: "customGray.500" }}
+                                  _focus={{
+                                    bg: "customGray.50",
+                                    borderColor: "customGray.500",
+                                    boxShadow: "0 0 0 4px var(--chakra-colors-customDark-10)",
+                                  }}
+                                  isDisabled={futureBookingMode !== "rolling"}
+                                  value={rollingDays}
+                                  onChange={(e) => setRollingDays(Math.max(1, Number(e.target.value) || 1))}
+                                />
+                                <ComboMenu
+                                  value={rollingUnit}
+                                  options={["business days", "calendar days"]}
+                                  onChange={setRollingUnit}
+                                  w="220px"
+                                />
+                                <Text fontSize="14px" color="customGray.800" whiteSpace="nowrap">into the future</Text>
+                              </HStack>
+                              <Checkbox
+                                isChecked={alwaysDaysAvailable}
+                                isDisabled={futureBookingMode !== "rolling"}
+                                onChange={(e) => setAlwaysDaysAvailable(e.target.checked)}
+                                ml="26px"
+                              >
+                                <HStack spacing="6px">
+                                  <Text fontSize="14px" color="customGray.700">Always {rollingDays} days available</Text>
+                                  <InfoOutlineIcon color="customGray.400" w="12px" h="12px" />
+                                </HStack>
+                              </Checkbox>
+                            </VStack>
+
+                            <HStack spacing="10px">
+                              <Radio value="range" borderWidth="1px" _checked={{
+                                bg: "white",
+                                borderColor: "customGray.800",
+                                borderWidth: "1px",
+                                color: "customGray.800",
+                                _before: { content: '""', display: "inline-block", pos: "relative", w: "50%", h: "50%", borderRadius: "50%", bg: "currentColor" },
+                              }}>
+                                <Text fontSize="14px" color="customGray.800" whiteSpace="nowrap">Within a date range</Text>
+                              </Radio>
+                              <Button
+                                isDisabled={futureBookingMode !== "range"}
+                                size="sm"
+                                variant="outline"
+                                fontWeight="400"
+                                borderRadius="full"
+                                rightIcon={<Text as="span">📅</Text>}
+                              >
+                                {new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
+                              </Button>
+                            </HStack>
+                          </VStack>
+                        </RadioGroup>
+                      )}
+                    </Box>
+
+                    {/* Limit number of upcoming bookings per booker */}
+                    <Box px="24px" py="20px" borderBottom="1px solid" borderColor="customGray.200">
+                      <HStack justify="space-between" align="flex-start">
+                        <VStack align="start" spacing="2px">
+                          <Text fontSize="14px" fontWeight="600" color="customGray.800">Limit number of upcoming bookings per booker</Text>
+                          <Text fontSize="13px" color="customGray.500">
+                            Limit the number of active bookings a booker can make for this meeting type. <Text as="span" textDecoration="underline">Learn more</Text>
+                          </Text>
+                        </VStack>
+                        <Switch
+                          isChecked={limitUpcomingPerBooker}
+                          onChange={(e) => setLimitUpcomingPerBooker(e.target.checked)}
+                          sx={{ "span.chakra-switch__track[data-checked]": { bg: "customGray.800" } }}
+                        />
+                      </HStack>
+                      {limitUpcomingPerBooker && (
+                        <VStack align="start" spacing="12px" mt="16px">
+                          <Box position="relative">
+                            <Input
+                              type="number"
+                              min={1}
+                              w="180px"
+                              size="sm"
+                              pr="70px"
+                              value={upcomingBookingsCount}
+                              onChange={(e) => setUpcomingBookingsCount(Math.max(1, Number(e.target.value) || 1))}
+                            />
+                            <Text position="absolute" right="12px" top="50%" transform="translateY(-50%)" fontSize="13px" color="customGray.400" pointerEvents="none">
+                              Bookings
+                            </Text>
+                          </Box>
+                          <Checkbox
+                            isChecked={offerRescheduleLastBooking}
+                            onChange={(e) => setOfferRescheduleLastBooking(e.target.checked)}
+                          >
+                            <Text fontSize="14px" color="customGray.700">Offer to reschedule the last booking to the new time slot</Text>
+                          </Checkbox>
+                        </VStack>
+                      )}
+                    </Box>
+
+                    {/* Show only the first available slot each day */}
+                    <HStack justify="space-between" align="flex-start" px="24px" py="20px">
+                      <VStack align="start" spacing="2px">
+                        <Text fontSize="14px" fontWeight="600" color="customGray.800">Show only the first available slot each day</Text>
+                        <Text fontSize="13px" color="customGray.500">Limit to one slot per day at the earliest available time.</Text>
+                      </VStack>
+                      <Switch
+                        isChecked={showOnlyFirstSlot}
+                        onChange={(e) => setShowOnlyFirstSlot(e.target.checked)}
+                        sx={{ "span.chakra-switch__track[data-checked]": { bg: "customGray.800" } }}
+                      />
+                    </HStack>
+                  </Box>
+                </Box>
                 ) : (
                 <Box w="688px" mx="auto" pt="64px" pb="64px">
                   <Text fontSize="22px" fontWeight="500" color="customGray.800" mb="2px">{configSection}</Text>
-                  <Text fontSize="14px" color="customGray.500">
-                    {configSection === "Limits & buffers"
-                      ? "Cap bookings per day and add space between meetings."
-                      : "Control who can see and book this event."}
-                  </Text>
+                  <Text fontSize="14px" color="customGray.500">Control who can see and book this event.</Text>
                   <Text fontSize="14px" color="customGray.400" mt="24px">This section isn&apos;t set up yet — check back soon.</Text>
                 </Box>
                 )}

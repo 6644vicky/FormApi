@@ -1,9 +1,10 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { Box, VStack, HStack, Text, Button, Heading, Icon, IconButton, Input, Textarea, useToast, Tabs, TabList, Tab, TabPanels, TabPanel, Avatar, AvatarGroup, Menu, MenuButton, MenuList, MenuItem, MenuGroup, MenuDivider, Modal, ModalOverlay, ModalContent, ModalHeader, ModalBody, ModalCloseButton, useDisclosure, Badge, Divider, Tag, TagLabel, TagCloseButton, Progress, Tooltip, Switch, Radio, RadioGroup, Checkbox, Table, Thead, Tbody, Tr, Th, Td, Popover, PopoverTrigger, PopoverContent, PopoverBody, Portal, Collapse } from "@chakra-ui/react";
-import { ArrowBackIcon, ArrowForwardIcon, AddIcon, CloseIcon, ChevronDownIcon, DragHandleIcon, CopyIcon, InfoOutlineIcon, RepeatClockIcon, ExternalLinkIcon } from "@chakra-ui/icons";
-import { useState, useEffect, useRef, useMemo, ComponentProps } from "react";
+import { Box, VStack, HStack, Text, Button, Heading, Icon, IconButton, Input, Textarea, Image, useToast, Tabs, TabList, Tab, TabPanels, TabPanel, Avatar, AvatarGroup, Menu, MenuButton, MenuList, MenuItem, MenuGroup, MenuDivider, Modal, ModalOverlay, ModalContent, ModalHeader, ModalBody, ModalCloseButton, useDisclosure, Badge, Divider, Tag, TagLabel, TagCloseButton, Progress, Tooltip, Switch, Radio, RadioGroup, Checkbox, Table, Thead, Tbody, Tr, Th, Td, Popover, PopoverTrigger, PopoverContent, PopoverBody, Portal, Collapse, Link } from "@chakra-ui/react";
+import { ArrowBackIcon, ArrowForwardIcon, ArrowUpIcon, AddIcon, CloseIcon, ChevronDownIcon, DragHandleIcon, CopyIcon, InfoOutlineIcon, RepeatClockIcon, ExternalLinkIcon, AttachmentIcon } from "@chakra-ui/icons";
+import { FiEdit2, FiTrash2 } from "react-icons/fi";
+import { useState, useEffect, useRef, useMemo, ComponentProps, ReactNode } from "react";
 import { CalendarPicker } from "@/components/CalendarPicker";
 import { AddPage } from "@/components/AddPage";
 import { supabase, syncServerSession } from "@/lib/supabase";
@@ -127,6 +128,392 @@ function TimeTextInput({
 // Palette for the Results table's attendee avatars, keyed by booking id so
 // each person reads as a consistent color across re-renders.
 const BOOKING_AVATAR_COLORS = ["#EA8C55", "#7C3AED", "#10B981", "#F59E0B", "#EF4444", "#06B6D4", "#8B5CF6", "#EC4899"];
+const MAX_COMMENT_ATTACHMENTS = 4;
+
+type BookingCommentRow = {
+  id: number;
+  user_id: string;
+  body: string | null;
+  created_at: string;
+  edited_at: string | null;
+  attachments: Array<{ url: string; name: string; width: number; height: number }>;
+  parent_id: number | null;
+  reactions: Array<{ emoji: string; user_id: string }>;
+};
+
+// "29 mins" for recent activity, falling back to a plain date once a note is
+// old enough that a relative label stops being useful.
+function formatRelativeTime(dateStr: string): string {
+  const date = new Date(dateStr);
+  const diffMin = Math.round((Date.now() - date.getTime()) / 60000);
+  if (diffMin < 1) return "just now";
+  if (diffMin < 60) return `${diffMin} min${diffMin === 1 ? "" : "s"}`;
+  const diffHr = Math.round(diffMin / 60);
+  if (diffHr < 24) return `${diffHr} hr${diffHr === 1 ? "" : "s"}`;
+  const diffDay = Math.round(diffHr / 24);
+  if (diffDay < 7) return `${diffDay} day${diffDay === 1 ? "" : "s"}`;
+  return date.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+}
+
+// Splits comment body text on bare URLs, turning each into a clickable link
+// that opens in a new tab while leaving the surrounding text untouched.
+function renderTextWithLinks(text: string) {
+  const urlPattern = /(https?:\/\/[^\s]+)/g;
+  const nodes: ReactNode[] = [];
+  let lastIndex = 0;
+  let match: RegExpExecArray | null;
+  let key = 0;
+  while ((match = urlPattern.exec(text)) !== null) {
+    if (match.index > lastIndex) nodes.push(text.slice(lastIndex, match.index));
+    nodes.push(
+      <Link key={key++} href={match[0]} isExternal color="blue.500" textDecoration="underline">
+        {match[0]}
+      </Link>
+    );
+    lastIndex = match.index + match[0].length;
+  }
+  if (lastIndex < text.length) nodes.push(text.slice(lastIndex));
+  return nodes;
+}
+
+// One comment or reply — avatar, name, relative time, body/attachments, and
+// the like / add-reaction / reply action row. Used for both top-level notes
+// and the replies nested under them in CommentThread.
+function CommentRow({
+  comment,
+  ownerName,
+  userAvatar,
+  currentUserId,
+  onToggleReaction,
+  onReplyClick,
+  onDelete,
+  onEdit,
+  footer,
+}: {
+  comment: BookingCommentRow;
+  ownerName: string;
+  userAvatar: string | null;
+  currentUserId: string | null;
+  onToggleReaction: (commentId: number, emoji: string) => void;
+  onReplyClick?: () => void;
+  onDelete: (commentId: number) => void;
+  onEdit: (commentId: number, newBody: string) => Promise<boolean>;
+  footer?: ReactNode;
+}) {
+  const reactionGroups = new Map<string, string[]>();
+  comment.reactions.forEach((r) => {
+    const list = reactionGroups.get(r.emoji) || [];
+    list.push(r.user_id);
+    reactionGroups.set(r.emoji, list);
+  });
+  const reactionEntries = Array.from(reactionGroups.entries());
+
+  const [isEditing, setIsEditing] = useState(false);
+  const [editText, setEditText] = useState(comment.body || "");
+  const [isSavingEdit, setIsSavingEdit] = useState(false);
+
+  const startEditing = () => {
+    setEditText(comment.body || "");
+    setIsEditing(true);
+  };
+
+  const cancelEditing = () => {
+    setIsEditing(false);
+    setEditText(comment.body || "");
+  };
+
+  const saveEdit = async () => {
+    const trimmed = editText.trim();
+    if (!trimmed || isSavingEdit) return;
+    setIsSavingEdit(true);
+    const ok = await onEdit(comment.id, trimmed);
+    setIsSavingEdit(false);
+    if (ok) setIsEditing(false);
+  };
+
+  return (
+    <HStack
+      align="flex-start"
+      spacing="10px"
+      role="group"
+      position="relative"
+      px="12px"
+      py="12px"
+      _hover={{ bg: "customDark.5" }}
+    >
+      <Avatar name={ownerName} src={userAvatar || undefined} size="sm" bg="customGray.300" color="customGray.800" flexShrink={0} />
+      <Box flex="1" minW="0">
+        <HStack spacing="6px">
+          <Text fontSize="sm" fontWeight="600" color="customGray.800">{ownerName}</Text>
+          <Text fontSize="xs" color="customGray.400">
+            {formatRelativeTime(comment.edited_at || comment.created_at)}
+            {comment.edited_at ? " (edited)" : ""}
+          </Text>
+        </HStack>
+        {isEditing ? (
+          <Box
+            mt="4px"
+            border="1px solid"
+            borderColor="customGray.200"
+            borderRadius="8px"
+            bg="white"
+            p="8px"
+            _hover={{ borderColor: "customGray.500" }}
+            _focusWithin={{ borderColor: "customGray.500", boxShadow: "0 0 0 4px rgba(161, 161, 170, 0.35)" }}
+          >
+            <Textarea
+              value={editText}
+              onChange={(e) => setEditText(e.target.value)}
+              variant="unstyled"
+              fontSize="sm"
+              borderRadius="0"
+              p="0"
+              minH="auto"
+              rows={4}
+              autoFocus
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && !e.shiftKey) {
+                  e.preventDefault();
+                  saveEdit();
+                } else if (e.key === "Escape") {
+                  cancelEditing();
+                }
+              }}
+            />
+            <HStack spacing="6px" justify="flex-end" mt="6px">
+              <Button size="sm" variant="ghost" onClick={cancelEditing}>Cancel</Button>
+              <Button
+                size="sm"
+                bg="brand.primary"
+                color="white"
+                _hover={{ bg: "brand.primaryHover" }}
+                isDisabled={!editText.trim() || isSavingEdit}
+                isLoading={isSavingEdit}
+                onClick={saveEdit}
+              >
+                Save
+              </Button>
+            </HStack>
+          </Box>
+        ) : (
+          comment.body && (
+            <Text fontSize="sm" color="customGray.800" whiteSpace="pre-wrap" mt="4px">{renderTextWithLinks(comment.body)}</Text>
+          )
+        )}
+        {comment.attachments && comment.attachments.length > 0 && (
+          <HStack spacing="6px" flexWrap="wrap" mt="12px">
+            {comment.attachments.map((att, index) => (
+              <Image
+                key={`${comment.id}-${index}`}
+                src={att.url}
+                alt={att.name}
+                maxW="120px"
+                maxH="120px"
+                objectFit="cover"
+                borderRadius="8px"
+                border="1px solid"
+                borderColor="customGray.200"
+              />
+            ))}
+          </HStack>
+        )}
+        {reactionEntries.length > 0 && (
+          <HStack spacing="4px" mt="12px" flexWrap="wrap">
+            {reactionEntries.map(([emoji, userIds]) => {
+              const reactedByMe = userIds.includes(currentUserId || "");
+              return (
+                <Button
+                  key={emoji}
+                  size="sm"
+                  variant="ghost"
+                  h="28px"
+                  px="10px"
+                  py="2px"
+                  borderRadius="full"
+                  border="1px solid"
+                  borderColor={reactedByMe ? "#24789b" : "#24789b"}
+                  bg={reactedByMe ? "#87ceeb26" : "#0c4257"}
+                  _hover={{ bg: "customGray.100" }}
+                  onClick={() => onToggleReaction(comment.id, emoji)}
+                >
+                  <HStack spacing="4px">
+                    <Text fontSize="16px">{emoji}</Text>
+                    <Text fontSize="12px" color="#24789b">{userIds.length}</Text>
+                  </HStack>
+                </Button>
+              );
+            })}
+          </HStack>
+        )}
+        {footer}
+      </Box>
+      {/* Hover toolbar — hidden until the comment row is hovered, matching a
+          Slack-style floating action bar instead of a permanently visible row. */}
+      <HStack
+        spacing="0px"
+        position="absolute"
+        top="-14px"
+        right="18px"
+        bg="white"
+        border="1px solid"
+        borderColor="customGray.200"
+        borderRadius="12px"
+        boxShadow="0 1px 4px rgba(0,0,0,0.08)"
+        p="2px"
+        opacity="0"
+        pointerEvents="none"
+        _groupHover={{ opacity: 1, pointerEvents: "auto" }}
+        transition="opacity 0.12s ease"
+      >
+        {comment.user_id === currentUserId && (
+          <IconButton
+            aria-label="Edit"
+            icon={<Icon as={FiEdit2} w="16px" h="16px" />}
+            size="sm"
+            variant="ghost"
+            color="customGray.700"
+            _hover={{ bg: "customGray.100" }}
+            onClick={startEditing}
+          />
+        )}
+        {comment.user_id === currentUserId && (
+          <IconButton
+            aria-label="Delete"
+            icon={<Icon as={FiTrash2} w="16px" h="16px" />}
+            size="sm"
+            variant="ghost"
+            color="customGray.700"
+            _hover={{ bg: "red.50", color: "red.500" }}
+            onClick={() => onDelete(comment.id)}
+          />
+        )}
+      </HStack>
+    </HStack>
+  );
+}
+
+// A top-level note plus its (optionally collapsed) replies and the inline
+// reply composer. Replies are a single level deep — matches the comment
+// schema, which only stores one parent_id per row.
+function CommentThread({
+  comment,
+  replies,
+  ownerName,
+  userAvatar,
+  currentUserId,
+  onToggleReaction,
+  onSendReply,
+  onDeleteComment,
+  onEditComment,
+}: {
+  comment: BookingCommentRow;
+  replies: BookingCommentRow[];
+  ownerName: string;
+  userAvatar: string | null;
+  currentUserId: string | null;
+  onToggleReaction: (commentId: number, emoji: string) => void;
+  onSendReply: (parentId: number, body: string) => Promise<boolean>;
+  onDeleteComment: (commentId: number) => void;
+  onEditComment: (commentId: number, newBody: string) => Promise<boolean>;
+}) {
+  const [isReplying, setIsReplying] = useState(false);
+  const [replyText, setReplyText] = useState("");
+  const [isSendingReply, setIsSendingReply] = useState(false);
+  const [repliesExpanded, setRepliesExpanded] = useState(false);
+
+  const handleReplySubmit = async () => {
+    const body = replyText.trim();
+    if (!body || isSendingReply) return;
+    setIsSendingReply(true);
+    const ok = await onSendReply(comment.id, body);
+    setIsSendingReply(false);
+    if (ok) {
+      setReplyText("");
+      setIsReplying(false);
+      setRepliesExpanded(true);
+    }
+  };
+
+  return (
+    <Box>
+      <CommentRow
+        comment={comment}
+        ownerName={ownerName}
+        userAvatar={userAvatar}
+        currentUserId={currentUserId}
+        onToggleReaction={onToggleReaction}
+        onReplyClick={() => setIsReplying((v) => !v)}
+        onDelete={onDeleteComment}
+        onEdit={onEditComment}
+        footer={
+          replies.length > 0 ? (
+            <HStack
+              spacing="6px"
+              mt="12px"
+              cursor="pointer"
+              onClick={() => setRepliesExpanded((v) => !v)}
+            >
+              <AvatarGroup size="2xs" max={3} spacing="-6px">
+                {replies.map((r) => (
+                  <Avatar key={r.id} name={ownerName} src={userAvatar || undefined} bg="customGray.300" color="customGray.800" />
+                ))}
+              </AvatarGroup>
+              <Text fontSize="xs" fontWeight="600" color="brand.primary">
+                {replies.length} repl{replies.length === 1 ? "y" : "ies"}
+              </Text>
+            </HStack>
+          ) : undefined
+        }
+      />
+      {repliesExpanded && replies.length > 0 && (
+        <VStack align="stretch" spacing="12px" mt="12px" ml="42px">
+          {replies.map((reply) => (
+            <CommentRow
+              key={reply.id}
+              comment={reply}
+              ownerName={ownerName}
+              userAvatar={userAvatar}
+              currentUserId={currentUserId}
+              onToggleReaction={onToggleReaction}
+              onDelete={onDeleteComment}
+              onEdit={onEditComment}
+            />
+          ))}
+        </VStack>
+      )}
+      {isReplying && (
+        <HStack mt="12px" ml="42px" spacing="6px" align="center">
+          <Input
+            size="sm"
+            placeholder="Reply..."
+            value={replyText}
+            onChange={(e) => setReplyText(e.target.value)}
+            borderRadius="8px"
+            bg="white"
+            autoFocus
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.preventDefault();
+                handleReplySubmit();
+              }
+            }}
+          />
+          <IconButton
+            aria-label="Send reply"
+            icon={<ArrowUpIcon w="12px" h="12px" />}
+            size="sm"
+            isDisabled={!replyText.trim() || isSendingReply}
+            isLoading={isSendingReply}
+            onClick={handleReplySubmit}
+            {...(replyText.trim()
+              ? { bg: "brand.primary", color: "white", _hover: { bg: "brand.primaryHover" } }
+              : { color: "customGray.800", _hover: { bg: "customGray.100" } })}
+          />
+        </HStack>
+      )}
+    </Box>
+  );
+}
 
 // Top-nav tab order, mirrored into the URL's ?view= param (see tabIndex
 // below) so a refresh lands back on whichever tab was open instead of
@@ -221,6 +608,12 @@ export default function CalendarBuilderPage() {
   // close transition has content to animate instead of unmounting instantly.
   const [panelBooking, setPanelBooking] = useState<(typeof bookings)[number] | null>(null);
   const [isNotesExpanded, setIsNotesExpanded] = useState(true);
+  const [commentDraft, setCommentDraft] = useState("");
+  const [bookingComments, setBookingComments] = useState<BookingCommentRow[]>([]);
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+  const [isSendingComment, setIsSendingComment] = useState(false);
+  const [pastedImages, setPastedImages] = useState<Array<{ file: File; previewUrl: string; width: number; height: number }>>([]);
+  const commentTextareaRef = useRef<HTMLTextAreaElement>(null);
   // This event's key for the inbound webhook route (app/api/webhook/[apiKey]) —
   // lets a third-party form post lead data straight to this event.
   const [apiKey, setApiKey] = useState<string | null>(null);
@@ -373,6 +766,7 @@ export default function CalendarBuilderPage() {
           setUserName(fullName);
           setOwnerName(fullName);
           setOwnerEmail(session.user.email || "");
+          setCurrentUserId(session.user.id);
 
           // "Connected" for Google now means the app's own Calendar OAuth
           // client (see lib/googleCalendar.ts) actually holds a refresh
@@ -576,6 +970,156 @@ export default function CalendarBuilderPage() {
 
     return () => clearTimeout(saveTimer);
   }, [formName, title, description, ownerName, slug, meetingLink, meetingLinkUrl, durations, userAvatar, isFormPageHidden, weeklyHours, currentEventId, isLoading]);
+
+  useEffect(() => {
+    if (!selectedBooking) {
+      setBookingComments([]);
+      setCommentDraft("");
+      setPastedImages([]);
+      return;
+    }
+    supabase
+      .from("booking_comments")
+      .select("id, user_id, body, created_at, edited_at, attachments, parent_id, reactions:booking_comment_reactions(emoji, user_id)")
+      .eq("booking_id", selectedBooking.id)
+      .order("created_at", { ascending: true })
+      .then(({ data }) => setBookingComments((data as BookingCommentRow[] | null) || []));
+  }, [selectedBooking]);
+
+  const handleSendComment = async () => {
+    const body = commentDraft.trim();
+    if ((!body && pastedImages.length === 0) || !selectedBooking || isSendingComment) return;
+    setIsSendingComment(true);
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session?.user) {
+      setIsSendingComment(false);
+      return;
+    }
+
+    const attachments: Array<{ url: string; name: string; width: number; height: number }> = [];
+    for (const img of pastedImages) {
+      const path = `${selectedBooking.id}/${Date.now()}_${img.file.name}`;
+      const { error: uploadError } = await supabase.storage.from("comment-attachments").upload(path, img.file);
+      if (uploadError) {
+        setIsSendingComment(false);
+        toast({ title: "Couldn't upload image", status: "error" });
+        return;
+      }
+      const { data: publicUrlData } = supabase.storage.from("comment-attachments").getPublicUrl(path);
+      attachments.push({ url: publicUrlData.publicUrl, name: img.file.name, width: img.width, height: img.height });
+    }
+
+    const { data, error } = await supabase
+      .from("booking_comments")
+      .insert({
+        booking_id: selectedBooking.id,
+        user_id: session.user.id,
+        body: body || null,
+        attachments,
+      })
+      .select("id, user_id, body, created_at, edited_at, attachments, parent_id")
+      .single();
+    setIsSendingComment(false);
+    if (error || !data) {
+      toast({ title: "Couldn't post comment", status: "error" });
+      return;
+    }
+    setBookingComments((prev) => [...prev, { ...data, reactions: [] }]);
+    setCommentDraft("");
+    setPastedImages([]);
+    if (commentTextareaRef.current) commentTextareaRef.current.style.height = "auto";
+  };
+
+  const handleSendReply = async (parentId: number, body: string): Promise<boolean> => {
+    if (!selectedBooking) return false;
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session?.user) return false;
+
+    const { data, error } = await supabase
+      .from("booking_comments")
+      .insert({
+        booking_id: selectedBooking.id,
+        user_id: session.user.id,
+        parent_id: parentId,
+        body,
+        attachments: [],
+      })
+      .select("id, user_id, body, created_at, edited_at, attachments, parent_id")
+      .single();
+    if (error || !data) {
+      toast({ title: "Couldn't post reply", status: "error" });
+      return false;
+    }
+    setBookingComments((prev) => [...prev, { ...data, reactions: [] }]);
+    return true;
+  };
+
+  const handleDeleteComment = async (commentId: number) => {
+    const { error } = await supabase.from("booking_comments").delete().eq("id", commentId);
+    if (error) {
+      toast({ title: "Couldn't delete comment", description: error.message, status: "error" });
+      return;
+    }
+    setBookingComments((prev) => prev.filter((c) => c.id !== commentId && c.parent_id !== commentId));
+  };
+
+  const handleEditComment = async (commentId: number, newBody: string): Promise<boolean> => {
+    const editedAt = new Date().toISOString();
+    const { error } = await supabase
+      .from("booking_comments")
+      .update({ body: newBody, edited_at: editedAt })
+      .eq("id", commentId);
+    if (error) {
+      toast({ title: "Couldn't update comment", description: error.message, status: "error" });
+      return false;
+    }
+    setBookingComments((prev) =>
+      prev.map((c) => (c.id === commentId ? { ...c, body: newBody, edited_at: editedAt } : c))
+    );
+    return true;
+  };
+
+  const toggleReaction = async (commentId: number, emoji: string) => {
+    if (!currentUserId) return;
+    const target = bookingComments.find((c) => c.id === commentId);
+    const hasReacted = target?.reactions.some((r) => r.emoji === emoji && r.user_id === currentUserId) ?? false;
+
+    setBookingComments((prev) =>
+      prev.map((c) =>
+        c.id === commentId
+          ? {
+              ...c,
+              reactions: hasReacted
+                ? c.reactions.filter((r) => !(r.emoji === emoji && r.user_id === currentUserId))
+                : [...c.reactions, { emoji, user_id: currentUserId }],
+            }
+          : c
+      )
+    );
+
+    if (hasReacted) {
+      await supabase
+        .from("booking_comment_reactions")
+        .delete()
+        .eq("comment_id", commentId)
+        .eq("user_id", currentUserId)
+        .eq("emoji", emoji);
+    } else {
+      const { error } = await supabase
+        .from("booking_comment_reactions")
+        .insert({ comment_id: commentId, user_id: currentUserId, emoji });
+      if (error) {
+        // Roll back the optimistic add if the insert didn't actually stick.
+        setBookingComments((prev) =>
+          prev.map((c) =>
+            c.id === commentId
+              ? { ...c, reactions: c.reactions.filter((r) => !(r.emoji === emoji && r.user_id === currentUserId)) }
+              : c
+          )
+        );
+      }
+    }
+  };
 
   const handleTitleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const val = e.target.value;
@@ -1050,9 +1594,64 @@ export default function CalendarBuilderPage() {
               <Box flex="1" h="100%" bg="white" borderLeft="1px solid" borderColor="customGray.200" overflow="hidden" position="relative">
                 <Box h="100%" overflow="hidden" bg="customGray.50">
                   <VStack align="stretch" spacing="0px" px="0px" py="0px" h="100%" overflow="hidden">
-                    <Box flexShrink={0} borderBottom="1px solid" borderColor="customGray.200" bg="white" px="24px" py="24px">
-                      <Text fontSize="18px" fontWeight="600" color="customGray.800" mb="2px">Results</Text>
-                      <Text fontSize="14px" color="customGray.500">Bookings and leads captured for this event</Text>
+                    <Box flexShrink={0} borderBottom="1px solid" borderColor="customGray.200" bg="white" px="24px" py="24px" display="flex" alignItems="center" justifyContent="space-between">
+                      <Box>
+                        <Text fontSize="18px" fontWeight="600" color="customGray.800" mb="2px">Results</Text>
+                        <Text fontSize="14px" color="customGray.500">Bookings and leads captured for this event</Text>
+                      </Box>
+                      <HStack spacing="8px">
+                        <HStack spacing="0px" bg="white" border="1px solid" borderColor="customGray.200" borderRadius="full" h="32px" w="200px" px="10px">
+                          <svg width="14" height="14" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+                            <path d="M14 14L11.1 11.1M12.6667 7.33333C12.6667 10.2789 10.2789 12.6667 7.33333 12.6667C4.38781 12.6667 2 10.2789 2 7.33333C2 4.38781 4.38781 2 7.33333 2C10.2789 2 12.6667 4.38781 12.6667 7.33333Z" stroke="#71717A" strokeWidth="1.33333" strokeLinecap="round" strokeLinejoin="round" />
+                          </svg>
+                          <Input
+                            value={bookingsSearchQuery}
+                            onChange={(e) => setBookingsSearchQuery(e.target.value)}
+                            placeholder="Search..."
+                            variant="unstyled"
+                            fontSize="sm"
+                            color="customGray.800"
+                            _placeholder={{ color: "customGray.400" }}
+                            px="8px"
+                          />
+                        </HStack>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          borderRadius="8px"
+                          border="none"
+                          bg="white"
+                          color="customGray.700"
+                          fontSize="sm"
+                          fontWeight="medium"
+                          _hover={{ bg: "customGray.100" }}
+                          leftIcon={
+                            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+                              <path d="M8.66667 10.667L11.3333 13.3337L14 10.667M11.3333 13.3337V2.66699M7.33333 5.33366L4.66667 2.66699L2 5.33366M4.66667 2.66699V13.3337" stroke="currentColor" strokeWidth="1.33333" strokeLinecap="round" strokeLinejoin="round" />
+                            </svg>
+                          }
+                        >
+                          Sort
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          borderRadius="8px"
+                          border="none"
+                          bg="white"
+                          color="customGray.700"
+                          fontSize="sm"
+                          fontWeight="medium"
+                          _hover={{ bg: "customGray.100" }}
+                          leftIcon={
+                            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+                              <path d="M2 4H14M4.66667 8H11.3333M6.66667 12H9.33333" stroke="currentColor" strokeWidth="1.33333" strokeLinecap="round" strokeLinejoin="round" />
+                            </svg>
+                          }
+                        >
+                          Filters
+                        </Button>
+                      </HStack>
                     </Box>
 
                     {currentEventId && !isLoadingBookings && bookings.length > 0 && (
@@ -1084,63 +1683,16 @@ export default function CalendarBuilderPage() {
                       </Box>
                     )}
 
-                    <Box flex="1" borderTop="1px solid" borderBottom="1px solid" borderColor="customGray.200" overflow="hidden" bg="white" display="flex" flexDirection="column">
-                      <Box flexShrink={0} w="100%" pl="24px" pr="30px" py="16px" display="flex" alignItems="center" justifyContent="flex-end" borderBottom="1px solid" borderColor="customGray.200">
-                        <HStack spacing="8px">
-                          <HStack spacing="0px" bg="white" border="1px solid" borderColor="customGray.200" borderRadius="full" h="32px" w="200px" px="10px">
-                            <svg width="14" height="14" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
-                              <path d="M14 14L11.1 11.1M12.6667 7.33333C12.6667 10.2789 10.2789 12.6667 7.33333 12.6667C4.38781 12.6667 2 10.2789 2 7.33333C2 4.38781 4.38781 2 7.33333 2C10.2789 2 12.6667 4.38781 12.6667 7.33333Z" stroke="#71717A" strokeWidth="1.33333" strokeLinecap="round" strokeLinejoin="round" />
-                            </svg>
-                            <Input
-                              value={bookingsSearchQuery}
-                              onChange={(e) => setBookingsSearchQuery(e.target.value)}
-                              placeholder="Search..."
-                              variant="unstyled"
-                              fontSize="sm"
-                              color="customGray.800"
-                              _placeholder={{ color: "customGray.400" }}
-                              px="8px"
-                            />
-                          </HStack>
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            borderRadius="8px"
-                            border="none"
-                            bg="white"
-                            color="customGray.700"
-                            fontSize="sm"
-                            fontWeight="medium"
-                            _hover={{ bg: "customGray.100" }}
-                            leftIcon={
-                              <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
-                                <path d="M8.66667 10.667L11.3333 13.3337L14 10.667M11.3333 13.3337V2.66699M7.33333 5.33366L4.66667 2.66699L2 5.33366M4.66667 2.66699V13.3337" stroke="currentColor" strokeWidth="1.33333" strokeLinecap="round" strokeLinejoin="round" />
-                              </svg>
-                            }
-                          >
-                            Sort
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            borderRadius="8px"
-                            border="none"
-                            bg="white"
-                            color="customGray.700"
-                            fontSize="sm"
-                            fontWeight="medium"
-                            _hover={{ bg: "customGray.100" }}
-                            leftIcon={
-                              <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
-                                <path d="M2 4H14M4.66667 8H11.3333M6.66667 12H9.33333" stroke="currentColor" strokeWidth="1.33333" strokeLinecap="round" strokeLinejoin="round" />
-                              </svg>
-                            }
-                          >
-                            Filters
-                          </Button>
-                        </HStack>
-                      </Box>
-
+                    <Box
+                      flex="1"
+                      borderTop={currentEventId && !isLoadingBookings && bookings.length > 0 ? "1px solid" : "none"}
+                      borderBottom={currentEventId && !isLoadingBookings && bookings.length > 0 ? "1px solid" : "none"}
+                      borderColor="customGray.200"
+                      overflow="hidden"
+                      bg="white"
+                      display="flex"
+                      flexDirection="column"
+                    >
                       {!currentEventId ? (
                         <Box flex="1" py="40px" display="flex" alignItems="center" justifyContent="center">
                           <Text fontSize="14px" color="customGray.500">Save this event before it can receive bookings.</Text>
@@ -1229,7 +1781,7 @@ export default function CalendarBuilderPage() {
                           const [meetingHour, meetingMinute] = booking.booking_time.split(":").map(Number);
                           const meetingTimeLabel = formatTime(meetingHour, meetingMinute, false);
                           return (
-                            <Tr key={booking.id} bg="white" _hover={{ bg: "customGray.50" }} transition="background-color 0.2s" cursor="pointer" onClick={() => { setSelectedBooking(booking); setPanelBooking(booking); }}>
+                            <Tr key={booking.id} bg={selectedBooking?.id === booking.id ? "customGray.50" : "white"} _hover={{ bg: "customGray.50" }} transition="background-color 0.2s" cursor="pointer" onClick={() => { setSelectedBooking(booking); setPanelBooking(booking); }}>
                               <Td h="56px" py="0" px="0" borderBottomColor="customGray.200">
                                 <Box display="flex" alignItems="center" px="24px">
                                 <Popover trigger="hover" placement="bottom-start" openDelay={200}>
@@ -1684,7 +2236,23 @@ export default function CalendarBuilderPage() {
                                       <Text fontSize="sm" color="customGray.500">
                                         {attendees.length > 1 ? `Attendee ${index + 1}` : "Attendee"}
                                       </Text>
-                                      <Text fontSize="sm" color="customGray.800">{attendee.name || "—"}</Text>
+                                      <HStack spacing="6px">
+                                        <Box
+                                          w="20px"
+                                          h="20px"
+                                          bg={BOOKING_AVATAR_COLORS[(panelBooking.id + index) % BOOKING_AVATAR_COLORS.length]}
+                                          borderRadius="full"
+                                          display="flex"
+                                          alignItems="center"
+                                          justifyContent="center"
+                                          flexShrink={0}
+                                        >
+                                          <Text fontSize="10px" fontWeight="medium" color="white">
+                                            {(attendee.name || "?").charAt(0).toUpperCase()}
+                                          </Text>
+                                        </Box>
+                                        <Text fontSize="sm" color="customGray.800">{attendee.name || "—"}</Text>
+                                      </HStack>
                                     </HStack>
                                     <HStack justify="space-between" py="10px" borderBottom="1px solid" borderColor="customGray.100">
                                       <Text fontSize="sm" color="customGray.500">Email</Text>
@@ -1790,8 +2358,200 @@ export default function CalendarBuilderPage() {
                               )}
                             </VStack>
                           </TabPanel>
-                          <TabPanel p="24px">
-                            <Text fontSize="sm" color="customGray.500">No notes yet.</Text>
+                          <TabPanel h="100%" p="0" bg="customGray.50" display="flex" flexDirection="column" justifyContent="flex-end">
+                            {bookingComments.length > 0 && (
+                              <Box flex="1" minH="0" display="flex">
+                                <VStack
+                                  align="stretch"
+                                  spacing="12px"
+                                  flex="1"
+                                  minH="0"
+                                  overflowY="auto"
+                                  pt="12px"
+                                  pb="12px"
+                                  sx={{
+                                    scrollbarWidth: 'thin',
+                                    scrollbarColor: 'var(--chakra-colors-customGray-300) transparent',
+                                    '&::-webkit-scrollbar': { width: '6px' },
+                                    '&::-webkit-scrollbar-track': { bg: 'transparent' },
+                                    '&::-webkit-scrollbar-thumb': { bg: 'customGray.300', borderRadius: '3px' },
+                                  }}
+                                >
+                                  {(() => {
+                                    const topLevel = bookingComments.filter((c) => !c.parent_id);
+                                    const repliesByParent = new Map<number, BookingCommentRow[]>();
+                                    bookingComments.forEach((c) => {
+                                      if (c.parent_id != null) {
+                                        const list = repliesByParent.get(c.parent_id) || [];
+                                        list.push(c);
+                                        repliesByParent.set(c.parent_id, list);
+                                      }
+                                    });
+                                    repliesByParent.forEach((list) =>
+                                      list.sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime())
+                                    );
+                                    return topLevel.map((comment) => (
+                                      <CommentThread
+                                        key={comment.id}
+                                        comment={comment}
+                                        replies={repliesByParent.get(comment.id) || []}
+                                        ownerName={ownerName}
+                                        userAvatar={userAvatar}
+                                        currentUserId={currentUserId}
+                                        onToggleReaction={toggleReaction}
+                                        onSendReply={handleSendReply}
+                                        onDeleteComment={handleDeleteComment}
+                                        onEditComment={handleEditComment}
+                                      />
+                                    ));
+                                  })()}
+                                </VStack>
+                              </Box>
+                            )}
+                            <Box p="12px">
+                            <Box bg="white" border="1px solid" borderColor="customGray.200" borderRadius="12px" p="0" _hover={{ borderColor: "customGray.500" }} _focusWithin={{ borderColor: "customGray.500", boxShadow: "0 0 0 4px rgba(161, 161, 170, 0.35)" }}>
+                              {pastedImages.length > 0 && (
+                                <HStack
+                                  align="center"
+                                  spacing="8px"
+                                  py="10px"
+                                  pl="12px"
+                                  pr="12px"
+                                  borderBottom="1px solid"
+                                  borderColor="customGray.200"
+                                  overflowX="auto"
+                                  sx={{ "&::-webkit-scrollbar": { display: "none" } }}
+                                >
+                                  {pastedImages.map((img, index) => (
+                                    <HStack
+                                      key={img.previewUrl}
+                                      spacing="6px"
+                                      bg="customGray.50"
+                                      border="1px solid"
+                                      borderColor="customGray.200"
+                                      borderRadius="8px"
+                                      pl="6px"
+                                      pr="4px"
+                                      py="4px"
+                                      flexShrink={0}
+                                    >
+                                      <Image src={img.previewUrl} boxSize="28px" objectFit="cover" borderRadius="4px" flexShrink={0} />
+                                      <VStack align="start" spacing="0px" minW="0">
+                                        <Text fontSize="xs" fontWeight="600" color="customGray.800" noOfLines={1} maxW="100px">{img.file.name}</Text>
+                                        <Text fontSize="10px" color="customGray.400">{img.width}×{img.height}</Text>
+                                      </VStack>
+                                      <IconButton
+                                        aria-label="Remove attachment"
+                                        icon={<CloseIcon w="7px" h="7px" />}
+                                        size="xs"
+                                        variant="ghost"
+                                        color="customGray.500"
+                                        _hover={{ bg: "customGray.100" }}
+                                        onClick={() => setPastedImages((prev) => prev.filter((_, i) => i !== index))}
+                                      />
+                                    </HStack>
+                                  ))}
+                                </HStack>
+                              )}
+                              <Box
+                                maxH="132px"
+                                overflowY="auto"
+                                pl="12px"
+                                pr="12px"
+                                sx={{
+                                  scrollbarWidth: 'thin',
+                                  scrollbarColor: 'var(--chakra-colors-customGray-300) transparent',
+                                  '&::-webkit-scrollbar': { width: '6px' },
+                                  '&::-webkit-scrollbar-track': { bg: 'transparent' },
+                                  '&::-webkit-scrollbar-thumb': { bg: 'customGray.300', borderRadius: '3px' },
+                                  '&::-webkit-scrollbar-thumb:hover': { bg: 'customGray.400' },
+                                }}
+                              >
+                                <Textarea
+                                  ref={commentTextareaRef}
+                                  variant="unstyled"
+                                  border="none"
+                                  borderRadius="0"
+                                  _focus={{ boxShadow: "none" }}
+                                  _focusVisible={{ boxShadow: "none" }}
+                                  placeholder="Leave a comment..."
+                                  fontSize="sm"
+                                  lineHeight="20px"
+                                  color="customGray.800"
+                                  _placeholder={{ color: "customGray.400" }}
+                                  pt="12px"
+                                  pb="0"
+                                  mb="12px"
+                                  rows={1}
+                                  resize="none"
+                                  minH="20px"
+                                  value={commentDraft}
+                                  onChange={(e) => {
+                                    setCommentDraft(e.target.value);
+                                    const el = e.target;
+                                    el.style.height = "auto";
+                                    el.style.height = `${el.scrollHeight}px`;
+                                  }}
+                                  onKeyDown={(e) => {
+                                    if (e.key === "Enter" && !e.shiftKey) {
+                                      e.preventDefault();
+                                      handleSendComment();
+                                    }
+                                  }}
+                                  onPaste={(e) => {
+                                    const items = Array.from(e.clipboardData.items).filter((i) => i.type.startsWith("image/"));
+                                    if (items.length === 0) return;
+                                    e.preventDefault();
+                                    const room = MAX_COMMENT_ATTACHMENTS - pastedImages.length;
+                                    if (room <= 0) {
+                                      toast({ title: `You can attach up to ${MAX_COMMENT_ATTACHMENTS} images`, status: "warning" });
+                                      return;
+                                    }
+                                    const accepted = items.slice(0, room);
+                                    if (items.length > accepted.length) {
+                                      toast({ title: `You can attach up to ${MAX_COMMENT_ATTACHMENTS} images`, status: "warning" });
+                                    }
+                                    accepted.forEach((item) => {
+                                      const file = item.getAsFile();
+                                      if (!file) return;
+                                      const previewUrl = URL.createObjectURL(file);
+                                      const img = new window.Image();
+                                      img.onload = () => {
+                                        setPastedImages((prev) =>
+                                          prev.length >= MAX_COMMENT_ATTACHMENTS
+                                            ? prev
+                                            : [...prev, { file, previewUrl, width: img.naturalWidth, height: img.naturalHeight }]
+                                        );
+                                      };
+                                      img.src = previewUrl;
+                                    });
+                                  }}
+                                />
+                              </Box>
+                              <HStack justify="flex-end" spacing="10px" pr="12px" pt="12px" pb="12px">
+                                <IconButton
+                                  aria-label="Attach file"
+                                  icon={<AttachmentIcon w="14px" h="14px" />}
+                                  size="sm"
+                                  variant="ghost"
+                                  color="customGray.500"
+                                  _hover={{ bg: "customGray.100" }}
+                                />
+                                <IconButton
+                                  aria-label="Send comment"
+                                  icon={<ArrowUpIcon w="14px" h="14px" />}
+                                  size="sm"
+                                  variant="ghost"
+                                  isDisabled={(!commentDraft.trim() && pastedImages.length === 0) || isSendingComment}
+                                  isLoading={isSendingComment}
+                                  onClick={handleSendComment}
+                                  {...(commentDraft.trim() || pastedImages.length > 0
+                                    ? { bg: "brand.primary", color: "white", _hover: { bg: "brand.primaryHover" } }
+                                    : { color: "customGray.800", _hover: { bg: "customGray.100" } })}
+                                />
+                              </HStack>
+                            </Box>
+                            </Box>
                           </TabPanel>
                         </TabPanels>
                       </Tabs>

@@ -29,6 +29,7 @@
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "crypto-js": "^4.2.0",
+    "emoji-picker-react": "^4.19.1",
     "framer-motion": "^12.42.2",
     "next": "^14.2.0",
     "next-auth": "^4.24.14",

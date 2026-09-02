@@ -7,6 +7,7 @@ import { useRouter } from "next/navigation";
 import { keyframes } from "@emotion/react";
 import { motion } from "framer-motion";
 import { supabase, syncServerSession } from "@/lib/supabase";
+import { formatTime } from "@/lib/bookingTime";
 import { deleteUserAccount } from "@/app/actions/deleteUser";
 import { getAgents, createAgent, deleteAgent } from "@/app/actions/agentActions";
 import CryptoJS from "crypto-js";
@@ -15,6 +16,7 @@ import FullPageLoader from "@/app/components/FullPageLoader";
 import UsernameModal from "@/app/components/UsernameModal";
 import ServiceSelector from "@/app/components/ServiceSelector";
 import OnboardingGate from "@/app/components/OnboardingGate";
+import { BookingDetailsPanel } from "@/app/components/BookingDetailsPanel";
 import {
   Box,
   Flex,
@@ -36,14 +38,14 @@ import {
   Tag,
   TagLabel,
   Tabs,
-  TabList,
-  Tab,
   TabPanels,
   TabPanel,
   Menu,
   MenuButton,
   MenuList,
   MenuItem,
+  MenuGroup,
+  MenuDivider,
   Tooltip,
   IconButton,
   useOutsideClick,
@@ -56,6 +58,13 @@ import {
   Td,
   Checkbox,
   Skeleton,
+  Avatar,
+  AvatarGroup,
+  Popover,
+  PopoverTrigger,
+  PopoverContent,
+  PopoverBody,
+  Portal,
 } from "@chakra-ui/react";
 import { SearchIcon, ChevronDownIcon, HamburgerIcon, CloseIcon, DeleteIcon, CopyIcon } from "@chakra-ui/icons";
 
@@ -113,6 +122,8 @@ export default function BuilderPage() {
   const router = useRouter();
   const [selectedNav, setSelectedNav] = useState("Messages");
   const [userEmail, setUserEmail] = useState("");
+  const [ownerName, setOwnerName] = useState("");
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [avatarUrl, setAvatarUrl] = useState("");
   const [hydrated, setHydrated] = useState(false);
   const { isOpen: isFeedbackOpen, onOpen: onFeedbackOpen, onClose: onFeedbackClose } = useDisclosure();
@@ -137,7 +148,9 @@ export default function BuilderPage() {
   const [isLoadingWorkspaces, setIsLoadingWorkspaces] = useState(true);
   const [enableSidebarTransition, setEnableSidebarTransition] = useState(false);
   const isMountedRef = useRef(false);
-  const [activeTabIndex, setActiveTabIndex] = useState(0);
+  // No tab switcher is shown anymore — Meeting scheduler (index 1) is the
+  // page's sole focus, so it's the fixed starting tab.
+  const [activeTabIndex, setActiveTabIndex] = useState(1);
 
   const [isSearchExpanded, setIsSearchExpanded] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
@@ -147,7 +160,7 @@ export default function BuilderPage() {
   // autoFocus only fires on mount, and this input never unmounts (it just
   // resizes), so re-focus explicitly every time it expands again.
   useEffect(() => {
-    if (isSearchExpanded) searchInputRef.current?.focus();
+    if (isSearchExpanded) searchInputRef.current?.focus({ preventScroll: true });
     else setSearchQuery("");
   }, [isSearchExpanded]);
 
@@ -177,12 +190,54 @@ export default function BuilderPage() {
     // shouldn't lose it, only an empty box collapses back to just the icon.
     handler: () => { if (searchQuery === "") setIsSearchExpanded(false); },
   });
-  const [calendarEvents, setCalendarEvents] = useState<Array<{ id: number; title: string; meeting_link: string; slug: string; updated_at: string; status: string }>>([]);
+
+  const [isBookingsSearchExpanded, setIsBookingsSearchExpanded] = useState(false);
+  const bookingsSearchInputRef = useRef<HTMLInputElement>(null);
+  const bookingsSearchRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (isBookingsSearchExpanded) bookingsSearchInputRef.current?.focus({ preventScroll: true });
+    else setBookingsSearchQuery("");
+  }, [isBookingsSearchExpanded]);
+
+  useOutsideClick({
+    ref: bookingsSearchRef,
+    handler: () => { if (bookingsSearchQuery === "") setIsBookingsSearchExpanded(false); },
+  });
+  const [calendarEvents, setCalendarEvents] = useState<Array<{ id: number; title: string; meeting_link: string; slug: string; updated_at: string; status: string; is_favorite: boolean; is_archived: boolean; is_offline: boolean }>>([]);
   const [bookingCounts, setBookingCounts] = useState<Record<number, number>>({});
+  const [eventsFilter, setEventsFilter] = useState<"All Event" | "Favourite" | "Draft" | "Archive">("All Event");
+  const [eventsSort, setEventsSort] = useState<"updated_desc" | "updated_asc" | "name_asc" | "name_desc" | "bookings_desc">("updated_desc");
+  // Which content the Meeting Scheduler panel shows: the events table, or the
+  // aggregated all-events Bookings view selected from the sidebar's
+  // "Bookings" row. This is a same-page view swap, not a route change.
+  const [sidebarSection, setSidebarSection] = useState<"events" | "bookings">("events");
+  const [allBookings, setAllBookings] = useState<Array<{
+    id: number;
+    event_id: number;
+    event_title: string;
+    guest_name: string;
+    guest_email: string;
+    guest_phone: string | null;
+    guest_notes: string | null;
+    booking_date: string;
+    booking_time: string;
+    created_at: string;
+    extra_fields: Record<string, unknown> | null;
+    source: string;
+    meeting_url: string | null;
+  }>>([]);
+  const [isLoadingAllBookings, setIsLoadingAllBookings] = useState(false);
+  const [selectedBooking, setSelectedBooking] = useState<(typeof allBookings)[number] | null>(null);
+  const [panelBooking, setPanelBooking] = useState<(typeof allBookings)[number] | null>(null);
+  const [bookingsSearchQuery, setBookingsSearchQuery] = useState("");
+  const [bookingsResultsFilter, setBookingsResultsFilter] = useState<"All" | "Upcoming" | "Past" | "Cancelled" | "Rescheduled">("All");
+  const [bookingsSort, setBookingsSort] = useState<"meeting_desc" | "meeting_asc" | "name_asc" | "name_desc">("meeting_desc");
   const [chatbotAgents, setChatbotAgents] = useState<Array<{ id: number; name: string; status: string; updated_at: string }>>([]);
   const [selectedEventIds, setSelectedEventIds] = useState<Set<number>>(new Set());
   const [isBulkDeleting, setIsBulkDeleting] = useState(false);
   const [isBulkDuplicating, setIsBulkDuplicating] = useState(false);
+  const [isBulkArchiving, setIsBulkArchiving] = useState(false);
 
   const handleBulkDeleteEvents = async () => {
     const ids = Array.from(selectedEventIds);
@@ -197,6 +252,90 @@ export default function BuilderPage() {
     setCalendarEvents((prev) => prev.filter((e) => !selectedEventIds.has(e.id)));
     setSelectedEventIds(new Set());
     toast({ title: `${ids.length} event${ids.length > 1 ? "s" : ""} deleted`, status: "success" });
+  };
+
+  // Optimistic toggles for the sidebar's Favourite/Draft/Archive state — flip
+  // locally first so the row/badge updates instantly, then roll back if the
+  // write fails.
+  const handleToggleFavorite = async (eventId: number) => {
+    const target = calendarEvents.find((e) => e.id === eventId);
+    if (!target) return;
+    const nextFavorite = !target.is_favorite;
+    setCalendarEvents((prev) => prev.map((e) => (e.id === eventId ? { ...e, is_favorite: nextFavorite } : e)));
+    const { error } = await supabase.from("calendar_events").update({ is_favorite: nextFavorite }).eq("id", eventId);
+    if (error) {
+      setCalendarEvents((prev) => prev.map((e) => (e.id === eventId ? { ...e, is_favorite: !nextFavorite } : e)));
+      toast({ title: "Couldn't update favorite", description: error.message, status: "error" });
+    }
+  };
+
+  const handleToggleArchive = async (eventId: number) => {
+    const target = calendarEvents.find((e) => e.id === eventId);
+    if (!target) return;
+    const nextArchived = !target.is_archived;
+    setCalendarEvents((prev) => prev.map((e) => (e.id === eventId ? { ...e, is_archived: nextArchived } : e)));
+    const { error } = await supabase.from("calendar_events").update({ is_archived: nextArchived }).eq("id", eventId);
+    if (error) {
+      setCalendarEvents((prev) => prev.map((e) => (e.id === eventId ? { ...e, is_archived: !nextArchived } : e)));
+      toast({ title: "Couldn't update archive status", description: error.message, status: "error" });
+      return;
+    }
+    setSelectedEventIds((prev) => {
+      if (!prev.has(eventId)) return prev;
+      const next = new Set(prev);
+      next.delete(eventId);
+      return next;
+    });
+  };
+
+  const handleTogglePublish = async (eventId: number) => {
+    const target = calendarEvents.find((e) => e.id === eventId);
+    if (!target) return;
+    const nextStatus = target.status === "published" ? "draft" : "published";
+    setCalendarEvents((prev) => prev.map((e) => (e.id === eventId ? { ...e, status: nextStatus } : e)));
+    const { error } = await supabase.from("calendar_events").update({ status: nextStatus }).eq("id", eventId);
+    if (error) {
+      setCalendarEvents((prev) => prev.map((e) => (e.id === eventId ? { ...e, status: target.status } : e)));
+      toast({ title: "Couldn't update status", description: error.message, status: "error" });
+    }
+  };
+
+  const handleToggleOffline = async (eventId: number) => {
+    const target = calendarEvents.find((e) => e.id === eventId);
+    if (!target) return;
+    const nextOffline = !target.is_offline;
+    setCalendarEvents((prev) => prev.map((e) => (e.id === eventId ? { ...e, is_offline: nextOffline } : e)));
+    const { error } = await supabase.from("calendar_events").update({ is_offline: nextOffline }).eq("id", eventId);
+    if (error) {
+      setCalendarEvents((prev) => prev.map((e) => (e.id === eventId ? { ...e, is_offline: !nextOffline } : e)));
+      toast({ title: "Couldn't update offline status", description: error.message, status: "error" });
+    }
+  };
+
+  const handleDeleteEvent = async (eventId: number) => {
+    if (!window.confirm("Are you sure you want to delete this event? This action cannot be undone.")) return;
+    const { error } = await supabase.from("calendar_events").delete().eq("id", eventId);
+    if (error) {
+      toast({ title: "Failed to delete event", description: error.message, status: "error" });
+      return;
+    }
+    setCalendarEvents((prev) => prev.filter((e) => e.id !== eventId));
+    toast({ title: "Event deleted", status: "success" });
+  };
+
+  const handleBulkArchiveEvents = async () => {
+    const ids = Array.from(selectedEventIds);
+    if (ids.length === 0) return;
+    setIsBulkArchiving(true);
+    const { error } = await supabase.from("calendar_events").update({ is_archived: true }).in("id", ids);
+    setIsBulkArchiving(false);
+    if (error) {
+      toast({ title: "Failed to archive events", description: error.message, status: "error" });
+      return;
+    }
+    setCalendarEvents((prev) => prev.map((e) => (selectedEventIds.has(e.id) ? { ...e, is_archived: true } : e)));
+    setSelectedEventIds(new Set());
+    toast({ title: `${ids.length} event${ids.length > 1 ? "s" : ""} archived`, status: "success" });
   };
 
   const handleBulkDuplicateEvents = async () => {
@@ -236,14 +375,149 @@ export default function BuilderPage() {
   // scopes by name (event queries, delete, the header) reads this.
   const selectedAgent = selectedAgentIndex !== null ? agents[selectedAgentIndex]?.name ?? null : null;
 
-  // Matches the event listing search box against event names. Select-all and
-  // the header checkbox operate on this rather than the full list, so a
-  // filtered search only selects/counts what's actually visible.
+  // Live counts for the All Event / Favourite / Draft / Archive sidebar.
+  // Archived events are excluded from every count except Archive itself, so
+  // an event doesn't keep showing up as a "draft" once it's been archived.
+  const eventsFilterCounts = useMemo(() => {
+    const active = calendarEvents.filter((e) => !e.is_archived);
+    return {
+      "All Event": active.length,
+      "Favourite": active.filter((e) => e.is_favorite).length,
+      "Draft": active.filter((e) => e.status === "draft").length,
+      "Archive": calendarEvents.filter((e) => e.is_archived).length,
+    };
+  }, [calendarEvents]);
+
+  // Matches the event listing search box against event names, and applies
+  // the sidebar's All Event / Favourite / Draft / Archive selection plus the
+  // Sort menu. Select-all and the header checkbox operate on this rather than
+  // the full list, so a filtered search only selects/counts what's visible.
   const filteredCalendarEvents = useMemo(() => {
     const query = searchQuery.trim().toLowerCase();
-    if (query === "") return calendarEvents;
-    return calendarEvents.filter((e) => e.title.toLowerCase().includes(query));
-  }, [calendarEvents, searchQuery]);
+    const byFilter = calendarEvents.filter((e) => {
+      if (eventsFilter === "Archive") return e.is_archived;
+      if (e.is_archived) return false;
+      if (eventsFilter === "Favourite") return e.is_favorite;
+      if (eventsFilter === "Draft") return e.status === "draft";
+      return true;
+    });
+    const bySearch = query === "" ? byFilter : byFilter.filter((e) => e.title.toLowerCase().includes(query));
+    const sorted = [...bySearch];
+    sorted.sort((a, b) => {
+      switch (eventsSort) {
+        case "updated_asc":
+          return new Date(a.updated_at).getTime() - new Date(b.updated_at).getTime();
+        case "name_asc":
+          return a.title.localeCompare(b.title);
+        case "name_desc":
+          return b.title.localeCompare(a.title);
+        case "bookings_desc":
+          return (bookingCounts[b.id] ?? 0) - (bookingCounts[a.id] ?? 0);
+        case "updated_desc":
+        default:
+          return new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime();
+      }
+    });
+    return sorted;
+  }, [calendarEvents, searchQuery, eventsFilter, eventsSort, bookingCounts]);
+
+  // Loads bookings across every event once on mount, so the sidebar's
+  // All/Upcoming/Past counts are accurate even before Bookings is opened.
+  // RLS on `bookings` already scopes rows to events this user owns.
+  useEffect(() => {
+    setIsLoadingAllBookings(true);
+    (async () => {
+      const { data, error } = await supabase
+        .from("bookings")
+        .select("id, event_id, guest_name, guest_email, guest_phone, guest_notes, booking_date, booking_time, created_at, extra_fields, source, meeting_url, calendar_events(event_title, title)")
+        .order("created_at", { ascending: false });
+      if (error) {
+        console.error("Error loading bookings:", error);
+      } else {
+        setAllBookings(
+          (data || []).map((row: any) => ({
+            id: row.id,
+            event_id: row.event_id,
+            event_title: row.calendar_events?.event_title || row.calendar_events?.title || "Untitled event",
+            guest_name: row.guest_name,
+            guest_email: row.guest_email,
+            guest_phone: row.guest_phone,
+            guest_notes: row.guest_notes,
+            booking_date: row.booking_date,
+            booking_time: row.booking_time,
+            created_at: row.created_at,
+            extra_fields: row.extra_fields,
+            source: row.source,
+            meeting_url: row.meeting_url,
+          }))
+        );
+      }
+      setIsLoadingAllBookings(false);
+    })();
+  }, []);
+
+  const bookingsResultsFilterCounts = useMemo(() => {
+    const todayStr = new Date().toISOString().slice(0, 10);
+    return {
+      All: allBookings.length,
+      Upcoming: allBookings.filter((b) => b.booking_date >= todayStr).length,
+      Past: allBookings.filter((b) => b.booking_date < todayStr).length,
+      // No cancellation/reschedule status is tracked on a booking yet, so
+      // these always come up empty rather than showing a misleading All.
+      Cancelled: 0,
+      Rescheduled: 0,
+    };
+  }, [allBookings]);
+
+  const allBookingsStats = useMemo(() => {
+    const todayStr = new Date().toISOString().slice(0, 10);
+    const total = allBookings.length;
+    const upcoming = allBookings.filter((b) => b.booking_date >= todayStr).length;
+    const webhook = allBookings.filter((b) => b.source === "webhook").length;
+    return { total, upcoming, direct: total - webhook, webhook };
+  }, [allBookings]);
+
+  const filteredAllBookings = useMemo(() => {
+    const todayStr = new Date().toISOString().slice(0, 10);
+    let scoped = allBookings;
+    if (bookingsResultsFilter === "Upcoming") scoped = allBookings.filter((b) => b.booking_date >= todayStr);
+    else if (bookingsResultsFilter === "Past") scoped = allBookings.filter((b) => b.booking_date < todayStr);
+    else if (bookingsResultsFilter === "Cancelled" || bookingsResultsFilter === "Rescheduled") scoped = [];
+
+    const q = bookingsSearchQuery.trim().toLowerCase();
+    if (q) {
+      scoped = scoped.filter((b) =>
+        (b.guest_name || "").toLowerCase().includes(q) ||
+        (b.guest_email || "").toLowerCase().includes(q) ||
+        (b.event_title || "").toLowerCase().includes(q)
+      );
+    }
+
+    const sorted = [...scoped];
+    sorted.sort((a, b) => {
+      switch (bookingsSort) {
+        case "meeting_asc":
+          return `${a.booking_date} ${a.booking_time}`.localeCompare(`${b.booking_date} ${b.booking_time}`);
+        case "name_asc":
+          return (a.guest_name || "").localeCompare(b.guest_name || "");
+        case "name_desc":
+          return (b.guest_name || "").localeCompare(a.guest_name || "");
+        case "meeting_desc":
+        default:
+          return `${b.booking_date} ${b.booking_time}`.localeCompare(`${a.booking_date} ${a.booking_time}`);
+      }
+    });
+    return sorted;
+  }, [allBookings, bookingsResultsFilter, bookingsSearchQuery, bookingsSort]);
+
+  const handleDeleteBooking = async (bookingId: number) => {
+    const { error } = await supabase.from("bookings").delete().eq("id", bookingId);
+    if (error) {
+      toast({ title: "Couldn't delete booking", description: error.message, status: "error" });
+      return;
+    }
+    setAllBookings((prev) => prev.filter((booking) => booking.id !== bookingId));
+  };
 
   const isAllEventsSelected = filteredCalendarEvents.length > 0 && filteredCalendarEvents.every((e) => selectedEventIds.has(e.id));
   const isSomeEventsSelected = selectedEventIds.size > 0 && !isAllEventsSelected;
@@ -394,7 +668,7 @@ export default function BuilderPage() {
 
       const { data, error } = await supabase
         .from("calendar_events")
-        .select("id, event_title, title, meeting_link, slug, updated_at")
+        .select("id, event_title, title, meeting_link, slug, updated_at, status, is_favorite, is_archived, is_offline")
         .eq("user_id", session.user.id)
         .eq("workspace_name", selectedAgent)
         .order("updated_at", { ascending: false });
@@ -411,10 +685,10 @@ export default function BuilderPage() {
           meeting_link: e.meeting_link || "Link",
           slug: e.slug || "",
           updated_at: e.updated_at,
-          // No status column on calendar_events yet, so everything is a draft.
-          // Once one exists, reading it here is all that's needed for the
-          // coloured badges below to start appearing.
-          status: "Draft",
+          status: e.status || "draft",
+          is_favorite: e.is_favorite ?? false,
+          is_archived: e.is_archived ?? false,
+          is_offline: e.is_offline ?? false,
         }));
 
         // Number events that share a name so they're tellable apart in the
@@ -587,6 +861,8 @@ export default function BuilderPage() {
         } else {
           const email = session.user.email || "";
           setUserEmail(email);
+          setOwnerName(session.user.user_metadata?.full_name || email || "User");
+          setCurrentUserId(session.user.id);
 
           supabase
             .from("profiles")
@@ -944,6 +1220,76 @@ export default function BuilderPage() {
               transform={isWorkspaceListCollapsed ? "translateX(-255px)" : "translateX(0)"}
               transition={enableSidebarTransition ? "transform 0.4s cubic-bezier(0.4, 0, 0.2, 1)" : "none"}
             >
+            {activeTabIndex === 1 ? (
+              <>
+                <HStack h="64px" align="center" pl="20px" pr="16px" pt="14px" pb="16px">
+                  <Text fontSize="base" fontWeight="medium" color="customGray.800">
+                    Meeting Scheduler
+                  </Text>
+                </HStack>
+                <VStack align="stretch" spacing="4px" px="12px" pt="2px" pb="16px">
+                  {(["All Event", "Favourite", "Draft", "Archive"] as const).map((label) => {
+                    const isActive = sidebarSection === "events" && eventsFilter === label;
+                    return (
+                    <Box
+                      key={label}
+                      role="group"
+                      h="32px"
+                      bg={isActive ? "customGray.100" : "transparent"}
+                      borderRadius="8px"
+                      px="8px"
+                      py="8px"
+                      display="flex"
+                      alignItems="center"
+                      justifyContent="space-between"
+                      cursor="pointer"
+                      onClick={() => { setSidebarSection("events"); setEventsFilter(label); }}
+                      _hover={{ bg: "customGray.100" }}
+                      transition="all 0.2s"
+                    >
+                      <Text fontSize="sm" fontWeight={isActive ? "500" : "normal"} color={isActive ? "customGray.700" : "customGray.500"}>
+                        {label}
+                      </Text>
+                      <Text fontSize="sm" fontWeight={isActive ? "500" : "normal"} color="customGray.400" opacity={isActive ? 1 : 0} _groupHover={{ opacity: 1 }}>{eventsFilterCounts[label]}</Text>
+                    </Box>
+                    );
+                  })}
+                </VStack>
+                <VStack align="stretch" spacing="4px" px="12px" pt="8px" pb="16px">
+                  <Text fontSize="11px" fontWeight="600" color="customGray.800" textTransform="uppercase" letterSpacing="0.04em" px="8px" pb="4px">
+                    Bookings
+                  </Text>
+                  {(["All", "Upcoming", "Past", "Cancelled", "Rescheduled"] as const).map((label) => {
+                    const isActive = sidebarSection === "bookings" && bookingsResultsFilter === label;
+                    return (
+                    <Box
+                      key={label}
+                      role="group"
+                      h="32px"
+                      bg={isActive ? "customGray.100" : "transparent"}
+                      borderRadius="8px"
+                      pl="8px"
+                      pr="8px"
+                      py="8px"
+                      display="flex"
+                      alignItems="center"
+                      justifyContent="space-between"
+                      cursor="pointer"
+                      onClick={() => { setSidebarSection("bookings"); setBookingsResultsFilter(label); }}
+                      _hover={{ bg: "customGray.100" }}
+                      transition="all 0.2s"
+                    >
+                      <Text fontSize="sm" fontWeight={isActive ? "500" : "normal"} color={isActive ? "customGray.700" : "customGray.500"}>
+                        {label === "All" ? "All bookings" : label}
+                      </Text>
+                      <Text fontSize="sm" fontWeight={isActive ? "500" : "normal"} color="customGray.400" opacity={isActive ? 1 : 0} _groupHover={{ opacity: 1 }}>{bookingsResultsFilterCounts[label]}</Text>
+                    </Box>
+                    );
+                  })}
+                </VStack>
+              </>
+            ) : (
+              <>
             <HStack h="64px" align="center" justify="space-between" pl="20px" pr="16px" pt="14px" pb="16px">
               <Text fontSize="base" fontWeight="medium" color="customGray.800">
                 Workspace
@@ -1009,11 +1355,13 @@ export default function BuilderPage() {
                 </Box>
               ))}
             </VStack>
+              </>
+            )}
             </VStack>
           </VStack>
-          <VStack flex={1} h="100%" align="stretch" spacing={0} overflow="hidden">
+          <VStack flex={1} h="100%" align="stretch" spacing={0} overflow="hidden" position="relative">
             {agents.length > 0 && (
-            <HStack h="64px" align="center" justify="space-between" pl="30px" pr="14px" pt="14px" pb="18px" w="100%">
+            <HStack h="64px" align="center" justify="space-between" pl="18px" pr="14px" pt="14px" pb="18px" w="100%">
               <HStack spacing="4px" align="center">
                 <Tooltip
                   label={isWorkspaceListCollapsed ? "Expand" : "Collapse"}
@@ -1036,43 +1384,18 @@ export default function BuilderPage() {
                       setIsWorkspaceListCollapsed(!isWorkspaceListCollapsed);
                     }}
                   >
-                    <svg width="16" height="16" viewBox="0 0 18 18" fill="none" xmlns="http://www.w3.org/2000/svg">
-                      <path d="M14.25 2.25H3.75C2.92157 2.25 2.25 2.92157 2.25 3.75V14.25C2.25 15.0784 2.92157 15.75 3.75 15.75H14.25C15.0784 15.75 15.75 15.0784 15.75 14.25V3.75C15.75 2.92157 15.0784 2.25 14.25 2.25Z" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-                      <path d="M8 13.25L8 4.75C8 4.33579 7.66421 4 7.25 4L4.75 4C4.33579 4 4 4.33579 4 4.75L4 13.25C4 13.6642 4.33579 14 4.75 14L7.25 14C7.66421 14 8 13.6642 8 13.25Z" fill="currentColor"/>
+                    <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
+                      <path fillRule="evenodd" clipRule="evenodd" d="M5 4.16667C4.77899 4.16667 4.56702 4.25446 4.41074 4.41074C4.25446 4.56702 4.16667 4.77899 4.16667 5V15C4.16667 15.221 4.25446 15.433 4.41074 15.5893C4.56702 15.7455 4.77899 15.8333 5 15.8333H6.66667V4.16667H5ZM8.33333 4.16667V15.8333H15C15.221 15.8333 15.433 15.7455 15.5893 15.5893C15.7455 15.433 15.8333 15.221 15.8333 15V5C15.8333 4.77899 15.7455 4.56702 15.5893 4.41074C15.433 4.25446 15.221 4.16667 15 4.16667H8.33333ZM2.5 5C2.5 4.33696 2.76339 3.70107 3.23223 3.23223C3.70107 2.76339 4.33696 2.5 5 2.5H15C15.663 2.5 16.2989 2.76339 16.7678 3.23223C17.2366 3.70107 17.5 4.33696 17.5 5V15C17.5 15.663 17.2366 16.2989 16.7678 16.7678C16.2989 17.2366 15.663 17.5 15 17.5H5C4.33696 17.5 3.70107 17.2366 3.23223 16.7678C2.76339 16.2989 2.5 15.663 2.5 15V5Z" fill="currentColor"/>
                     </svg>
                   </Button>
                 </Tooltip>
                 <Text fontSize="16px" fontWeight="medium" color="customGray.800">
-                  {selectedAgent || "form dev"}
+                  {sidebarSection === "bookings"
+                    ? (bookingsResultsFilter === "All" ? "All bookings" : bookingsResultsFilter)
+                    : eventsFilter}
                 </Text>
               </HStack>
               <HStack spacing="8px">
-                <Menu>
-                  <MenuButton
-                    as={IconButton}
-                    aria-label="More options"
-                    size="sm"
-                    variant="ghost"
-                    color="customGray.600"
-                    _hover={{ bg: "customGray.100" }}
-                    _active={{ bg: "customGray.100" }}
-                    icon={
-                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                        <circle cx="12" cy="5" r="2" fill="currentColor" />
-                        <circle cx="12" cy="12" r="2" fill="currentColor" />
-                        <circle cx="12" cy="19" r="2" fill="currentColor" />
-                      </svg>
-                    }
-                  />
-                  <MenuList fontSize="sm" minW="160px">
-                    <MenuItem color="customGray.800" onClick={handleDuplicate}>
-                      Duplicate
-                    </MenuItem>
-                    <MenuItem color="red.500" onClick={onDeleteOpen}>
-                      Delete
-                    </MenuItem>
-                  </MenuList>
-                </Menu>
                 {agents.length > 0 && (
                   <Button size="sm" bg="sky.400" color="white" _hover={{ bg: "sky.500" }} display="flex" alignItems="center" gap="8px" onClick={() => {
                     // Carry the workspace through so the new event/agent is
@@ -1098,34 +1421,6 @@ export default function BuilderPage() {
             )}
             {agents.length > 0 ? (
             <Tabs flex={1} display="flex" flexDirection="column" overflow="hidden" w="100%" index={activeTabIndex} onChange={setActiveTabIndex}>
-              <TabList pl="38px" borderBottom="1px solid" borderColor="customGray.200">
-                <Tab fontSize="sm" color="customGray.500" pb="12px" mb="-1px" borderBottom="2px solid transparent" _selected={{ color: "customGray.800", borderColor: "customGray.800", bg: "white" }} display="flex" alignItems="center" gap="6px" pl="0px">
-                  <svg width="16" height="16" viewBox="0 0 18 18" fill="none" xmlns="http://www.w3.org/2000/svg">
-                    <path d="M10.5 1.5V4.5C10.5 4.89782 10.658 5.27936 10.9393 5.56066C11.2206 5.84196 11.6022 6 12 6H15M7.5 6.75H6M12 9.75H6M12 12.75H6M11.25 1.5H4.5C4.10218 1.5 3.72064 1.65804 3.43934 1.93934C3.15804 2.22064 3 2.60218 3 3V15C3 15.3978 3.15804 15.7794 3.43934 16.0607C3.72064 16.342 4.10218 16.5 4.5 16.5H13.5C13.8978 16.5 14.2794 16.342 14.5607 16.0607C14.842 15.7794 15 15.3978 15 15V5.25L11.25 1.5Z" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-                  </svg>
-                  Form
-                </Tab>
-                <Tab fontSize="sm" color="customGray.500" pb="12px" mb="-1px" borderBottom="2px solid transparent" _selected={{ color: "customGray.800", borderColor: "customGray.800", bg: "white" }} display="flex" alignItems="center" gap="6px">
-                  <svg width="16" height="16" viewBox="0 0 18 18" fill="none" xmlns="http://www.w3.org/2000/svg">
-                    <path d="M6 1.5V4.5M12 1.5V4.5M2.25 7.5H15.75M3.75 3H14.25C15.0784 3 15.75 3.67157 15.75 4.5V15C15.75 15.8284 15.0784 16.5 14.25 16.5H3.75C2.92157 16.5 2.25 15.8284 2.25 15V4.5C2.25 3.67157 2.92157 3 3.75 3Z" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-                  </svg>
-                  Meeting scheduler
-                </Tab>
-                <Tab fontSize="sm" color="customGray.500" pb="12px" mb="-1px" borderBottom="2px solid transparent" _selected={{ color: "customGray.800", borderColor: "customGray.800", bg: "white" }} display="flex" alignItems="center" gap="6px">
-                  <svg width="16" height="16" viewBox="0 0 18 18" fill="none" xmlns="http://www.w3.org/2000/svg">
-                    <path d="M2.25 4.5H15.75V13.5C15.75 14.3284 15.0784 15 14.25 15H3.75C2.92157 15 2.25 14.3284 2.25 13.5V4.5Z" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-                    <path d="M2.25 5.25L9 10.5L15.75 5.25" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-                  </svg>
-                  Newsletter
-                </Tab>
-                <Tab fontSize="sm" color="customGray.500" pb="12px" mb="-1px" borderBottom="2px solid transparent" _selected={{ color: "customGray.800", borderColor: "customGray.800", bg: "white" }} display="flex" alignItems="center" gap="6px">
-                  <svg width="16" height="16" viewBox="0 0 18 18" fill="none" xmlns="http://www.w3.org/2000/svg">
-                    <path d="M9 2.25C5.27208 2.25 2.25 4.92893 2.25 8.25C2.25 9.7867 2.90177 11.1893 3.96186 12.2652C4.13039 12.4372 4.21935 12.6743 4.19811 12.9128L4.02893 14.8168C3.99756 15.1706 4.34987 15.4373 4.68062 15.3005L6.87246 14.3939C7.05377 14.3195 7.25523 14.3103 7.44236 14.3679C7.9366 14.5182 8.45932 14.6 9 14.6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-                    <path d="M15.75 12.75C15.75 10.6789 13.8995 9 11.625 9C9.35051 9 7.5 10.6789 7.5 12.75C7.5 14.8211 9.35051 16.5 11.625 16.5C12.1173 16.5 12.5891 16.4231 13.0264 16.2812L14.6182 16.9505C14.8845 17.0605 15.1636 16.8391 15.1257 16.5537L14.9636 15.2969C15.4667 14.6089 15.75 13.7089 15.75 12.75Z" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-                  </svg>
-                  Chatbot
-                </Tab>
-              </TabList>
               <TabPanels flex={1} overflow="hidden" h="100%">
                 <TabPanel h="100%" p="0" overflow="hidden">
                   <VStack w="100%" align="center" justify="center" spacing="24px">
@@ -1149,10 +1444,580 @@ export default function BuilderPage() {
                 </TabPanel>
                 <TabPanel h="100%" p="0" overflow="hidden">
                   <VStack w="100%" h="100%" align="stretch" spacing={0} overflow="hidden" position="relative">
-                    <Box flexShrink={0} w="100%" px="14px" py="12px" h="50px" display="flex" alignItems="center" justifyContent="flex-end" bg="white" borderBottom="1px solid" borderBottomColor="customGray.200">
+                  {sidebarSection === "bookings" ? (
+                    <VStack w="100%" h="100%" align="stretch" spacing={0} overflow="hidden">
+                      <Box flexShrink={0} w="100%" px="14px" pt="0px" pb="12px" h="50px" display="flex" alignItems="center" justifyContent="flex-start" bg="white" borderBottom="1px solid" borderBottomColor="customGray.200">
+                        <HStack spacing="8px">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          borderRadius="8px"
+                          border="none"
+                          bg="white"
+                          color="customGray.700"
+                          fontSize="sm"
+                          fontWeight="medium"
+                          _hover={{ bg: "customGray.100" }}
+                          leftIcon={
+                            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+                              <path d="M2 4H14M4.66667 8H11.3333M6.66667 12H9.33333" stroke="currentColor" strokeWidth="1.33333" strokeLinecap="round" strokeLinejoin="round" />
+                            </svg>
+                          }
+                        >
+                          Filter
+                        </Button>
+                        <Menu>
+                          <MenuButton
+                            as={Button}
+                            size="sm"
+                            variant="outline"
+                            borderRadius="8px"
+                            border="none"
+                            bg="white"
+                            color="customGray.700"
+                            fontSize="sm"
+                            fontWeight="medium"
+                            _hover={{ bg: "customGray.100" }}
+                            leftIcon={
+                              <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                <path d="M8.66667 10.667L11.3333 13.3337L14 10.667M11.3333 13.3337V2.66699M7.33333 5.33366L4.66667 2.66699L2 5.33366M4.66667 2.66699V13.3337" stroke="currentColor" strokeWidth="1.33333" strokeLinecap="round" strokeLinejoin="round" />
+                              </svg>
+                            }
+                          >
+                            Sort
+                          </MenuButton>
+                          <MenuList fontSize="sm" minW="180px">
+                            <MenuItem color={bookingsSort === "meeting_desc" ? "customGray.800" : "customGray.600"} fontWeight={bookingsSort === "meeting_desc" ? "600" : "400"} onClick={() => setBookingsSort("meeting_desc")}>Meeting date (newest)</MenuItem>
+                            <MenuItem color={bookingsSort === "meeting_asc" ? "customGray.800" : "customGray.600"} fontWeight={bookingsSort === "meeting_asc" ? "600" : "400"} onClick={() => setBookingsSort("meeting_asc")}>Meeting date (oldest)</MenuItem>
+                            <MenuItem color={bookingsSort === "name_asc" ? "customGray.800" : "customGray.600"} fontWeight={bookingsSort === "name_asc" ? "600" : "400"} onClick={() => setBookingsSort("name_asc")}>Guest name (A–Z)</MenuItem>
+                            <MenuItem color={bookingsSort === "name_desc" ? "customGray.800" : "customGray.600"} fontWeight={bookingsSort === "name_desc" ? "600" : "400"} onClick={() => setBookingsSort("name_desc")}>Guest name (Z–A)</MenuItem>
+                          </MenuList>
+                        </Menu>
+                        <HStack ref={bookingsSearchRef} spacing="0" bg="transparent" borderRadius="6px" border="none" transition="width 0.3s ease" overflow="hidden" h="32px" w={isBookingsSearchExpanded ? "224px" : "32px"} flexShrink={0}>
+                          <IconButton aria-label="Search" icon={<SearchIcon w="16px" h="16px" />} size="sm" variant="ghost" color="customGray.600" flexShrink={0} _hover={isBookingsSearchExpanded ? undefined : { bg: "customGray.50" }} onMouseDown={(e) => e.preventDefault()} onClick={() => setIsBookingsSearchExpanded(!isBookingsSearchExpanded)} />
+                          <Input
+                            ref={bookingsSearchInputRef}
+                            value={bookingsSearchQuery}
+                            onChange={(e) => setBookingsSearchQuery(e.target.value)}
+                            placeholder="Search..."
+                            variant="unstyled"
+                            w="160px"
+                            flexShrink={0}
+                            px="8px"
+                            fontSize="sm"
+                            color="customGray.800"
+                            _placeholder={{ color: "customGray.400" }}
+                            onBlur={() => { if (bookingsSearchQuery === "") setIsBookingsSearchExpanded(false); }}
+                          />
+                          <Box w="32px" h="32px" flexShrink={0} display="flex" alignItems="center" justifyContent="center">
+                            {bookingsSearchQuery !== "" && (
+                              <IconButton
+                                aria-label="Clear search"
+                                icon={<CloseIcon w="9px" h="9px" />}
+                                size="xs"
+                                variant="ghost"
+                                color="customGray.500"
+                                _hover={{ bg: "customGray.100" }}
+                                onMouseDown={(e) => e.preventDefault()}
+                                onClick={() => {
+                                  setBookingsSearchQuery("");
+                                  bookingsSearchInputRef.current?.focus({ preventScroll: true });
+                                }}
+                              />
+                            )}
+                          </Box>
+                        </HStack>
+                        </HStack>
+                      </Box>
+                      {!isLoadingAllBookings && allBookings.length > 0 && (
+                        <Box flexShrink={0} overflow="hidden">
+                          <Box flexShrink={0} w="100%" bg="purple.50" py="8px" textAlign="center" borderBottom="1px solid" borderColor="customGray.200">
+                            <HStack spacing="6px" justify="center">
+                              <Text fontSize="12px" fontWeight="500" color="customGray.800">Overall summarize insights for you!</Text>
+                            </HStack>
+                          </Box>
+                          <HStack flexShrink={0} w="100%" bg="white" spacing="0px" align="stretch" borderBottom="1px solid" borderColor="customGray.200">
+                            {[
+                              { label: "Total bookings", value: allBookingsStats.total, dot: "customGray.800" },
+                              { label: "Upcoming", value: allBookingsStats.upcoming, dot: "green.400" },
+                              { label: "Direct", value: allBookingsStats.direct, dot: "green.400" },
+                              { label: "Webhook", value: allBookingsStats.webhook, dot: "red.400" },
+                            ].map((stat, index) => (
+                              <HStack key={stat.label} spacing="0px" flex="1" align="stretch">
+                                {index > 0 && <Box w="1px" bg="customGray.200" />}
+                                <VStack align="start" justify="center" spacing="6px" flex="1" h="84px" px="24px">
+                                  <HStack spacing="6px">
+                                    <Box w="6px" h="6px" borderRadius="full" bg={stat.dot} flexShrink={0} />
+                                    <Text fontSize="sm" color="customGray.500">{stat.label}</Text>
+                                  </HStack>
+                                  <Text fontSize="22px" fontWeight="600" color="customGray.800">{stat.value}</Text>
+                                </VStack>
+                              </HStack>
+                            ))}
+                          </HStack>
+                        </Box>
+                      )}
+                      <Box flex="1" h="100%" bg="white" overflow="hidden" display="flex" flexDirection="column">
+                          {isLoadingAllBookings ? (
+                            <Box flex="1" py="40px" display="flex" alignItems="center" justifyContent="center">
+                              <Text fontSize="14px" color="customGray.500">Loading...</Text>
+                            </Box>
+                          ) : filteredAllBookings.length === 0 ? (
+                            <Box flex="1" py="40px" display="flex" alignItems="center" justifyContent="center">
+                              <Text fontSize="14px" color="customGray.500">
+                                {bookingsSearchQuery.trim() ? `No bookings match "${bookingsSearchQuery}"` : "No bookings yet."}
+                              </Text>
+                            </Box>
+                          ) : (
+                            <>
+                              <Box flexShrink={0} w="100%" bg="customGray.50" borderBottom="1px solid" borderColor="customGray.200">
+                                <Table w="100%" sx={{ tableLayout: "fixed" }}>
+                                  <colgroup>
+                                    <col style={{ width: "340px" }} />
+                                    <col style={{ width: "214px" }} />
+                                    <col style={{ width: "214px" }} />
+                                    <col style={{ width: "140px" }} />
+                                    <col style={{ width: "140px" }} />
+                                    <col style={{ width: "50px" }} />
+                                  </colgroup>
+                                  <Thead>
+                                    <Tr>
+                                      <Th border="none" h="40px" py="0" pl="24px" pr="0" fontSize="sm" fontWeight="medium" color="customGray.700" textTransform="none" letterSpacing="normal" whiteSpace="nowrap" bg="customGray.50">Event Name</Th>
+                                      <Th border="none" h="40px" py="0" px="0" fontSize="sm" fontWeight="medium" color="customGray.700" textTransform="none" letterSpacing="normal" bg="customGray.50">Meeting</Th>
+                                      <Th border="none" h="40px" py="0" px="0" fontSize="sm" fontWeight="medium" color="customGray.700" textTransform="none" letterSpacing="normal" bg="customGray.50">Participants</Th>
+                                      <Th border="none" h="40px" py="0" px="0" fontSize="sm" fontWeight="medium" color="customGray.700" textTransform="none" letterSpacing="normal" bg="customGray.50">Status</Th>
+                                      <Th border="none" h="40px" py="0" px="0" fontSize="sm" fontWeight="medium" color="customGray.700" textTransform="none" letterSpacing="normal" bg="customGray.50">Source</Th>
+                                      <Th border="none" h="40px" py="0" pr="24px" pl="0" bg="customGray.50" />
+                                    </Tr>
+                                  </Thead>
+                                </Table>
+                              </Box>
+                              <Box
+                                flex="1"
+                                w="100%"
+                                overflowY="auto"
+                                sx={{
+                                  '&::-webkit-scrollbar': { width: '6px' },
+                                  '&::-webkit-scrollbar-track': { bg: 'transparent' },
+                                  '&::-webkit-scrollbar-thumb': { bg: 'customGray.300', borderRadius: '3px' },
+                                  '&::-webkit-scrollbar-thumb:hover': { bg: 'customGray.400' },
+                                }}
+                              >
+                                <Table w="100%" sx={{ tableLayout: "fixed" }}>
+                                  <colgroup>
+                                    <col style={{ width: "340px" }} />
+                                    <col style={{ width: "214px" }} />
+                                    <col style={{ width: "214px" }} />
+                                    <col style={{ width: "140px" }} />
+                                    <col style={{ width: "140px" }} />
+                                    <col style={{ width: "50px" }} />
+                                  </colgroup>
+                                  <Tbody>
+                                    {filteredAllBookings.map((booking) => {
+                                      const initial = (booking.guest_name || "?").charAt(0).toUpperCase();
+                                      const avatarColor = colors[booking.id % colors.length];
+                                      const bookingAttendees = Array.isArray(booking.extra_fields?.attendees)
+                                        ? (booking.extra_fields!.attendees as unknown[]).filter(
+                                            (attendee): attendee is Record<string, unknown> => Boolean(attendee) && typeof attendee === "object"
+                                          )
+                                        : [];
+                                      const attendeeCount = Math.max(bookingAttendees.length, 1);
+                                      const isWebhook = booking.source === "webhook";
+                                      const [meetingYear, meetingMonth, meetingDay] = booking.booking_date.split("-").map(Number);
+                                      const meetingDateLabel = new Date(meetingYear, meetingMonth - 1, meetingDay).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
+                                      const [meetingHour, meetingMinute] = booking.booking_time.split(":").map(Number);
+                                      const meetingTimeLabel = formatTime(meetingHour, meetingMinute, false);
+
+                                      return (
+                                        <Tr
+                                          key={booking.id}
+                                          bg={selectedBooking?.id === booking.id ? "customGray.50" : "white"}
+                                          _hover={{ bg: "customGray.50" }}
+                                          transition="background-color 0.2s"
+                                          cursor="pointer"
+                                          onClick={() => { setSelectedBooking(booking); setPanelBooking(booking); }}
+                                        >
+                                          <Td h="56px" py="0" px="0" borderBottomColor="customGray.200">
+                                            <Box display="flex" alignItems="center" pl="24px" pr="100px">
+                                              <Text fontSize="sm" color="customGray.800" isTruncated maxW="100%">{booking.event_title}</Text>
+                                            </Box>
+                                          </Td>
+                                          <Td h="56px" py="0" px="0" borderBottomColor="customGray.200">
+                                            <Box display="flex" alignItems="center" pl="0" pr="24px">
+                                              <Text fontSize="sm" color="customGray.600" noOfLines={1}>{meetingDateLabel} · {meetingTimeLabel}</Text>
+                                            </Box>
+                                          </Td>
+                                          <Td h="56px" py="0" px="0" borderBottomColor="customGray.200">
+                                            <Box display="flex" alignItems="center" pl="0" pr="24px">
+                                              <Popover trigger="hover" placement="bottom-start" openDelay={200}>
+                                                <PopoverTrigger>
+                                                  <HStack spacing="8px" cursor="pointer">
+                                                    {attendeeCount > 1 ? (
+                                                      <AvatarGroup size="xs" max={2} spacing="-8px" sx={{ "--avatar-font-size": "12px" }}>
+                                                        {(() => {
+                                                          const firstAttendee = bookingAttendees[0];
+                                                          const firstName = typeof firstAttendee?.name === "string" ? firstAttendee.name : "";
+                                                          return (
+                                                            <Avatar
+                                                              key="first-attendee"
+                                                              name={firstName || "Attendee 1"}
+                                                              getInitials={(name) => name.charAt(0).toUpperCase()}
+                                                              borderWidth="1px"
+                                                              bg={colors[booking.id % colors.length]}
+                                                              color="white"
+                                                              fontWeight="medium"
+                                                              sx={{ "--avatar-font-size": "12px" }}
+                                                            />
+                                                          );
+                                                        })()}
+                                                        <Avatar
+                                                          key="attendee-count"
+                                                          name={String(attendeeCount)}
+                                                          getInitials={(name) => name}
+                                                          borderWidth="1px"
+                                                          bg="customGray.200"
+                                                          color="customGray.700"
+                                                          fontWeight="medium"
+                                                          sx={{ "--avatar-font-size": "12px" }}
+                                                        />
+                                                      </AvatarGroup>
+                                                    ) : (
+                                                      <Box w="24px" h="24px" bg={avatarColor} borderRadius="full" display="flex" alignItems="center" justifyContent="center" flexShrink={0}>
+                                                        <Text fontSize="xs" fontWeight="medium" color="white">{initial}</Text>
+                                                      </Box>
+                                                    )}
+                                                    <Text fontSize="sm" color="customGray.800" isTruncated maxW="150px" textUnderlineOffset="3px" _hover={{ textDecoration: "underline" }}>
+                                                      {attendeeCount > 1 ? `${attendeeCount} attendees` : (booking.guest_name || "No name provided")}
+                                                    </Text>
+                                                  </HStack>
+                                                </PopoverTrigger>
+                                                <Portal>
+                                                  <PopoverContent w="300px" borderRadius="16px" overflow="hidden" border="1px solid" borderColor="customGray.200" boxShadow="0 8px 24px rgba(0,0,0,0.12)" _focus={{ boxShadow: "0 8px 24px rgba(0,0,0,0.12)" }}>
+                                                    <PopoverBody p="0px">
+                                                      {attendeeCount > 1 ? (
+                                                        <>
+                                                          <Text w="100%" bg="white" fontSize="10px" fontWeight="600" color="customGray.400" textTransform="uppercase" letterSpacing="0.04em" pl="16px" pr="0" pt="12px" pb="10px" borderBottom="1px solid" borderColor="customGray.100">
+                                                            Participants
+                                                          </Text>
+                                                          <Box maxH="240px" overflowY="auto" overscrollBehavior="contain" pb="8px">
+                                                            {bookingAttendees.map((attendee, index) => {
+                                                              const attendeeName = typeof attendee.name === "string" ? attendee.name : "";
+                                                              const attendeeEmail = typeof attendee.email === "string" ? attendee.email : "";
+                                                              const displayName = attendeeName || `Guest ${index}`;
+                                                              return (
+                                                                <Box key={`${attendeeEmail || displayName}-${index}`} px="12px" py="10px" _hover={{ bg: "customGray.100" }}>
+                                                                  <HStack role="group" spacing="8px" w="100%" position="relative">
+                                                                    <Box
+                                                                      w="28px"
+                                                                      h="28px"
+                                                                      bg={colors[(booking.id + index) % colors.length]}
+                                                                      borderRadius="full"
+                                                                      display="flex"
+                                                                      alignItems="center"
+                                                                      justifyContent="center"
+                                                                      flexShrink={0}
+                                                                    >
+                                                                      <Text fontSize="xs" fontWeight="medium" color="white">{displayName.charAt(0).toUpperCase()}</Text>
+                                                                    </Box>
+                                                                    <VStack align="start" spacing="0px" minW="0" flex="1">
+                                                                      <Text fontSize="sm" fontWeight="medium" color="customGray.800" isTruncated maxW="100%">{displayName}</Text>
+                                                                      <Text fontSize="xs" color="customGray.500" isTruncated maxW="100%">{attendeeEmail || "No email provided"}</Text>
+                                                                    </VStack>
+                                                                    {attendeeEmail && (
+                                                                      <Tooltip label="Copy" hasArrow placement="top">
+                                                                        <IconButton
+                                                                          aria-label="Copy email"
+                                                                          icon={<CopyIcon w="12px" h="12px" />}
+                                                                          size="sm"
+                                                                          variant="ghost"
+                                                                          position="absolute"
+                                                                          right="0px"
+                                                                          top="50%"
+                                                                          transform="translateY(-50%)"
+                                                                          bg="transparent"
+                                                                          _hover={{ bg: "transparent" }}
+                                                                          onClick={(e) => {
+                                                                            e.stopPropagation();
+                                                                            navigator.clipboard.writeText(attendeeEmail);
+                                                                            toast({ title: "Email copied", status: "success", duration: 2000 });
+                                                                          }}
+                                                                        />
+                                                                      </Tooltip>
+                                                                    )}
+                                                                  </HStack>
+                                                                </Box>
+                                                              );
+                                                            })}
+                                                          </Box>
+                                                        </>
+                                                      ) : (
+                                                        <>
+                                                          <HStack spacing="12px" align="center" p="12px">
+                                                            <Box w="40px" h="40px" bg={avatarColor} borderRadius="full" display="flex" alignItems="center" justifyContent="center" flexShrink={0}>
+                                                              <Text fontSize="sm" fontWeight="medium" color="white">{initial}</Text>
+                                                            </Box>
+                                                            <VStack align="start" spacing="0px" flex="1" minW="0">
+                                                              <Text fontSize="sm" fontWeight="600" color="customGray.800" noOfLines={1}>{booking.guest_name || "No name provided"}</Text>
+                                                              <Text fontSize="xs" color="customGray.500" noOfLines={1}>{booking.guest_email || "No email provided"}</Text>
+                                                            </VStack>
+                                                          </HStack>
+                                                          <HStack spacing="8px" p="12px" borderTop="1px solid" borderColor="customGray.200">
+                                                            <Button
+                                                              w="fit-content"
+                                                              size="sm"
+                                                              variant="outline"
+                                                              borderColor="customGray.200"
+                                                              bg="customGray.50"
+                                                              fontWeight="400"
+                                                              leftIcon={<CopyIcon w="12px" h="12px" />}
+                                                              onClick={(clickEvent) => {
+                                                                clickEvent.stopPropagation();
+                                                                navigator.clipboard.writeText(booking.guest_email || "");
+                                                                toast({ title: "Email copied", status: "success", duration: 2000 });
+                                                              }}
+                                                            >
+                                                              Copy
+                                                            </Button>
+                                                          </HStack>
+                                                        </>
+                                                      )}
+                                                    </PopoverBody>
+                                                  </PopoverContent>
+                                                </Portal>
+                                              </Popover>
+                                            </Box>
+                                          </Td>
+                                          <Td h="56px" py="0" px="0" borderBottomColor="customGray.200">
+                                            <Box display="flex" alignItems="center" pl="0" pr="24px">
+                                              <Box px="8px" py="2px" bg="green.100" borderRadius="full" display="inline-block">
+                                                <Text fontSize="xs" fontWeight="medium" color="green.700">Confirmed</Text>
+                                              </Box>
+                                            </Box>
+                                          </Td>
+                                          <Td h="56px" py="0" px="0" borderBottomColor="customGray.200">
+                                            <Box display="flex" alignItems="center" pl="0" pr="24px">
+                                              <Box px="8px" py="2px" bg={isWebhook ? "purple.100" : "customGray.100"} borderRadius="full" display="inline-block">
+                                                <Text fontSize="xs" fontWeight="medium" color={isWebhook ? "purple.700" : "customGray.600"}>{isWebhook ? "Webhook" : "Direct"}</Text>
+                                              </Box>
+                                            </Box>
+                                          </Td>
+                                          <Td h="56px" py="0" px="0" borderBottomColor="customGray.200" onClick={(e) => e.stopPropagation()}>
+                                            <Box display="flex" alignItems="center" justifyContent="flex-end" pl="0" pr="24px">
+                                            <Menu placement="bottom-end">
+                                              <MenuButton
+                                                as={IconButton}
+                                                aria-label="More options"
+                                                icon={
+                                                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                                    <circle cx="12" cy="5" r="2" fill="currentColor" />
+                                                    <circle cx="12" cy="12" r="2" fill="currentColor" />
+                                                    <circle cx="12" cy="19" r="2" fill="currentColor" />
+                                                  </svg>
+                                                }
+                                                size="sm"
+                                                variant="ghost"
+                                                color="customGray.600"
+                                                _hover={{ bg: "customGray.200" }}
+                                              />
+                                              <Portal>
+                                              <MenuList
+                                                fontSize="sm"
+                                                minW="240px"
+                                                maxH="380px"
+                                                overflowY="auto"
+                                                boxShadow="0 4px 16px rgba(0,0,0,0.08)"
+                                                sx={{
+                                                  scrollbarWidth: 'thin',
+                                                  scrollbarColor: 'var(--chakra-colors-customGray-400) transparent',
+                                                  '&::-webkit-scrollbar': { width: '6px' },
+                                                  '&::-webkit-scrollbar-track': { bg: 'transparent' },
+                                                  '&::-webkit-scrollbar-thumb': { bg: 'customGray.400', borderRadius: '3px' },
+                                                }}
+                                              >
+                                                <MenuGroup title="Edit event" fontSize="xs" color="customGray.500" fontWeight="500" ml="3" mt="1">
+                                                  <MenuItem
+                                                    icon={
+                                                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                                        <circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="1.5" />
+                                                        <path d="M12 7.5V12L15 14" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                                                      </svg>
+                                                    }
+                                                  >
+                                                    Reschedule booking
+                                                  </MenuItem>
+                                                  <MenuItem
+                                                    icon={
+                                                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                                        <path d="M21 3L3 10.5L10.5 13.5L13.5 21L21 3Z" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                                                      </svg>
+                                                    }
+                                                  >
+                                                    Request reschedule
+                                                  </MenuItem>
+                                                  <MenuItem
+                                                    icon={
+                                                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                                        <path d="M12 21s-7-6.2-7-11.5A7 7 0 0 1 19 9.5C19 14.8 12 21 12 21Z" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                                                        <circle cx="12" cy="9.5" r="2.2" stroke="currentColor" strokeWidth="1.5" />
+                                                      </svg>
+                                                    }
+                                                  >
+                                                    Edit location
+                                                  </MenuItem>
+                                                </MenuGroup>
+                                                <MenuDivider />
+                                                <MenuItem
+                                                  icon={
+                                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                                      <rect x="3.5" y="5" width="17" height="16" rx="2" stroke="currentColor" strokeWidth="1.5" />
+                                                      <path d="M3.5 9.5H20.5M8 3V6M16 3V6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+                                                    </svg>
+                                                  }
+                                                >
+                                                  <HStack spacing="0px" justify="space-between" w="100%">
+                                                    <Text>Add to calendar</Text>
+                                                    <ChevronDownIcon transform="rotate(-90deg)" color="customGray.400" />
+                                                  </HStack>
+                                                </MenuItem>
+                                                <MenuDivider />
+                                                <MenuGroup title="After event" fontSize="xs" color="customGray.500" fontWeight="500" ml="3" mt="1">
+                                                  <MenuItem
+                                                    color="customGray.500"
+                                                    icon={
+                                                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                                        <rect x="3" y="6" width="12" height="12" rx="2" stroke="currentColor" strokeWidth="1.5" />
+                                                        <path d="M15 10.5L21 7.5V16.5L15 13.5" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" />
+                                                      </svg>
+                                                    }
+                                                  >
+                                                    View recordings
+                                                  </MenuItem>
+                                                  <MenuItem
+                                                    color="customGray.500"
+                                                    icon={
+                                                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                                        <path d="M7 3.5H14L18 7.5V19.5C18 20.05 17.55 20.5 17 20.5H7C6.45 20.5 6 20.05 6 19.5V4.5C6 3.95 6.45 3.5 7 3.5Z" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" />
+                                                        <path d="M9 11H15M9 14.5H15M9 18H13" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+                                                      </svg>
+                                                    }
+                                                  >
+                                                    Check for transcripts
+                                                  </MenuItem>
+                                                  <MenuItem
+                                                    color="customGray.500"
+                                                    icon={
+                                                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                                        <circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="1.5" />
+                                                        <path d="M12 11V16" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+                                                        <circle cx="12" cy="8" r="1" fill="currentColor" />
+                                                      </svg>
+                                                    }
+                                                  >
+                                                    View session details
+                                                  </MenuItem>
+                                                  <MenuItem
+                                                    color="customGray.500"
+                                                    icon={
+                                                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                                        <path d="M3 12s3.5-6.5 9-6.5c1.6 0 3 .4 4.2 1.1M21 12s-1.1 2-3.2 3.7M9.9 9.9a3 3 0 0 0 4.2 4.2" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                                                        <path d="M3 3L21 21" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+                                                      </svg>
+                                                    }
+                                                  >
+                                                    Mark as no-show
+                                                  </MenuItem>
+                                                </MenuGroup>
+                                                <MenuDivider />
+                                                <MenuItem
+                                                  color="red.500"
+                                                  icon={
+                                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                                      <path d="M6 4V20M6 4L16 4L14 7.5L16 11L6 11" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                                                    </svg>
+                                                  }
+                                                >
+                                                  Report booking
+                                                </MenuItem>
+                                                <MenuDivider />
+                                                <MenuItem
+                                                  color="red.500"
+                                                  icon={
+                                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                                      <circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="1.5" />
+                                                      <path d="M9 9L15 15M15 9L9 15" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+                                                    </svg>
+                                                  }
+                                                  onClick={() => handleDeleteBooking(booking.id)}
+                                                >
+                                                  Cancel event
+                                                </MenuItem>
+                                              </MenuList>
+                                              </Portal>
+                                            </Menu>
+                                            </Box>
+                                          </Td>
+                                        </Tr>
+                                      );
+                                    })}
+                                  </Tbody>
+                                </Table>
+                              </Box>
+                            </>
+                          )}
+                        </Box>
+                    </VStack>
+                  ) : (
+                  <>
+                    <Box flexShrink={0} w="100%" px="14px" pt="0px" pb="12px" h="50px" display="flex" alignItems="center" justifyContent="space-between" bg="white" borderBottom="1px solid" borderBottomColor="customGray.200">
                       <HStack spacing="8px">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          borderRadius="8px"
+                          border="none"
+                          bg="white"
+                          color="customGray.700"
+                          fontSize="sm"
+                          fontWeight="medium"
+                          _hover={{ bg: "customGray.100" }}
+                          leftIcon={
+                            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+                              <path d="M2 4H14M4.66667 8H11.3333M6.66667 12H9.33333" stroke="currentColor" strokeWidth="1.33333" strokeLinecap="round" strokeLinejoin="round" />
+                            </svg>
+                          }
+                        >
+                          Filter
+                        </Button>
+                        <Menu>
+                          <MenuButton
+                            as={Button}
+                            size="sm"
+                            variant="outline"
+                            borderRadius="8px"
+                            border="none"
+                            bg="white"
+                            color="customGray.700"
+                            fontSize="sm"
+                            fontWeight="medium"
+                            _hover={{ bg: "customGray.100" }}
+                            leftIcon={
+                              <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                <path d="M8.66667 10.667L11.3333 13.3337L14 10.667M11.3333 13.3337V2.66699M7.33333 5.33366L4.66667 2.66699L2 5.33366M4.66667 2.66699V13.3337" stroke="currentColor" strokeWidth="1.33333" strokeLinecap="round" strokeLinejoin="round" />
+                              </svg>
+                            }
+                          >
+                            Sort
+                          </MenuButton>
+                          <MenuList fontSize="sm" minW="180px">
+                            <MenuItem color={eventsSort === "updated_desc" ? "customGray.800" : "customGray.600"} fontWeight={eventsSort === "updated_desc" ? "600" : "400"} onClick={() => setEventsSort("updated_desc")}>Last updated (newest)</MenuItem>
+                            <MenuItem color={eventsSort === "updated_asc" ? "customGray.800" : "customGray.600"} fontWeight={eventsSort === "updated_asc" ? "600" : "400"} onClick={() => setEventsSort("updated_asc")}>Last updated (oldest)</MenuItem>
+                            <MenuItem color={eventsSort === "name_asc" ? "customGray.800" : "customGray.600"} fontWeight={eventsSort === "name_asc" ? "600" : "400"} onClick={() => setEventsSort("name_asc")}>Name (A–Z)</MenuItem>
+                            <MenuItem color={eventsSort === "name_desc" ? "customGray.800" : "customGray.600"} fontWeight={eventsSort === "name_desc" ? "600" : "400"} onClick={() => setEventsSort("name_desc")}>Name (Z–A)</MenuItem>
+                            <MenuItem color={eventsSort === "bookings_desc" ? "customGray.800" : "customGray.600"} fontWeight={eventsSort === "bookings_desc" ? "600" : "400"} onClick={() => setEventsSort("bookings_desc")}>Most bookings</MenuItem>
+                          </MenuList>
+                        </Menu>
                         <HStack ref={searchRef} spacing="0" bg="transparent" borderRadius="6px" border="none" transition="width 0.3s ease" overflow="hidden" h="32px" w={isSearchExpanded ? "224px" : "32px"} flexShrink={0}>
-                          <IconButton aria-label="Search" icon={<SearchIcon w="16px" h="16px" />} size="sm" variant="ghost" color="customGray.600" flexShrink={0} _hover={isSearchExpanded ? undefined : { bg: "customGray.50" }} onClick={() => setIsSearchExpanded(!isSearchExpanded)} />
+                          <IconButton aria-label="Search" icon={<SearchIcon w="16px" h="16px" />} size="sm" variant="ghost" color="customGray.600" flexShrink={0} _hover={isSearchExpanded ? undefined : { bg: "customGray.50" }} onMouseDown={(e) => e.preventDefault()} onClick={() => setIsSearchExpanded(!isSearchExpanded)} />
                           <Input
                             ref={searchInputRef}
                             value={searchQuery}
@@ -1179,48 +2044,12 @@ export default function BuilderPage() {
                                 onMouseDown={(e) => e.preventDefault()}
                                 onClick={() => {
                                   setSearchQuery("");
-                                  searchInputRef.current?.focus();
+                                  searchInputRef.current?.focus({ preventScroll: true });
                                 }}
                               />
                             )}
                           </Box>
                         </HStack>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          borderRadius="8px"
-                          border="none"
-                          bg="white"
-                          color="customGray.700"
-                          fontSize="sm"
-                          fontWeight="medium"
-                          _hover={{ bg: "customGray.100" }}
-                          leftIcon={
-                            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
-                              <path d="M8.66667 10.667L11.3333 13.3337L14 10.667M11.3333 13.3337V2.66699M7.33333 5.33366L4.66667 2.66699L2 5.33366M4.66667 2.66699V13.3337" stroke="currentColor" strokeWidth="1.33333" strokeLinecap="round" strokeLinejoin="round" />
-                            </svg>
-                          }
-                        >
-                          Sort
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          borderRadius="8px"
-                          border="none"
-                          bg="white"
-                          color="customGray.700"
-                          fontSize="sm"
-                          fontWeight="medium"
-                          _hover={{ bg: "customGray.100" }}
-                          leftIcon={
-                            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
-                              <path d="M2 4H14M4.66667 8H11.3333M6.66667 12H9.33333" stroke="currentColor" strokeWidth="1.33333" strokeLinecap="round" strokeLinejoin="round" />
-                            </svg>
-                          }
-                        >
-                          Filters
-                        </Button>
                       </HStack>
                     </Box>
                     <Box flexShrink={0} w="100%" bg="customGray.50" borderBottom="1px solid" borderBottomColor="customGray.200">
@@ -1231,6 +2060,7 @@ export default function BuilderPage() {
                           <col style={{ width: "160px" }} />
                           <col style={{ width: "160px" }} />
                           <col style={{ width: "160px" }} />
+                          <col style={{ width: "50px" }} />
                         </colgroup>
                         <Thead>
                           <Tr>
@@ -1255,7 +2085,8 @@ export default function BuilderPage() {
                             <Th border="none" h="50px" py="0" px="0" fontSize="sm" fontWeight="medium" color="customGray.700" textTransform="none" letterSpacing="normal">Booking Link</Th>
                             <Th border="none" h="50px" py="0" px="0" fontSize="sm" fontWeight="medium" color="customGray.700" textTransform="none" letterSpacing="normal">Status</Th>
                             <Th border="none" h="50px" py="0" px="0" fontSize="sm" fontWeight="medium" color="customGray.700" textTransform="none" letterSpacing="normal">Bookings</Th>
-                            <Th border="none" h="50px" py="0" pr="24px" pl="0" fontSize="sm" fontWeight="medium" color="customGray.700" textTransform="none" letterSpacing="normal">Last Updated</Th>
+                            <Th border="none" h="50px" py="0" px="0" fontSize="sm" fontWeight="medium" color="customGray.700" textTransform="none" letterSpacing="normal">Last Updated</Th>
+                            <Th border="none" h="50px" py="0" pr="24px" pl="0" />
                           </Tr>
                         </Thead>
                       </Table>
@@ -1278,6 +2109,7 @@ export default function BuilderPage() {
                         <col style={{ width: "160px" }} />
                         <col style={{ width: "160px" }} />
                         <col style={{ width: "160px" }} />
+                        <col style={{ width: "50px" }} />
                       </colgroup>
                       <Tbody>
                     {isSearching ? (
@@ -1293,11 +2125,12 @@ export default function BuilderPage() {
                           <Td h="50px" py="0" px="0" borderBottomColor="customGray.200"><Skeleton startColor="customGray.100" endColor="customGray.200" h="12px" w="50px" borderRadius="full" /></Td>
                           <Td h="50px" py="0" px="0" borderBottomColor="customGray.200"><Skeleton startColor="customGray.100" endColor="customGray.200" h="12px" w="44px" borderRadius="6px" /></Td>
                           <Td h="50px" py="0" px="0" borderBottomColor="customGray.200"><Skeleton startColor="customGray.100" endColor="customGray.200" h="12px" w="80px" borderRadius="6px" /></Td>
+                          <Td h="50px" py="0" pr="24px" pl="0" borderBottomColor="customGray.200" />
                         </Tr>
                       ))
                     ) : filteredCalendarEvents.length === 0 && searchQuery.trim() !== "" ? (
                       <Tr>
-                        <Td colSpan={5} h="80px" textAlign="center" borderBottomColor="customGray.200">
+                        <Td colSpan={6} h="80px" textAlign="center" borderBottomColor="customGray.200">
                           <Text fontSize="sm" color="customGray.500">No events match "{searchQuery}"</Text>
                         </Td>
                       </Tr>
@@ -1305,10 +2138,10 @@ export default function BuilderPage() {
                       const initial = (event.title || "U").charAt(0).toUpperCase();
                       const updatedLabel = new Date(event.updated_at).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
                       // Drafts keep the neutral grey badge. The colour palette
-                      // only kicks in once the event goes live, and is keyed off
-                      // the event id so it stays the same across refetches and
-                      // reordering.
-                      const isLive = event.status === "Online" || event.status === "Offline";
+                      // only kicks in once the event is published, and is keyed
+                      // off the event id so it stays the same across refetches
+                      // and reordering.
+                      const isLive = event.status === "published";
                       const badgeColor = isLive ? colors[event.id % colors.length] : "customGray.400";
                       const isSelected = selectedEventIds.has(event.id);
                       const toggleSelected = () => {
@@ -1323,9 +2156,9 @@ export default function BuilderPage() {
                         });
                       };
                       return (
-                        <Tr key={event.id} role="group" cursor="pointer" bg="white" _hover={{ bg: "customGray.50" }} transition="background-color 0.2s" onClick={() => router.push(`/calendar-builder?id=${event.id}&tab=calendar`)}>
+                        <Tr key={event.id} role="group" cursor="pointer" bg="white" _hover={{ bg: "sky.50" }} transition="background-color 0.2s" onClick={() => router.push(`/calendar-builder?id=${event.id}&tab=calendar`)}>
                           <Td h="50px" py="0" pl="12px" pr="12px" borderBottomColor="customGray.200">
-                            <Flex align="center" gap="10px">
+                            <Flex align="center">
                               <Box display="contents" onClick={(e) => e.stopPropagation()}>
                                 <Checkbox
                                   isChecked={isSelected}
@@ -1334,6 +2167,7 @@ export default function BuilderPage() {
                                   icon={<CheckboxGlyph />}
                                   sx={checkboxControlSx}
                                   flexShrink={0}
+                                  mr="10px"
                                   opacity={isSelected ? 1 : 0}
                                   _groupHover={{ opacity: 1 }}
                                   transition="opacity 0.15s"
@@ -1348,10 +2182,29 @@ export default function BuilderPage() {
                                 alignItems="center"
                                 justifyContent="center"
                                 flexShrink={0}
+                                mr="10px"
                               >
                                 <Text fontSize="xs" fontWeight="medium" color="white">{initial}</Text>
                               </Box>
-                              <Text fontSize="sm" fontWeight="500" color="customGray.800">{event.title}</Text>
+                              <Text fontSize="sm" fontWeight="500" color="customGray.800" isTruncated minW="0" maxW="190px" mr="4px">{event.title}</Text>
+                              <IconButton
+                                aria-label={event.is_favorite ? "Remove from favourites" : "Add to favourites"}
+                                icon={
+                                  <svg width="14" height="14" viewBox="0 0 16 16" fill={event.is_favorite ? "#F59E0B" : "none"} xmlns="http://www.w3.org/2000/svg">
+                                    <path d="M8 1.5L10.163 5.882L15 6.588L11.5 10L12.326 14.816L8 12.542L3.674 14.816L4.5 10L1 6.588L5.837 5.882L8 1.5Z" stroke={event.is_favorite ? "#F59E0B" : "#A1A1AA"} strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" />
+                                  </svg>
+                                }
+                                size="xs"
+                                variant="ghost"
+                                minW="auto"
+                                opacity={event.is_favorite ? 1 : 0}
+                                _groupHover={{ opacity: 1 }}
+                                _hover={{ bg: "customGray.100" }}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleToggleFavorite(event.id);
+                                }}
+                              />
                             </Flex>
                           </Td>
                           <Td h="50px" py="0" px="0" borderBottomColor="customGray.200">
@@ -1383,15 +2236,60 @@ export default function BuilderPage() {
                             )}
                           </Td>
                           <Td h="50px" py="0" px="0" borderBottomColor="customGray.200">
-                            <Box px="8px" py="2px" bg="customGray.100" borderRadius="full" display="inline-block">
-                              <Text fontSize="xs" fontWeight="medium" color="customGray.600">{event.status}</Text>
+                            <Box
+                              as="button"
+                              px="8px"
+                              py="2px"
+                              bg={isLive ? "green.50" : "customGray.100"}
+                              borderRadius="full"
+                              display="inline-block"
+                              onClick={(e: React.MouseEvent) => {
+                                e.stopPropagation();
+                                handleTogglePublish(event.id);
+                              }}
+                            >
+                              <Text fontSize="xs" fontWeight="medium" color={isLive ? "green.700" : "customGray.600"}>
+                                {isLive ? "Published" : "Draft"}
+                              </Text>
                             </Box>
                           </Td>
                           <Td h="50px" py="0" px="0" borderBottomColor="customGray.200">
                             <Text fontSize="sm" color="customGray.600">{bookingCounts[event.id] ?? 0}</Text>
                           </Td>
-                          <Td h="50px" py="0" pr="24px" pl="0" borderBottomColor="customGray.200">
+                          <Td h="50px" py="0" px="0" borderBottomColor="customGray.200">
                             <Text fontSize="sm" color="customGray.600">{updatedLabel}</Text>
+                          </Td>
+                          <Td h="50px" py="0" pr="24px" pl="0" borderBottomColor="customGray.200" onClick={(e) => e.stopPropagation()}>
+                            <Box display="flex" alignItems="center" justifyContent="flex-end">
+                              <Menu placement="bottom-end">
+                                <MenuButton
+                                  as={IconButton}
+                                  aria-label="More options"
+                                  icon={
+                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                      <circle cx="12" cy="5" r="2" fill="currentColor" />
+                                      <circle cx="12" cy="12" r="2" fill="currentColor" />
+                                      <circle cx="12" cy="19" r="2" fill="currentColor" />
+                                    </svg>
+                                  }
+                                  size="sm"
+                                  variant="ghost"
+                                  color="customGray.600"
+                                  _hover={{ bg: "customGray.200" }}
+                                />
+                                <MenuList fontSize="sm" minW="180px">
+                                  <MenuItem onClick={() => handleToggleOffline(event.id)}>
+                                    {event.is_offline ? "Set as online" : "Set as offline"}
+                                  </MenuItem>
+                                  <MenuItem onClick={() => handleToggleArchive(event.id)}>
+                                    {event.is_archived ? "Unarchive" : "Archive"}
+                                  </MenuItem>
+                                  <MenuItem color="red.500" onClick={() => handleDeleteEvent(event.id)}>
+                                    Delete
+                                  </MenuItem>
+                                </MenuList>
+                              </Menu>
+                            </Box>
                           </Td>
                         </Tr>
                       );
@@ -1478,6 +2376,47 @@ export default function BuilderPage() {
                           borderRadius="full"
                           bg="transparent"
                           border="none"
+                          cursor={isBulkArchiving ? "default" : "pointer"}
+                          _hover={isBulkArchiving ? undefined : { bg: "customGray.700" }}
+                          disabled={isBulkArchiving}
+                          onClick={isBulkArchiving ? undefined : handleBulkArchiveEvents}
+                        >
+                          {isBulkArchiving && (
+                            <MotionBox
+                              position="absolute"
+                              top={0}
+                              left={0}
+                              h="100%"
+                              w="45%"
+                              bg="customGray.600"
+                              borderRadius="full"
+                              initial={{ x: "-100%" }}
+                              animate={{ x: "320%" }}
+                              transition={{ duration: 1.1, repeat: Infinity, ease: "easeInOut" }}
+                            />
+                          )}
+                          <HStack position="relative" zIndex={1} spacing="6px" color="white" fontSize="sm" fontWeight="medium">
+                            <svg width="14" height="14" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+                              <path d="M2 4.66667C2 4.29848 2.29848 4 2.66667 4H13.3333C13.7015 4 14 4.29848 14 4.66667V5.33333C14 5.70152 13.7015 6 13.3333 6H2.66667C2.29848 6 2 5.70152 2 5.33333V4.66667Z" stroke="white" strokeWidth="1.33333" strokeLinecap="round" strokeLinejoin="round" />
+                              <path d="M3.33333 6V12.6667C3.33333 13.403 3.93029 14 4.66667 14H11.3333C12.0697 14 12.6667 13.403 12.6667 12.6667V6" stroke="white" strokeWidth="1.33333" strokeLinecap="round" strokeLinejoin="round" />
+                              <path d="M6.66667 8.66667H9.33333" stroke="white" strokeWidth="1.33333" strokeLinecap="round" strokeLinejoin="round" />
+                            </svg>
+                            <Text>Archive</Text>
+                          </HStack>
+                        </Box>
+                        <Box w="1px" h="20px" bg="customGray.600" />
+                        <Box
+                          as="button"
+                          position="relative"
+                          overflow="hidden"
+                          display="flex"
+                          alignItems="center"
+                          gap="6px"
+                          h="32px"
+                          px="12px"
+                          borderRadius="full"
+                          bg="transparent"
+                          border="none"
                           cursor={isBulkDeleting ? "default" : "pointer"}
                           _hover={isBulkDeleting ? undefined : { bg: "customGray.700" }}
                           disabled={isBulkDeleting}
@@ -1504,6 +2443,8 @@ export default function BuilderPage() {
                         </Box>
                       </HStack>
                     )}
+                  </>
+                  )}
                   </VStack>
                 </TabPanel>
                 <TabPanel h="100%" p="0" overflow="hidden">
@@ -1666,6 +2607,15 @@ export default function BuilderPage() {
               </Button>
             </VStack>
             )}
+            <BookingDetailsPanel
+              booking={panelBooking}
+              isOpen={sidebarSection === "bookings" && !!selectedBooking}
+              onClose={() => setSelectedBooking(null)}
+              eventTitle={panelBooking?.event_title || "Untitled event"}
+              ownerName={ownerName}
+              userAvatar={avatarUrl}
+              currentUserId={currentUserId}
+            />
           </VStack>
         </HStack>
       </VStack>

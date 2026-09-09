@@ -9,6 +9,8 @@ import { AddPage } from "@/components/AddPage";
 import { supabase, syncServerSession } from "@/lib/supabase";
 import { parseDurationMinutes, formatTime, buildTimeSlots, WEEK_DAYS, DEFAULT_AVAILABILITY, getDayRanges, isMissingAvailabilityColumnError, type WeeklyAvailability } from "@/lib/bookingTime";
 import FullPageLoader from "@/app/components/FullPageLoader";
+import { PhoneNumberInput } from "@/app/components/PhoneNumberInput";
+import { DEFAULT_PHONE_COUNTRY } from "@/lib/phoneCountries";
 import UsernameModal from "@/app/components/UsernameModal";
 
 // Default slug for the "Scheduling page link" field, derived from the event
@@ -135,6 +137,7 @@ export default function CalendarBuilderPage() {
   const toast = useToast({ position: "top" });
   const { isOpen, onOpen, onClose } = useDisclosure();
   const { isOpen: isShareOpen, onOpen: onShareOpen, onClose: onShareClose } = useDisclosure();
+  const [isManualSaving, setIsManualSaving] = useState(false);
   const { isOpen: isUsernameOpen, onOpen: onUsernameOpen, onClose: onUsernameClose } = useDisclosure();
   const { isOpen: isDateOverridesOpen, onOpen: onDateOverridesOpen, onClose: onDateOverridesClose } = useDisclosure();
   const { isOpen: isBackChoiceOpen, onOpen: onBackChoiceOpen, onClose: onBackChoiceClose } = useDisclosure();
@@ -154,6 +157,16 @@ export default function CalendarBuilderPage() {
   };
   const [selectedPage, setSelectedPage] = useState("Main page");
   const [isFormPageHidden, setIsFormPageHidden] = useState(false);
+  // Booking questions — local UI-only for now, same as the rest of Configure.
+  const [bookingQuestions, setBookingQuestions] = useState([
+    { key: "name", label: "Your name", sublabel: "Name", required: true, hasToggle: false, enabled: true },
+    { key: "email", label: "Email address", sublabel: "Email", required: true, hasToggle: true, enabled: true },
+    { key: "phone", label: "Phone number", sublabel: "Phone", required: false, hasToggle: true, enabled: false },
+    { key: "meeting_about", label: "What is this meeting about?", sublabel: "Short Text", required: false, hasToggle: true, enabled: false },
+    { key: "notes", label: "Additional notes", sublabel: "Long Text", required: false, hasToggle: true, enabled: false },
+    { key: "guests", label: "Add guests", sublabel: "Multiple Emails", required: false, hasToggle: true, enabled: true },
+    { key: "reschedule_reason", label: "Reason for reschedule", sublabel: "Long Text", required: false, hasToggle: true, enabled: false },
+  ]);
   // Weekly hours editor in the Configure tab. Each day holds a list of
   // {start, end} ranges in minutes-since-midnight, empty meaning
   // unavailable that day. Drives both the Main-page preview and (once
@@ -190,6 +203,14 @@ export default function CalendarBuilderPage() {
   const [showOnlyFirstSlot, setShowOnlyFirstSlot] = useState(true);
   const [allowReschedulingPastEvents, setAllowReschedulingPastEvents] = useState(false);
   const [allowBookingThroughRescheduleLink, setAllowBookingThroughRescheduleLink] = useState(false);
+  // Privacy and security — local UI-only for now, same as the rest of Configure.
+  const [privateNotesEnabled, setPrivateNotesEnabled] = useState(true);
+  const [privateNotesDeliveryMode, setPrivateNotesDeliveryMode] = useState("Additional entry for the host");
+  const [privateNoteTemplate, setPrivateNoteTemplate] = useState("");
+  const [requiresConfirmation, setRequiresConfirmation] = useState(false);
+  const [requiresBookerEmailVerification, setRequiresBookerEmailVerification] = useState(false);
+  const [hideNotesInCalendar, setHideNotesInCalendar] = useState(false);
+  const [hideEventDetailsOnSharedCalendars, setHideEventDetailsOnSharedCalendars] = useState(false);
   const [weeklyHours, setWeeklyHours] = useState<WeeklyAvailability>(DEFAULT_AVAILABILITY);
   // Drives the "Main page" preview's calendar/time-slot list — the same
   // state shape PublicBookingView uses, so the preview behaves like the real
@@ -197,6 +218,10 @@ export default function CalendarBuilderPage() {
   const [previewDate, setPreviewDate] = useState(new Date());
   const [previewTime, setPreviewTime] = useState<number | null>(null);
   const [previewIs24Hour, setPreviewIs24Hour] = useState(false);
+  const [previewGuestEmails, setPreviewGuestEmails] = useState<string[]>([]);
+  const [previewPhone, setPreviewPhone] = useState("");
+  const [previewPhoneCountry, setPreviewPhoneCountry] = useState(DEFAULT_PHONE_COUNTRY.code);
+  const MAX_PREVIEW_GUESTS = 10;
   // This event's key for the inbound webhook route (app/api/webhook/[apiKey]) —
   // lets a third-party form post lead data straight to this event.
   const [apiKey, setApiKey] = useState<string | null>(null);
@@ -403,11 +428,33 @@ export default function CalendarBuilderPage() {
               // deliberately-cleared empty string, which must stay empty
               // rather than falling back to the session's name.
               setOwnerName(eventData.owner_name ?? fullName);
+              if (eventData.avatar_url) setUserAvatar(eventData.avatar_url);
               setMeetingLink(eventData.meeting_link || "Link");
               setMeetingLinkUrl(eventData.meeting_link_url || "");
               setDurations(eventData.durations || ["15 min"]);
               setIsFormPageHidden(eventData.hide_form_page || false);
               setWeeklyHours(eventData.availability || DEFAULT_AVAILABILITY);
+              // Merge saved toggles onto the code-defined questions by key
+              // rather than replacing the list, so a question added or
+              // relabelled in code still shows up for older rows.
+              if (Array.isArray(eventData.booking_questions)) {
+                const savedEnabledByKey = new Map(
+                  (eventData.booking_questions as unknown[])
+                    .filter((entry): entry is { key: string; enabled: boolean } =>
+                      Boolean(entry) && typeof entry === "object"
+                      && typeof (entry as { key?: unknown }).key === "string"
+                      && typeof (entry as { enabled?: unknown }).enabled === "boolean"
+                    )
+                    .map((entry) => [entry.key, entry.enabled] as const)
+                );
+                setBookingQuestions((prev) =>
+                  prev.map((question) =>
+                    savedEnabledByKey.has(question.key)
+                      ? { ...question, enabled: savedEnabledByKey.get(question.key)! }
+                      : question
+                  )
+                );
+              }
             }
 
             if (eventError) {
@@ -459,6 +506,7 @@ export default function CalendarBuilderPage() {
     JSON.stringify({
       formName, title, description, ownerName, slug,
       meetingLink, meetingLinkUrl, durations, userAvatar, isFormPageHidden, weeklyHours,
+      bookingQuestions,
     });
 
   useEffect(() => {
@@ -488,7 +536,7 @@ export default function CalendarBuilderPage() {
     }, delay);
 
     return () => clearTimeout(saveTimer);
-  }, [formName, title, description, ownerName, slug, meetingLink, meetingLinkUrl, durations, userAvatar, isFormPageHidden, weeklyHours, currentEventId, isLoading]);
+  }, [formName, title, description, ownerName, slug, meetingLink, meetingLinkUrl, durations, userAvatar, isFormPageHidden, weeklyHours, bookingQuestions, currentEventId, isLoading]);
 
   const handleTitleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const val = e.target.value;
@@ -551,7 +599,11 @@ export default function CalendarBuilderPage() {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session?.user) return;
 
-      const buildPayload = (includeSlug: boolean, includeAvailability = true): Record<string, unknown> => ({
+      // `includeNewColumns` covers every column added by a later migration
+      // (availability, booking_questions). They're dropped together on a
+      // 42703/PGRST204 retry so an environment mid-deploy still saves the
+      // rest of the row instead of failing outright.
+      const buildPayload = (includeSlug: boolean, includeNewColumns = true): Record<string, unknown> => ({
         user_id: session.user.id,
         workspace_name: workspaceNameRef.current,
         title: formName,
@@ -567,7 +619,14 @@ export default function CalendarBuilderPage() {
         durations: durations,
         avatar_url: userAvatar,
         hide_form_page: isFormPageHidden,
-        ...(includeAvailability ? { availability: weeklyHours } : {}),
+        ...(includeNewColumns
+          ? {
+              availability: weeklyHours,
+              // Only key/enabled is persisted — labels and field types stay
+              // code-defined so they can change without migrating rows.
+              booking_questions: bookingQuestions.map(({ key, enabled }) => ({ key, enabled })),
+            }
+          : {}),
         updated_at: new Date().toISOString(),
       });
 
@@ -781,6 +840,25 @@ export default function CalendarBuilderPage() {
     });
   };
 
+  const toggleBookingQuestion = (key: string) => {
+    setBookingQuestions((prev) => prev.map((q) => (q.key === key ? { ...q, enabled: !q.enabled } : q)));
+  };
+  // Drives which fields the "Form page" preview renders, so switching a
+  // question off in the sidebar drops it from the form straight away.
+  // Unknown keys default to shown rather than silently hiding a field.
+  const isBookingQuestionEnabled = (key: string) =>
+    bookingQuestions.find((question) => question.key === key)?.enabled ?? true;
+
+  const addPreviewGuestEmail = () => {
+    setPreviewGuestEmails((prev) => (prev.length >= MAX_PREVIEW_GUESTS ? prev : [...prev, ""]));
+  };
+  const removePreviewGuestEmail = (index: number) => {
+    setPreviewGuestEmails((prev) => prev.filter((_, i) => i !== index));
+  };
+  const updatePreviewGuestEmail = (index: number, value: string) => {
+    setPreviewGuestEmails((prev) => prev.map((email, i) => (i === index ? value : email)));
+  };
+
   const addFrequencyLimit = () => {
     setBookingFrequencyLimits((prev) => [...prev, { count: 1, period: "Per Day" }]);
   };
@@ -919,29 +997,42 @@ export default function CalendarBuilderPage() {
               >
                 Preview
               </Button>
-              <Button
-                size="sm"
-                px="14px"
-                bg="brand.primary"
-                color="white"
-                _hover={{ bg: "brand.primaryHover" }}
-                onClick={() => {
-                  if (!currentEventId) {
-                    toast({ title: "Save the event before sharing", status: "info" });
-                    return;
-                  }
-                  onShareOpen();
-                }}
-              >
-                Share
-              </Button>
+              {tabIndex < TAB_VIEWS.length - 1 ? (
+                <Button
+                  size="sm"
+                  px="14px"
+                  bg="brand.primary"
+                  color="white"
+                  _hover={{ bg: "brand.primaryHover" }}
+                  onClick={() => handleTabChange(tabIndex + 1)}
+                >
+                  Next
+                </Button>
+              ) : (
+                <Button
+                  size="sm"
+                  px="14px"
+                  bg="brand.primary"
+                  color="white"
+                  _hover={{ bg: "brand.primaryHover" }}
+                  isLoading={isManualSaving}
+                  onClick={async () => {
+                    setIsManualSaving(true);
+                    await saveEventToDatabase();
+                    setIsManualSaving(false);
+                    toast({ title: "Changes saved", status: "success" });
+                  }}
+                >
+                  Save
+                </Button>
+              )}
             </HStack>
           </Box>
 
           {tabIndex === 2 ? (
             <HStack align="stretch" flex="1" w="100%" overflowY="auto" p="0px" bg="customGray.50" spacing="0px">
             <HStack align="stretch" flex="1" spacing="0px" overflow="hidden">
-              <Box w="255px" flexShrink={0} h="100%" bg="white" overflow="hidden">
+              <Box w="274px" flexShrink={0} h="100%" bg="white" overflow="hidden">
                 <VStack align="stretch" spacing="4px" px="12px" pb="12px">
                   <Text fontSize="11px" fontWeight="500" textTransform="uppercase" letterSpacing="0.04em" color="customGray.800" px="16px" pt="16px" pb="8px">
                     Configure
@@ -1619,6 +1710,126 @@ export default function CalendarBuilderPage() {
                     </HStack>
                   </Box>
                 </Box>
+                ) : configSection === "Privacy and security" ? (
+                <Box w="688px" mx="auto" pt="64px" pb="64px">
+                  <Text fontSize="20px" fontWeight="500" color="customGray.800" mb="2px">Privacy and security</Text>
+                  <Text fontSize="14px" color="customGray.500" mb="32px">Control who can see and book this event.</Text>
+
+                  <Box bg="white" border="1px solid" borderColor="customGray.200" borderRadius="16px" overflow="hidden">
+                    {/* Private notes */}
+                    <Box px="24px" py="24px" borderBottom="1px solid" borderColor="customGray.200">
+                      <HStack justify="space-between" align="flex-start">
+                        <VStack align="start" spacing="2px" flex="1">
+                          <Text fontSize="14px" fontWeight="600" color="customGray.800">Private notes</Text>
+                          <Text fontSize="13px" color="customGray.500">Send private information as calendar events to hosts that the guests can&apos;t see</Text>
+                        </VStack>
+                        <Switch
+                          isChecked={privateNotesEnabled}
+                          onChange={(e) => setPrivateNotesEnabled(e.target.checked)}
+                          sx={{ "span.chakra-switch__track[data-checked]": { bg: "customGray.800" } }}
+                        />
+                      </HStack>
+                      {privateNotesEnabled && (
+                        <VStack align="stretch" spacing="20px" mt="20px">
+                          <VStack align="stretch" spacing="8px">
+                            <Text fontSize="14px" fontWeight="600" color="customGray.800">Delivery mode</Text>
+                            <ComboMenu
+                              value={privateNotesDeliveryMode}
+                              options={["Additional entry for the host", "Replace the event description"]}
+                              onChange={setPrivateNotesDeliveryMode}
+                              w="100%"
+                            />
+                          </VStack>
+                          <VStack align="stretch" spacing="8px">
+                            <Text fontSize="14px" fontWeight="600" color="customGray.800">Private note template</Text>
+                            <Box border="1px solid" borderColor="customGray.300" borderRadius="8px" overflow="hidden">
+                              <HStack justify="space-between" px="12px" py="8px" bg="customGray.50" borderBottom="1px solid" borderColor="customGray.300">
+                                <HStack spacing="16px">
+                                  <ComboMenu value="Normal" options={["Normal", "Heading", "Subheading"]} onChange={() => {}} w="110px" />
+                                  <Text fontSize="15px" fontWeight="700" color="customGray.600" cursor="pointer">B</Text>
+                                  <Text fontSize="15px" fontStyle="italic" color="customGray.600" cursor="pointer">I</Text>
+                                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                    <path d="M9 15L15 9M11 6l1.5-1.5a3.536 3.536 0 015 5L16 11M13 18l-1.5 1.5a3.536 3.536 0 01-5-5L8 13" stroke="#71717A" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                                  </svg>
+                                </HStack>
+                                <ComboMenu value="Add variable" options={["Guest name", "Guest email", "Event name"]} onChange={() => {}} w="150px" />
+                              </HStack>
+                              <Textarea
+                                value={privateNoteTemplate}
+                                onChange={(e) => setPrivateNoteTemplate(e.target.value)}
+                                placeholder="Save the notes"
+                                variant="unstyled"
+                                minH="140px"
+                                px="12px"
+                                py="12px"
+                                fontSize="14px"
+                                color="customGray.800"
+                                _placeholder={{ color: "customGray.400" }}
+                                resize="vertical"
+                              />
+                            </Box>
+                          </VStack>
+                        </VStack>
+                      )}
+                    </Box>
+
+                    {/* Requires confirmation */}
+                    <HStack justify="space-between" align="flex-start" px="24px" py="24px" borderBottom="1px solid" borderColor="customGray.200">
+                      <VStack align="start" spacing="2px">
+                        <Text fontSize="14px" fontWeight="600" color="customGray.800">Requires confirmation</Text>
+                        <Text fontSize="13px" color="customGray.500">
+                          The booking needs to be manually confirmed before it is pushed to your calendar and a confirmation is sent. <Text as="span" textDecoration="underline">Learn more</Text>
+                        </Text>
+                      </VStack>
+                      <Switch
+                        isChecked={requiresConfirmation}
+                        onChange={(e) => setRequiresConfirmation(e.target.checked)}
+                        sx={{ "span.chakra-switch__track[data-checked]": { bg: "customGray.800" } }}
+                      />
+                    </HStack>
+
+                    {/* Requires booker email verification */}
+                    <HStack justify="space-between" align="flex-start" px="24px" py="24px" borderBottom="1px solid" borderColor="customGray.200">
+                      <VStack align="start" spacing="2px">
+                        <Text fontSize="14px" fontWeight="600" color="customGray.800">Requires booker email verification</Text>
+                        <Text fontSize="13px" color="customGray.500">To ensure booker&apos;s email verification before scheduling events</Text>
+                      </VStack>
+                      <Switch
+                        isChecked={requiresBookerEmailVerification}
+                        onChange={(e) => setRequiresBookerEmailVerification(e.target.checked)}
+                        sx={{ "span.chakra-switch__track[data-checked]": { bg: "customGray.800" } }}
+                      />
+                    </HStack>
+
+                    {/* Hide notes in calendar */}
+                    <HStack justify="space-between" align="flex-start" px="24px" py="24px" borderBottom="1px solid" borderColor="customGray.200">
+                      <VStack align="start" spacing="2px">
+                        <Text fontSize="14px" fontWeight="600" color="customGray.800">Hide notes in calendar</Text>
+                        <Text fontSize="13px" color="customGray.500">
+                          For privacy reasons, additional inputs and notes will be hidden in the calendar entry. They will still be sent to your email. <Text as="span" textDecoration="underline">Learn more</Text>
+                        </Text>
+                      </VStack>
+                      <Switch
+                        isChecked={hideNotesInCalendar}
+                        onChange={(e) => setHideNotesInCalendar(e.target.checked)}
+                        sx={{ "span.chakra-switch__track[data-checked]": { bg: "customGray.800" } }}
+                      />
+                    </HStack>
+
+                    {/* Hide calendar event details on shared calendars */}
+                    <HStack justify="space-between" align="flex-start" px="24px" py="24px">
+                      <VStack align="start" spacing="2px">
+                        <Text fontSize="14px" fontWeight="600" color="customGray.800">Hide calendar event details on shared calendars</Text>
+                        <Text fontSize="13px" color="customGray.500">When a calendar is shared, events are visible to readers but their details are hidden from those without write access.</Text>
+                      </VStack>
+                      <Switch
+                        isChecked={hideEventDetailsOnSharedCalendars}
+                        onChange={(e) => setHideEventDetailsOnSharedCalendars(e.target.checked)}
+                        sx={{ "span.chakra-switch__track[data-checked]": { bg: "customGray.800" } }}
+                      />
+                    </HStack>
+                  </Box>
+                </Box>
                 ) : (
                 <Box w="688px" mx="auto" pt="64px" pb="64px">
                   <Text fontSize="22px" fontWeight="500" color="customGray.800" mb="2px">{configSection}</Text>
@@ -1633,37 +1844,141 @@ export default function CalendarBuilderPage() {
           ) : (
           <HStack spacing="0px" flex="1" align="stretch" w="100%" overflow="hidden">
             {/* Left Sidebar */}
+            {/* Children keep a fixed 400px width so they never reflow as this
+                container's width animates. Sliding the panel by the same
+                amount, on the same timing, as the width collapses makes it
+                read as sliding out to the left rather than being
+                squeezed/clipped in place. */}
             <Box
-              w={selectedPage === "Form page" && isFormPageHidden ? "0px" : "380px"}
+              w={selectedPage === "Form page" && isFormPageHidden ? "0px" : "400px"}
               flexShrink={0}
-              overflow="hidden"
+              overflowX="hidden"
+              overflowY="auto"
               pointerEvents={selectedPage === "Form page" && isFormPageHidden ? "none" : "auto"}
-              transition="width 0.4s cubic-bezier(0.4, 0, 0.2, 1)"
+              transform={selectedPage === "Form page" && isFormPageHidden ? "translateX(-400px)" : "translateX(0)"}
+              transition="width 0.4s cubic-bezier(0.4, 0, 0.2, 1), transform 0.4s cubic-bezier(0.4, 0, 0.2, 1)"
               bg="white"
               borderRight="1px solid"
               borderColor="customGray.200"
             >
-              {/* Fixed width so it never reflows as the outer container's
-                  width animates. Sliding this by the same amount, on the
-                  same timing, as the outer width collapses makes it read as
-                  the panel sliding out to the left rather than being
-                  squeezed/clipped in place. */}
-              <Box
-                w="380px"
-                h="100%"
-                overflowY="auto"
-                transform={selectedPage === "Form page" && isFormPageHidden ? "translateX(-380px)" : "translateX(0)"}
-                transition="transform 0.4s cubic-bezier(0.4, 0, 0.2, 1)"
-              >
-              <VStack spacing="0px" align="stretch">
-                <HStack spacing="8px" py="20px" px="30px">
-                  <Text fontSize="14px" fontWeight="bold">📅</Text>
-                  <Heading fontSize="14px" fontWeight="600" color="customGray.800">General</Heading>
-                </HStack>
-
-                <Box h="1px" bg="customGray.200" w="100%" />
-
-                <HStack justify="space-between" align="center" py="20px" px="30px" w="100%">
+              {selectedPage === "Form page" ? (
+                <>
+                <VStack spacing="0px" align="stretch" w="400px" px="20px" pt="20px">
+                  <Text fontSize="16px" fontWeight="600" color="customGray.800">Booking questions</Text>
+                  <Text fontSize="13px" color="customGray.500" mt="4px">
+                    Customize the questions asked on the booking page. <Text as="span" textDecoration="underline" cursor="pointer">Learn more</Text>
+                  </Text>
+                  <Button
+                    alignSelf="start"
+                    size="sm"
+                    mt="16px"
+                    fontSize="14px"
+                    fontWeight="400"
+                    color="customGray.800"
+                    bg="white"
+                    border="1px solid"
+                    borderColor="customGray.200"
+                    borderRadius="8px"
+                    boxShadow="0 1px 2px rgba(0,0,0,0.05)"
+                    _hover={{ bg: "customGray.100", borderColor: "customGray.300" }}
+                    leftIcon={<AddIcon w="10px" h="10px" />}
+                  >
+                    Add question
+                  </Button>
+                </VStack>
+                <Box w="400px" mt="16px">
+                  <VStack align="stretch" spacing="0px" bg="white" border="1px solid" borderColor="customGray.200" overflow="hidden">
+                    {bookingQuestions.map((question, index) => {
+                      const badgeLabel = question.required ? "Required" : question.enabled ? "Optional" : "Hidden";
+                      const badgeStyles = question.required
+                        ? { bg: "customGray.800", color: "white", border: "none" }
+                        : question.enabled
+                        ? { bg: "customGray.100", color: "customGray.700", border: "none" }
+                        : { bg: "white", color: "customGray.500", border: "1px solid", borderColor: "customGray.200" };
+                      return (
+                        <HStack
+                          key={question.key}
+                          align="flex-start"
+                          spacing="10px"
+                          px="16px"
+                          py="14px"
+                          borderBottom={index < bookingQuestions.length - 1 ? "1px solid" : "none"}
+                          borderColor="customGray.200"
+                        >
+                          {/* "Your name" can't be switched off, so it gets a spacer
+                              instead of a checkbox — keeps every label on the same
+                              left edge without showing a control that does nothing. */}
+                          {question.hasToggle ? (
+                            <Checkbox
+                              size="md"
+                              mt="2px"
+                              flexShrink={0}
+                              isChecked={question.enabled}
+                              onChange={() => toggleBookingQuestion(question.key)}
+                              sx={{
+                                "span.chakra-checkbox__control": {
+                                  borderColor: "customGray.300",
+                                  borderRadius: "5px",
+                                  borderWidth: "1px",
+                                },
+                                "span.chakra-checkbox__control[data-checked]": {
+                                  bg: "brand.primary",
+                                  borderColor: "brand.primary",
+                                  color: "white",
+                                },
+                                "span.chakra-checkbox__control[data-checked]:hover": {
+                                  bg: "brand.primaryHover",
+                                  borderColor: "brand.primaryHover",
+                                },
+                                "span.chakra-checkbox__control[data-focus-visible], span.chakra-checkbox__control[data-focus]": {
+                                  boxShadow: "0 0 0 3px rgba(18, 94, 154, 0.2)",
+                                },
+                              }}
+                            />
+                          ) : (
+                            <Box w="16px" flexShrink={0} />
+                          )}
+                          <VStack align="stretch" spacing="6px" flex="1" minW="0">
+                            <HStack justify="space-between" align="flex-start">
+                              {/* Badge rendered inline inside the heading so it always sits
+                                  beside the field name, wrapping with it when the name is
+                                  long instead of dropping onto a line of its own. */}
+                              <Text fontSize="14px" fontWeight="600" color="customGray.800">
+                                {question.label}{" "}
+                                <Box
+                                  as="span"
+                                  display="inline-block"
+                                  verticalAlign="middle"
+                                  px="8px"
+                                  py="1px"
+                                  borderRadius="6px"
+                                  fontSize="11px"
+                                  fontWeight="500"
+                                  whiteSpace="nowrap"
+                                  {...badgeStyles}
+                                >
+                                  {badgeLabel}
+                                </Box>
+                              </Text>
+                              {/* The two required fields (name, email) aren't editable — they
+                                  always ask the same thing, so no Edit affordance for them. */}
+                              {!question.required && (
+                                <Button size="xs" flexShrink={0} variant="outline" borderColor="customGray.300" color="customGray.800" bg="white" _hover={{ bg: "customGray.50" }}>
+                                  Edit
+                                </Button>
+                              )}
+                            </HStack>
+                            <Text fontSize="13px" color="customGray.500">{question.sublabel}</Text>
+                          </VStack>
+                        </HStack>
+                      );
+                    })}
+                  </VStack>
+                </Box>
+                </>
+              ) : (
+                <>
+                <HStack justify="space-between" align="center" py="20px" px="20px" w="100%">
                   <Text fontSize="14px" fontWeight="500" color="customGray.800">Owner name</Text>
                   <Input
                     size="md"
@@ -1686,7 +2001,7 @@ export default function CalendarBuilderPage() {
 
                 <Box h="1px" bg="customGray.200" w="100%" />
 
-                <VStack spacing="2px" align="stretch" py="20px" px="30px">
+                <VStack spacing="2px" align="stretch" py="20px" px="20px">
                   <Text fontSize="14px" fontWeight="500" color="customGray.800">Profile picture</Text>
                   <Text fontSize="xs" color="customGray.500">Choose the times of day you'll accept meetings.</Text>
                   <HStack spacing="12px" pt="12px">
@@ -1726,7 +2041,7 @@ export default function CalendarBuilderPage() {
 
                 <Box h="1px" bg="customGray.200" w="100%" />
 
-                <VStack spacing="12px" align="stretch" py="20px" px="30px">
+                <VStack spacing="12px" align="stretch" py="20px" px="20px">
                   <VStack spacing="2px" align="stretch">
                     <Text fontSize="14px" fontWeight="500" color="customGray.800">Description</Text>
                     <Text fontSize="xs" color="customGray.500">Choose the times of day you'll accept meetings.</Text>
@@ -1768,7 +2083,7 @@ export default function CalendarBuilderPage() {
 
                 <Box h="1px" bg="customGray.200" w="100%" />
 
-                <VStack spacing="12px" align="stretch" py="20px" px="30px">
+                <VStack spacing="12px" align="stretch" py="20px" px="20px">
                   <HStack spacing="6px">
                     <Text fontSize="14px" fontWeight="500" color="customGray.800">Scheduling page link</Text>
                     <Text as="span" color="red.500">*</Text>
@@ -1841,7 +2156,7 @@ export default function CalendarBuilderPage() {
 
                 <Box h="1px" bg="customGray.200" w="100%" />
 
-                <VStack spacing="12px" align="stretch" py="20px" px="30px">
+                <VStack spacing="12px" align="stretch" py="20px" px="20px">
                   <VStack spacing="2px" align="stretch">
                     <Text fontSize="14px" fontWeight="500" color="customGray.800">Meeting link</Text>
                     <Text fontSize="xs" color="customGray.500">Choose the times of day you'll accept meetings.</Text>
@@ -2019,7 +2334,7 @@ export default function CalendarBuilderPage() {
 
                 <Box h="1px" bg="customGray.200" w="100%" />
 
-                <VStack spacing="8px" align="stretch" py="20px" px="30px" pb="32px">
+                <VStack spacing="8px" align="stretch" py="20px" px="20px" pb="32px">
                   <Text fontSize="14px" fontWeight="500" color="customGray.800">Duration</Text>
                   <Box position="relative" w="100%">
                     <Menu matchWidth>
@@ -2078,8 +2393,8 @@ export default function CalendarBuilderPage() {
                     </Menu>
                   </Box>
                 </VStack>
-              </VStack>
-              </Box>
+                </>
+              )}
             </Box>
 
             {/* Center Preview */}
@@ -2219,13 +2534,33 @@ export default function CalendarBuilderPage() {
 
                 </HStack>
 
-                {/* Preview Card */}
-                <Box w="fit-content" h={selectedPage === "Success page" ? "580px" : "484px"} p={selectedPage === "Success page" ? "0px" : "12px"} bg="white" border="1px solid" borderColor="customGray.200" boxShadow="0 2px 8px rgba(0, 0, 0, 0.08), 0 1px 2px rgba(0, 0, 0, 0.04)" borderRadius="20px" position="relative" overflow="hidden">
+                {/* Preview Card. The Form page sizes itself to however many
+                    questions are switched on: never below the baseline (so
+                    hiding fields can't shrink the card), growing with the
+                    content, and scrolling inside once it passes the cap. */}
+                <Box
+                  w="fit-content"
+                  h={selectedPage === "Success page" ? "580px" : selectedPage === "Form page" ? undefined : "484px"}
+                  minH={selectedPage === "Form page" ? "492px" : undefined}
+                  maxH={selectedPage === "Form page" ? "720px" : undefined}
+                  display={selectedPage === "Form page" ? "flex" : undefined}
+                  flexDirection={selectedPage === "Form page" ? "column" : undefined}
+                  p={selectedPage === "Success page" ? "0px" : "12px"}
+                  bg="white"
+                  border="1px solid"
+                  borderColor="customGray.200"
+                  boxShadow="0 2px 8px rgba(0, 0, 0, 0.08), 0 1px 2px rgba(0, 0, 0, 0.04)"
+                  borderRadius="20px"
+                  position="relative"
+                  overflow="hidden"
+                >
                 <HStack
                   spacing="0px"
                   align="stretch"
                   w="100%"
-                  h="100%"
+                  h={selectedPage === "Form page" ? undefined : "100%"}
+                  flex={selectedPage === "Form page" ? "1" : undefined}
+                  minH={selectedPage === "Form page" ? "0" : undefined}
                   filter={selectedPage === "Form page" && isFormPageHidden ? "blur(4px)" : "none"}
                   pointerEvents={selectedPage === "Form page" && isFormPageHidden ? "none" : "auto"}
                   userSelect={selectedPage === "Form page" && isFormPageHidden ? "none" : "auto"}
@@ -2261,7 +2596,7 @@ export default function CalendarBuilderPage() {
                   )}
 
                   {selectedPage === "Main page" ? (
-                    <Box display="flex" border="1px solid" borderColor="customGray.200" borderRadius="8px" overflow="hidden">
+                    <Box display="flex" alignItems="stretch" border="1px solid" borderColor="customGray.200" borderRadius="8px" overflow="hidden">
                       <Box w="440px" flexShrink={0} display="flex" alignItems="flex-start" justifyContent="center" bg="customGray.50" px="30px" pt="24px">
                         <CalendarPicker
                           value={previewDate}
@@ -2343,9 +2678,25 @@ export default function CalendarBuilderPage() {
                       </VStack>
                     </Box>
                   ) : selectedPage === "Form page" ? (
-                    <VStack spacing="16px" flex="1" align="stretch" bg="customGray.50" border="1px solid" borderColor="customGray.200" borderRadius="8px" p="24px" overflowY="auto">
-                      <VStack spacing="8px" align="stretch">
-                        <Text fontSize="14px" fontWeight="600" color="customGray.800">Your name <Text as="span" color="red.500">*</Text></Text>
+                    <VStack
+                      spacing="16px"
+                      flex="1"
+                      align="stretch"
+                      bg="customGray.50"
+                      border="1px solid"
+                      borderColor="customGray.200"
+                      borderRadius="8px"
+                      p="24px"
+                      overflowY="auto"
+                      sx={{
+                        "&::-webkit-scrollbar": { width: "6px" },
+                        "&::-webkit-scrollbar-track": { bg: "transparent" },
+                        "&::-webkit-scrollbar-thumb": { bg: "customGray.300", borderRadius: "3px" },
+                        "&::-webkit-scrollbar-thumb:hover": { bg: "customGray.400" },
+                      }}
+                    >
+                      <VStack spacing="4px" align="stretch">
+                        <Text fontSize="14px" fontWeight="medium" color="customGray.800">Your name <Text as="span" color="red.500">*</Text></Text>
                         <Input
                           size="sm"
                           placeholder="Your name"
@@ -2363,8 +2714,9 @@ export default function CalendarBuilderPage() {
                         />
                       </VStack>
 
-                      <VStack spacing="8px" align="stretch">
-                        <Text fontSize="14px" fontWeight="600" color="customGray.800">Email address <Text as="span" color="red.500">*</Text></Text>
+                      {isBookingQuestionEnabled("email") && (
+                      <VStack spacing="4px" align="stretch">
+                        <Text fontSize="14px" fontWeight="medium" color="customGray.800">Email address <Text as="span" color="red.500">*</Text></Text>
                         <Input
                           size="sm"
                           placeholder="your@email.com"
@@ -2381,9 +2733,23 @@ export default function CalendarBuilderPage() {
                           _focus={{ bg: "white", borderColor: "customGray.500", boxShadow: "0 0 0 3px rgba(39, 39, 42, 0.1)" }}
                         />
                       </VStack>
+                      )}
 
-                      <VStack spacing="8px" align="stretch">
-                        <Text fontSize="14px" fontWeight="600" color="customGray.800">Additional notes</Text>
+                      {isBookingQuestionEnabled("phone") && (
+                      <VStack spacing="4px" align="stretch">
+                        <Text fontSize="14px" fontWeight="medium" color="customGray.800">Phone number</Text>
+                        <PhoneNumberInput
+                          countryCode={previewPhoneCountry}
+                          onCountryCodeChange={setPreviewPhoneCountry}
+                          value={previewPhone}
+                          onChange={setPreviewPhone}
+                        />
+                      </VStack>
+                      )}
+
+                      {isBookingQuestionEnabled("notes") && (
+                      <VStack spacing="4px" align="stretch">
+                        <Text fontSize="14px" fontWeight="medium" color="customGray.800">Additional notes</Text>
                         <Textarea
                           size="sm"
                           placeholder="Please share anything that will help prepare for our meeting."
@@ -2401,11 +2767,77 @@ export default function CalendarBuilderPage() {
                           _focus={{ bg: "white", borderColor: "customGray.500", boxShadow: "0 0 0 3px rgba(39, 39, 42, 0.1)" }}
                         />
                       </VStack>
+                      )}
 
-                      <HStack w="100%" spacing="8px" justify="flex-start" fontSize="14px" color="customGray.600">
-                        <Box>👥</Box>
-                        <Text>Add guests</Text>
-                      </HStack>
+                      {!isBookingQuestionEnabled("guests") ? null : previewGuestEmails.length === 0 ? (
+                        <Button
+                          variant="link"
+                          alignSelf="start"
+                          fontSize="14px"
+                          fontWeight="medium"
+                          color="brand.primary"
+                          _hover={{ textDecoration: "underline" }}
+                          leftIcon={<AddIcon w="10px" h="10px" />}
+                          onClick={addPreviewGuestEmail}
+                        >
+                          Add guests
+                        </Button>
+                      ) : (
+                        <VStack spacing="8px" align="stretch" w="100%">
+                          <Text fontSize="14px" fontWeight="medium" color="customGray.800">Add guests</Text>
+                          {previewGuestEmails.map((email, index) => (
+                            <HStack key={index} spacing="8px">
+                              <Input
+                                size="sm"
+                                placeholder="Email"
+                                borderRadius="md"
+                                bg="white"
+                                border="1px solid"
+                                borderColor="customGray.300"
+                                fontSize="14px"
+                                fontWeight="400"
+                                color="customGray.800"
+                                px="12px"
+                                py="8px"
+                                value={email}
+                                onChange={(e) => updatePreviewGuestEmail(index, e.target.value)}
+                                _hover={{ borderColor: "customGray.400" }}
+                                _focus={{ bg: "white", borderColor: "customGray.500", boxShadow: "0 0 0 3px rgba(39, 39, 42, 0.1)" }}
+                              />
+                              <IconButton
+                                aria-label="Remove this guest"
+                                icon={<CloseIcon w="10px" h="10px" />}
+                                size="sm"
+                                variant="ghost"
+                                color="customGray.500"
+                                onClick={() => removePreviewGuestEmail(index)}
+                              />
+                            </HStack>
+                          ))}
+                          {previewGuestEmails.length < MAX_PREVIEW_GUESTS ? (
+                            <Button
+                              variant="link"
+                              alignSelf="start"
+                              fontSize="14px"
+                              fontWeight="medium"
+                              color="brand.primary"
+                              _hover={{ textDecoration: "underline" }}
+                              leftIcon={
+                                <svg width="14" height="14" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                  <path d="M6 8a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z" stroke="currentColor" strokeWidth="1.3" />
+                                  <path d="M1 14c0-2.5 2-4.2 5-4.2s5 1.7 5 4.2" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
+                                  <path d="M12.5 5v4M10.5 7h4" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
+                                </svg>
+                              }
+                              onClick={addPreviewGuestEmail}
+                            >
+                              Add another
+                            </Button>
+                          ) : (
+                            <Text fontSize="xs" color="customGray.500">You can add up to {MAX_PREVIEW_GUESTS} guests.</Text>
+                          )}
+                        </VStack>
+                      )}
 
                       <Text fontSize="xs" color="customGray.500" pt="8px">By proceeding, you agree to Cal.com's Terms and Privacy Policy.</Text>
                     </VStack>

@@ -1558,22 +1558,10 @@ export default function BuilderPage() {
                         </Box>
                       )}
                       <Box flex="1" h="100%" bg="white" overflow="hidden" display="flex" flexDirection="column">
-                          {isLoadingAllBookings ? (
-                            <Box flex="1" py="40px" display="flex" alignItems="center" justifyContent="center">
-                              <Text fontSize="14px" color="customGray.500">Loading...</Text>
-                            </Box>
-                          ) : filteredAllBookings.length === 0 ? (
-                            <Box flex="1" py="40px" display="flex" alignItems="center" justifyContent="center">
-                              <Text fontSize="14px" color="customGray.500">
-                                {bookingsSearchQuery.trim() ? `No bookings match "${bookingsSearchQuery}"` : "No bookings yet."}
-                              </Text>
-                            </Box>
-                          ) : (
-                            <>
-                              <Box flexShrink={0} w="100%" bg="customGray.50" borderBottom="1px solid" borderColor="customGray.200">
+                              <Box flexShrink={0} w="100%" pr="6px" bg="customGray.50" borderBottom="1px solid" borderColor="customGray.200">
                                 <Table w="100%" sx={{ tableLayout: "fixed" }}>
                                   <colgroup>
-                                    <col style={{ width: "340px" }} />
+                                    <col style={{ width: "381px" }} />
                                     <col style={{ width: "214px" }} />
                                     <col style={{ width: "214px" }} />
                                     <col style={{ width: "140px" }} />
@@ -1595,7 +1583,7 @@ export default function BuilderPage() {
                               <Box
                                 flex="1"
                                 w="100%"
-                                overflowY="auto"
+                                overflowY="scroll"
                                 sx={{
                                   '&::-webkit-scrollbar': { width: '6px' },
                                   '&::-webkit-scrollbar-track': { bg: 'transparent' },
@@ -1605,7 +1593,7 @@ export default function BuilderPage() {
                               >
                                 <Table w="100%" sx={{ tableLayout: "fixed" }}>
                                   <colgroup>
-                                    <col style={{ width: "340px" }} />
+                                    <col style={{ width: "381px" }} />
                                     <col style={{ width: "214px" }} />
                                     <col style={{ width: "214px" }} />
                                     <col style={{ width: "140px" }} />
@@ -1613,7 +1601,21 @@ export default function BuilderPage() {
                                     <col style={{ width: "50px" }} />
                                   </colgroup>
                                   <Tbody>
-                                    {filteredAllBookings.map((booking) => {
+                                    {isLoadingAllBookings ? (
+                                      <Tr>
+                                        <Td colSpan={6} h="80px" textAlign="center" borderBottomColor="customGray.200">
+                                          <Text fontSize="14px" color="customGray.500">Loading...</Text>
+                                        </Td>
+                                      </Tr>
+                                    ) : filteredAllBookings.length === 0 ? (
+                                      <Tr>
+                                        <Td colSpan={6} h="80px" textAlign="center" borderBottomColor="customGray.200">
+                                          <Text fontSize="14px" color="customGray.500">
+                                            {bookingsSearchQuery.trim() ? `No bookings match "${bookingsSearchQuery}"` : "No bookings yet."}
+                                          </Text>
+                                        </Td>
+                                      </Tr>
+                                    ) : filteredAllBookings.map((booking) => {
                                       const initial = (booking.guest_name || "?").charAt(0).toUpperCase();
                                       const avatarColor = colors[booking.id % colors.length];
                                       const bookingAttendees = Array.isArray(booking.extra_fields?.attendees)
@@ -1654,32 +1656,25 @@ export default function BuilderPage() {
                                                   <HStack spacing="8px" cursor="pointer">
                                                     {attendeeCount > 1 ? (
                                                       <AvatarGroup size="xs" max={2} spacing="-8px" sx={{ "--avatar-font-size": "12px" }}>
-                                                        {(() => {
-                                                          const firstAttendee = bookingAttendees[0];
-                                                          const firstName = typeof firstAttendee?.name === "string" ? firstAttendee.name : "";
+                                                        {/* Only the first two attendees get an avatar — the
+                                                            "N attendees" label beside them carries the count,
+                                                            so no "+N" overflow badge is needed. */}
+                                                        {bookingAttendees.slice(0, 2).map((attendee, attendeeIndex) => {
+                                                          const attendeeName = typeof attendee?.name === "string" ? attendee.name : "";
+                                                          const attendeeEmail = typeof attendee?.email === "string" ? attendee.email : "";
                                                           return (
                                                             <Avatar
-                                                              key="first-attendee"
-                                                              name={firstName || "Attendee 1"}
+                                                              key={attendeeIndex}
+                                                              name={attendeeName || attendeeEmail || `Attendee ${attendeeIndex + 1}`}
                                                               getInitials={(name) => name.charAt(0).toUpperCase()}
                                                               borderWidth="1px"
-                                                              bg={colors[booking.id % colors.length]}
+                                                              bg={colors[(booking.id + attendeeIndex) % colors.length]}
                                                               color="white"
                                                               fontWeight="medium"
                                                               sx={{ "--avatar-font-size": "12px" }}
                                                             />
                                                           );
-                                                        })()}
-                                                        <Avatar
-                                                          key="attendee-count"
-                                                          name={String(attendeeCount)}
-                                                          getInitials={(name) => name}
-                                                          borderWidth="1px"
-                                                          bg="customGray.200"
-                                                          color="customGray.700"
-                                                          fontWeight="medium"
-                                                          sx={{ "--avatar-font-size": "12px" }}
-                                                        />
+                                                        })}
                                                       </AvatarGroup>
                                                     ) : (
                                                       <Box w="24px" h="24px" bg={avatarColor} borderRadius="full" display="flex" alignItems="center" justifyContent="center" flexShrink={0}>
@@ -1962,8 +1957,6 @@ export default function BuilderPage() {
                                   </Tbody>
                                 </Table>
                               </Box>
-                            </>
-                          )}
                         </Box>
                     </VStack>
                   ) : (

@@ -59,13 +59,14 @@ export async function saveGoogleCalendarConnection(userId: string, code: string,
   return !error;
 }
 
+// A stored refresh_token row isn't enough on its own — Google revokes/expires
+// refresh tokens behind the scenes (e.g. a 7-day cap while the OAuth consent
+// screen is in "Testing" mode), which would otherwise leave the UI showing
+// "Connected" forever while every real booking silently fails to get a
+// meeting link. Actually exchanging it is the only way to know it still works.
 export async function isGoogleCalendarConnected(userId: string): Promise<boolean> {
-  const { data } = await supabaseAdmin
-    .from("google_calendar_tokens")
-    .select("user_id")
-    .eq("user_id", userId)
-    .maybeSingle();
-  return !!data;
+  const accessToken = await getValidAccessToken(userId);
+  return !!accessToken;
 }
 
 async function refreshAccessToken(userId: string, refreshToken: string): Promise<string | null> {

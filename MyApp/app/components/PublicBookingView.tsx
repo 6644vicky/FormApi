@@ -3,8 +3,10 @@
 import { useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { Box, VStack, HStack, Text, Button, IconButton, Input, Textarea, Avatar, Tabs, TabList, Tab } from "@chakra-ui/react";
-import { CloseIcon, RepeatIcon } from "@chakra-ui/icons";
+import { AddIcon, CloseIcon, RepeatIcon } from "@chakra-ui/icons";
 import { CalendarPicker } from "@/components/CalendarPicker";
+import { PhoneNumberInput } from "@/app/components/PhoneNumberInput";
+import { findPhoneCountry, guessPhoneCountryCode } from "@/lib/phoneCountries";
 import { supabase } from "@/lib/supabase";
 import { parseDurationMinutes, formatTime, buildTimeSlots, getDayRanges, type WeeklyAvailability } from "@/lib/bookingTime";
 import FullPageLoader from "@/app/components/FullPageLoader";
@@ -19,6 +21,9 @@ type EventInfo = {
   durations: string[];
   hideFormPage: boolean;
   availability: WeeklyAvailability;
+  // key -> shown, from the owner's "Booking questions" panel. A missing key
+  // means the owner never touched that question, so it stays visible.
+  bookingQuestions?: Record<string, boolean>;
 };
 
 // Renders the public booking flow for a resolved event. Used by both
@@ -38,11 +43,20 @@ export function PublicBookingView({ fetchUrl }: { fetchUrl: string }) {
   const [guestName, setGuestName] = useState("");
   const [guestEmail, setGuestEmail] = useState("");
   const [guestPhone, setGuestPhone] = useState("");
+  // Guessed from the browser locale on mount rather than at init, so the
+  // server-rendered markup and the first client render agree.
+  const [guestPhoneCountry, setGuestPhoneCountry] = useState("IN");
   const [guestNotes, setGuestNotes] = useState("");
+  const [extraGuestEmails, setExtraGuestEmails] = useState<string[]>([]);
   const [isSaving, setIsSaving] = useState(false);
+  const MAX_EXTRA_GUESTS = 10;
   // The gray backdrop only makes sense standing alone — inside an <iframe>
   // embed it just shows up as an unwanted margin around the card.
   const [isEmbedded, setIsEmbedded] = useState(false);
+
+  useEffect(() => {
+    setGuestPhoneCountry(guessPhoneCountryCode());
+  }, []);
 
   useEffect(() => {
     const embedded = window.self !== window.top;
@@ -98,6 +112,13 @@ export function PublicBookingView({ fetchUrl }: { fetchUrl: string }) {
   const selectedTimeLabel = selectedTime !== null ? formatTime(Math.floor(selectedTime / 60), selectedTime % 60, is24Hour) : "";
   const compactDateLabel = selectedDate.toLocaleDateString("en-US", { month: "short", day: "numeric" });
   const guestTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+  // Unknown keys default to shown, so an event saved before a question
+  // existed never silently loses a field.
+  const showQuestion = (key: string) => event.bookingQuestions?.[key] ?? true;
+  const showEmail = showQuestion("email");
+  const showPhone = showQuestion("phone");
+  const showNotes = showQuestion("notes");
+  const showGuests = showQuestion("guests");
 
   const resetBooking = () => {
     setStep("main");
@@ -107,6 +128,17 @@ export function PublicBookingView({ fetchUrl }: { fetchUrl: string }) {
     setGuestEmail("");
     setGuestPhone("");
     setGuestNotes("");
+    setExtraGuestEmails([]);
+  };
+
+  const addExtraGuestEmail = () => {
+    setExtraGuestEmails((prev) => (prev.length >= MAX_EXTRA_GUESTS ? prev : [...prev, ""]));
+  };
+  const removeExtraGuestEmail = (index: number) => {
+    setExtraGuestEmails((prev) => prev.filter((_, i) => i !== index));
+  };
+  const updateExtraGuestEmail = (index: number, value: string) => {
+    setExtraGuestEmails((prev) => prev.map((email, i) => (i === index ? value : email)));
   };
 
   // Shared by the Confirm button (form page hidden — no separate form step
@@ -116,6 +148,14 @@ export function PublicBookingView({ fetchUrl }: { fetchUrl: string }) {
     if (selectedTime === null) return;
     const bookingDate = `${selectedDate.getFullYear()}-${String(selectedDate.getMonth() + 1).padStart(2, "0")}-${String(selectedDate.getDate()).padStart(2, "0")}`;
     const bookingTime = formatTime(Math.floor(selectedTime / 60), selectedTime % 60, true);
+    // Stored with the dial code so the host can actually call the number back
+    // without having to guess where the guest is.
+    const trimmedPhone = guestPhone.trim();
+    const fullPhone = trimmedPhone ? `${findPhoneCountry(guestPhoneCountry).dial} ${trimmedPhone}` : null;
+    const validExtraGuestEmails = extraGuestEmails.map((email) => email.trim()).filter(Boolean);
+    const extraFields = validExtraGuestEmails.length > 0
+      ? { attendees: [{ name: guestName, email: guestEmail }, ...validExtraGuestEmails.map((email) => ({ name: "", email }))] }
+      : null;
     // Best-effort: a guest's booking should still go through even
     // if the bookings table isn't set up yet on this instance.
     const { data: inserted, error: bookingError } = await supabase
@@ -124,11 +164,12 @@ export function PublicBookingView({ fetchUrl }: { fetchUrl: string }) {
         event_id: event.id,
         guest_name: guestName,
         guest_email: guestEmail,
-        guest_phone: guestPhone || null,
+        guest_phone: fullPhone,
         guest_notes: guestNotes || null,
         booking_date: bookingDate,
         booking_time: bookingTime,
         guest_timezone: guestTimezone,
+        extra_fields: extraFields,
       })
       .select("id")
       .single();
@@ -196,10 +237,28 @@ export function PublicBookingView({ fetchUrl }: { fetchUrl: string }) {
 
   return (
     <Box minH="100vh" bg={isEmbedded ? "transparent" : "customGray.50"} display="flex" alignItems="center" justifyContent="center" p={isEmbedded ? "0px" : "24px"}>
-      <Box w="fit-content" minH={step === "success" ? "465px" : "489px"} p={step === "success" ? "0px" : "12px"} maxW="100%" bg="white" borderRadius="20px" border="1px solid" borderColor="customGray.200" boxShadow="0 2px 8px rgba(0,0,0,0.08), 0 1px 2px rgba(0,0,0,0.04)" overflow="hidden">
-        <HStack spacing="0px" align="stretch">
+      <Box
+        w="fit-content"
+        h={step === "main" ? "485px" : undefined}
+        // The form step sizes itself to however many questions the owner left
+        // on: never below the baseline (so hiding fields can't shrink the
+        // card), growing with the content, and scrolling inside past the cap.
+        maxH={step === "form" ? "720px" : undefined}
+        minH={step === "success" ? "465px" : step === "form" ? "560px" : undefined}
+        display={step === "success" ? undefined : "flex"}
+        flexDirection={step === "success" ? undefined : "column"}
+        p={step === "success" ? "0px" : "12px"}
+        maxW="100%"
+        bg="white"
+        borderRadius="20px"
+        border="1px solid"
+        borderColor="customGray.200"
+        boxShadow="0 2px 8px rgba(0,0,0,0.08), 0 1px 2px rgba(0,0,0,0.04)"
+        overflow="hidden"
+      >
+        <HStack spacing="0px" align="stretch" flex={step === "success" ? undefined : "1"} minH={step === "success" ? undefined : "0"}>
           {step !== "success" && (
-            <VStack spacing="16px" align="start" w="280px" flexShrink={0} pl="16px" pr="24px" pt="24px" pb="24px" overflowY="auto" maxH="600px">
+            <VStack spacing="16px" align="start" w="280px" flexShrink={0} pl="16px" pr="24px" pt="24px" pb="13px" overflowY="auto" maxH="600px">
               <HStack spacing="12px">
                 <Avatar name={event.ownerName} src={event.avatarUrl || undefined} size="sm" flexShrink={0} bg="customGray.300" color="customGray.800" />
                 <Text fontSize="14px" fontWeight="600" color="customGray.800">{event.ownerName}</Text>
@@ -222,7 +281,7 @@ export function PublicBookingView({ fetchUrl }: { fetchUrl: string }) {
           )}
 
           {step === "main" && (
-            <Box display="flex" border="1px solid" borderColor="customGray.200" borderRadius="8px" overflow="hidden">
+            <Box display="flex" alignItems="stretch" border="1px solid" borderColor="customGray.200" borderRadius="8px" overflow="hidden">
               <Box w="440px" flexShrink={0} display="flex" alignItems="flex-start" justifyContent="center" bg="customGray.50" px="24px" pt="24px" pb="24px" overflowY="hidden">
                 <CalendarPicker
                   value={selectedDate}
@@ -230,7 +289,7 @@ export function PublicBookingView({ fetchUrl }: { fetchUrl: string }) {
                   isDateDisabled={(date) => getDayRanges(event.availability, date).length === 0}
                 />
               </Box>
-              <VStack spacing="0px" w="259px" flexShrink={0} borderLeft="1px solid" borderColor="customGray.200" bg="customGray.50" p="0px">
+              <VStack spacing="0px" w="259px" flexShrink={0} align="stretch" borderLeft="1px solid" borderColor="customGray.200" bg="customGray.50" p="0px">
                 <HStack w="100%" justify="space-between" px="20px" pt="24px" pb="12px">
                   <Text fontSize="14px" fontWeight="600" color="customGray.800">{dateLabel}</Text>
                   <Tabs
@@ -318,7 +377,24 @@ export function PublicBookingView({ fetchUrl }: { fetchUrl: string }) {
           )}
 
           {step === "form" && (
-            <VStack spacing="16px" flex="1" minW="416px" align="stretch" bg="customGray.50" border="1px solid" borderColor="customGray.200" borderRadius="8px" p="24px" overflowY="auto">
+            <VStack
+              spacing="16px"
+              flex="1"
+              minW="416px"
+              align="stretch"
+              bg="customGray.50"
+              border="1px solid"
+              borderColor="customGray.200"
+              borderRadius="8px"
+              p="24px"
+              overflowY="auto"
+              sx={{
+                "&::-webkit-scrollbar": { width: "6px" },
+                "&::-webkit-scrollbar-track": { bg: "transparent" },
+                "&::-webkit-scrollbar-thumb": { bg: "customGray.300", borderRadius: "3px" },
+                "&::-webkit-scrollbar-thumb:hover": { bg: "customGray.400" },
+              }}
+            >
               <Text fontSize="14px" color="customGray.600">{fullDateLabel} · {selectedTimeLabel}</Text>
               <VStack spacing="8px" align="stretch">
                 <Text fontSize="14px" fontWeight="600" color="customGray.800">Your name <Text as="span" color="red.500">*</Text></Text>
@@ -340,6 +416,7 @@ export function PublicBookingView({ fetchUrl }: { fetchUrl: string }) {
                   _focus={{ bg: "white", borderColor: "customGray.500", boxShadow: "0 0 0 3px rgba(39, 39, 42, 0.1)" }}
                 />
               </VStack>
+              {showEmail && (
               <VStack spacing="8px" align="stretch">
                 <Text fontSize="14px" fontWeight="600" color="customGray.800">Email address <Text as="span" color="red.500">*</Text></Text>
                 <Input
@@ -361,27 +438,19 @@ export function PublicBookingView({ fetchUrl }: { fetchUrl: string }) {
                   _focus={{ bg: "white", borderColor: "customGray.500", boxShadow: "0 0 0 3px rgba(39, 39, 42, 0.1)" }}
                 />
               </VStack>
+              )}
+              {showPhone && (
               <VStack spacing="8px" align="stretch">
                 <Text fontSize="14px" fontWeight="600" color="customGray.800">Phone number</Text>
-                <Input
-                  size="sm"
-                  type="tel"
-                  placeholder="Your phone number"
+                <PhoneNumberInput
+                  countryCode={guestPhoneCountry}
+                  onCountryCodeChange={setGuestPhoneCountry}
                   value={guestPhone}
-                  onChange={(e) => setGuestPhone(e.target.value)}
-                  borderRadius="md"
-                  bg="white"
-                  border="1px solid"
-                  borderColor="customGray.300"
-                  fontSize="14px"
-                  fontWeight="400"
-                  color="customGray.800"
-                  px="12px"
-                  py="8px"
-                  _hover={{ borderColor: "customGray.400" }}
-                  _focus={{ bg: "white", borderColor: "customGray.500", boxShadow: "0 0 0 3px rgba(39, 39, 42, 0.1)" }}
+                  onChange={setGuestPhone}
                 />
               </VStack>
+              )}
+              {showNotes && (
               <VStack spacing="8px" align="stretch">
                 <Text fontSize="14px" fontWeight="600" color="customGray.800">Additional notes</Text>
                 <Textarea
@@ -403,14 +472,86 @@ export function PublicBookingView({ fetchUrl }: { fetchUrl: string }) {
                   _focus={{ bg: "white", borderColor: "customGray.500", boxShadow: "0 0 0 3px rgba(39, 39, 42, 0.1)" }}
                 />
               </VStack>
+              )}
+              {!showGuests ? null : extraGuestEmails.length === 0 ? (
+                <Button
+                  variant="link"
+                  alignSelf="start"
+                  fontSize="14px"
+                  fontWeight="medium"
+                  color="brand.primary"
+                  _hover={{ textDecoration: "underline" }}
+                  leftIcon={<AddIcon w="10px" h="10px" />}
+                  onClick={addExtraGuestEmail}
+                >
+                  Add guests
+                </Button>
+              ) : (
+                <VStack spacing="8px" align="stretch">
+                  <Text fontSize="14px" fontWeight="medium" color="customGray.800">Add guests</Text>
+                  {extraGuestEmails.map((email, index) => (
+                    <HStack key={index} spacing="8px">
+                      <Input
+                        size="sm"
+                        type="email"
+                        placeholder="Email"
+                        value={email}
+                        onChange={(e) => updateExtraGuestEmail(index, e.target.value)}
+                        borderRadius="md"
+                        bg="white"
+                        border="1px solid"
+                        borderColor="customGray.300"
+                        fontSize="14px"
+                        fontWeight="400"
+                        color="customGray.800"
+                        px="12px"
+                        py="8px"
+                        _hover={{ borderColor: "customGray.400" }}
+                        _focus={{ bg: "white", borderColor: "customGray.500", boxShadow: "0 0 0 3px rgba(39, 39, 42, 0.1)" }}
+                      />
+                      <IconButton
+                        aria-label="Remove this guest"
+                        icon={<CloseIcon w="10px" h="10px" />}
+                        size="sm"
+                        variant="ghost"
+                        color="customGray.500"
+                        onClick={() => removeExtraGuestEmail(index)}
+                      />
+                    </HStack>
+                  ))}
+                  {extraGuestEmails.length < MAX_EXTRA_GUESTS ? (
+                    <Button
+                      variant="link"
+                      alignSelf="start"
+                      fontSize="14px"
+                      fontWeight="medium"
+                      color="brand.primary"
+                      _hover={{ textDecoration: "underline" }}
+                      leftIcon={
+                        <svg width="14" height="14" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+                          <path d="M6 8a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z" stroke="currentColor" strokeWidth="1.3" />
+                          <path d="M1 14c0-2.5 2-4.2 5-4.2s5 1.7 5 4.2" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
+                          <path d="M12.5 5v4M10.5 7h4" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
+                        </svg>
+                      }
+                      onClick={addExtraGuestEmail}
+                    >
+                      Add another
+                    </Button>
+                  ) : (
+                    <Text fontSize="xs" color="customGray.500">You can add up to {MAX_EXTRA_GUESTS} guests.</Text>
+                  )}
+                </VStack>
+              )}
               <HStack>
-                <Button variant="outline" onClick={() => setStep("main")}>Back</Button>
+                <Button fontSize="14px" variant="outline" onClick={() => setStep("main")}>Back</Button>
                 <Button
                   flex="1"
+                  fontSize="14px"
                   bg="customGray.800"
                   color="white"
                   _hover={{ bg: "customGray.700" }}
-                  isDisabled={guestName.trim() === "" || guestEmail.trim() === ""}
+                  isDisabled={guestName.trim() === "" || (showEmail && guestEmail.trim() === "")}
                   isLoading={isSaving}
                   onClick={async () => {
                     setIsSaving(true);

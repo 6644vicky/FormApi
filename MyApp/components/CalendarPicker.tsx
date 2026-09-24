@@ -10,9 +10,12 @@ interface CalendarPickerProps {
   // For days with no configured availability (e.g. a fully "Unavailable"
   // weekday) — styled and blocked the same way a past date already is.
   isDateDisabled?: (date: Date) => boolean;
+  // Highlight for the selected day, so a booking page can be themed from the
+  // Design tab. Defaults to the app's own dark selection.
+  accentColor?: string;
 }
 
-export function CalendarPicker({ value = new Date(), onChange, isDateDisabled }: CalendarPickerProps) {
+export function CalendarPicker({ value = new Date(), onChange, isDateDisabled, accentColor = "var(--chakra-colors-customGray-800)" }: CalendarPickerProps) {
   const [currentDate, setCurrentDate] = useState(new Date(value.getFullYear(), value.getMonth(), 1));
 
   const daysInMonth = (date: Date) => new Date(date.getFullYear(), date.getMonth() + 1, 0).getDate();
@@ -174,7 +177,7 @@ export function CalendarPicker({ value = new Date(), onChange, isDateDisabled }:
               fontWeight={isSelected(day) ? "600" : "500"}
               borderRadius="4px"
               cursor={day && !isBlocked ? "pointer" : isBlocked ? "not-allowed" : "default"}
-              bg={isSelected(day) ? "customGray.800" : isBlocked || isToday(day) ? "transparent" : "customGray.100"}
+              bg={isSelected(day) ? accentColor : isBlocked || isToday(day) ? "transparent" : "customGray.100"}
               color={isSelected(day) ? "white" : isBlocked ? "customGray.400" : "customGray.900"}
               _hover={day && !isBlocked && !isSelected(day) ? { bg: "customGray.200" } : {}}
               onClick={() => day && !isBlocked && handleDateClick(day)}
@@ -183,7 +186,7 @@ export function CalendarPicker({ value = new Date(), onChange, isDateDisabled }:
             >
               {day}
               {isToday(day) && !isSelected(day) && (
-                <Box position="absolute" bottom="4px" w="4px" h="4px" borderRadius="full" bg="customGray.800" />
+                <Box position="absolute" bottom="4px" w="4px" h="4px" borderRadius="full" bg={accentColor} />
               )}
             </Box>
           );

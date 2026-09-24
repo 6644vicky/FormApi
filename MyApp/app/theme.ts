@@ -107,9 +107,26 @@ const theme = extendTheme({
       800: "#7B341E",
       900: "#652B19",
     },
+    // 500 and 600 line up with the existing badge.violet / badge.purple, so
+    // avatar badges and anything using this scale stay the same hue.
+    violet: {
+      50: "#F5F3FF",
+      100: "#EDE9FE",
+      200: "#DDD6FE",
+      300: "#C4B5FD",
+      400: "#A78BFA",
+      500: "#8B5CF6",
+      600: "#7C3AED",
+      700: "#6D28D9",
+      800: "#5B21B6",
+      900: "#4C1D95",
+    },
     // Single-shade semantic accents, pulled from what's actually used
     // across the app (not full 50-900 scales — these only ever appear as
     // one shade each).
+    // The tint behind the app shell — the area framing the white content card
+    // and the nav rail beside it.
+    appBg: "#F3EFFE",
     error: "#FF6B6B",
     link: "#3B82F6",
     success: "#22C55E",

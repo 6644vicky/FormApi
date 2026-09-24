@@ -1,6 +1,7 @@
 "use client";
 
 import { VStack, Box, Button, Text } from "@chakra-ui/react";
+import { AtSignIcon } from "@chakra-ui/icons";
 import { useRouter } from "next/navigation";
 import AvatarBadge from "@/app/components/AvatarBadge";
 
@@ -20,12 +21,17 @@ const navItems = [
   { label: "Messages", icon: "messages" },
   { label: "Settings", icon: "settings" },
   { label: "Help", icon: "help" },
+  { label: "Contacts", icon: "contacts" },
 ];
 
 export default function Sidebar({ selectedNav, onNavClick, userEmail = "", avatarUrl = "", onDelete, onFeedbackOpen, onSettingsClick, isLoading = false }: SidebarProps) {
   const router = useRouter();
 
   const renderSvgIcon = (icon: string, strokeColor: string) => {
+    if (icon === "contacts") {
+      return <AtSignIcon boxSize="22px" color={strokeColor} />;
+    }
+
     if (icon === "home") {
       return (
         <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -37,7 +43,11 @@ export default function Sidebar({ selectedNav, onNavClick, userEmail = "", avata
     if (icon === "messages") {
       return (
         <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-          <path d="M15.6 17.4001L21 12.0001L15.6 6.6001M8.4 6.6001L3 12.0001L8.4 17.4001" stroke={strokeColor} strokeWidth="1.35" strokeLinecap="round" strokeLinejoin="round"/>
+          <path d="M16 2V6M8 2V6M3 9H21M19 4H5C3.895 4 3 4.895 3 6V19C3 20.105 3.895 21 5 21H19C20.105 21 21 20.105 21 19V6C21 4.895 20.105 4 19 4Z" stroke={strokeColor} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+          <path d="M12.0132 12.729C11.8752 12.729 11.7632 12.841 11.7642 12.979C11.7642 13.117 11.8762 13.229 12.0142 13.229C12.1522 13.229 12.2642 13.117 12.2642 12.979C12.2642 12.841 12.1522 12.729 12.0132 12.729" stroke={strokeColor} strokeWidth="1.125" strokeLinecap="round" strokeLinejoin="round"/>
+          <path d="M17.0132 12.729C16.8752 12.729 16.7632 12.841 16.7642 12.979C16.7642 13.117 16.8762 13.229 17.0142 13.229C17.1522 13.229 17.2642 13.117 17.2642 12.979C17.2642 12.841 17.1522 12.729 17.0132 12.729" stroke={strokeColor} strokeWidth="1.125" strokeLinecap="round" strokeLinejoin="round"/>
+          <path d="M7.01316 16.729C6.87516 16.729 6.76316 16.841 6.76416 16.979C6.76416 17.117 6.87616 17.229 7.01416 17.229C7.15216 17.229 7.26416 17.117 7.26416 16.979C7.26416 16.841 7.15216 16.729 7.01316 16.729" stroke={strokeColor} strokeWidth="1.125" strokeLinecap="round" strokeLinejoin="round"/>
+          <path d="M12.0132 16.729C11.8752 16.729 11.7632 16.841 11.7642 16.979C11.7642 17.117 11.8762 17.229 12.0142 17.229C12.1522 17.229 12.2642 17.117 12.2642 16.979C12.2642 16.841 12.1522 16.729 12.0132 16.729" stroke={strokeColor} strokeWidth="1.125" strokeLinecap="round" strokeLinejoin="round"/>
         </svg>
       );
     }
@@ -63,7 +73,7 @@ export default function Sidebar({ selectedNav, onNavClick, userEmail = "", avata
     <VStack
       w="64px"
       h="100%"
-      bg="customGray.100"
+      bg="appBg"
       spacing={0}
       align="stretch"
       pt="30px"
@@ -76,7 +86,7 @@ export default function Sidebar({ selectedNav, onNavClick, userEmail = "", avata
         w="36px"
         h="36px"
         bg="brand.primary"
-        borderRadius="base"
+        borderRadius="12px"
         display="flex"
         alignItems="center"
         justifyContent="center"
@@ -88,7 +98,7 @@ export default function Sidebar({ selectedNav, onNavClick, userEmail = "", avata
       </Box>
 
       {/* Nav Items */}
-      <VStack spacing="16px" flex={1}>
+      <VStack spacing="14px" flex={1}>
         {navItems.map((item) => {
           const strokeColor = selectedNav === item.label ? "#ffffff" : "#27272a";
 
@@ -109,11 +119,13 @@ export default function Sidebar({ selectedNav, onNavClick, userEmail = "", avata
                   router.push("/builder");
                 } else if (item.label === "Home") {
                   router.push("/inbox");
+                } else if (item.label === "Contacts") {
+                  router.push("/contacts");
                 } else if (item.label === "Settings") {
                   onSettingsClick?.();
                 }
               }}
-              borderRadius="base"
+              borderRadius="12px"
               p={0}
             >
               <Box
@@ -122,10 +134,10 @@ export default function Sidebar({ selectedNav, onNavClick, userEmail = "", avata
                 display="flex"
                 alignItems="center"
                 justifyContent="center"
-                bg={selectedNav === item.label ? "customGray.800" : "customGray.100"}
-                borderRadius="base"
+                bg={selectedNav === item.label ? "customGray.800" : "appBg"}
+                borderRadius="12px"
                 transition="all 0.2s"
-                _hover={selectedNav === item.label ? {} : { bg: "customGray.200" }}
+                _hover={selectedNav === item.label ? {} : { bg: "customDark.5" }}
               >
                 {renderSvgIcon(item.icon, strokeColor)}
               </Box>
@@ -143,10 +155,10 @@ export default function Sidebar({ selectedNav, onNavClick, userEmail = "", avata
           display="flex"
           alignItems="center"
           justifyContent="center"
-          bg="customGray.100"
-          borderRadius="base"
+          bg="appBg"
+          borderRadius="12px"
           cursor="pointer"
-          _hover={{ bg: "customGray.200" }}
+          _hover={{ bg: "customDark.5" }}
           onClick={onFeedbackOpen}
         >
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">

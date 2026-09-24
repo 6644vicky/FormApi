@@ -192,26 +192,21 @@ export function BookingDetailsPanel({
                         <Box cursor="pointer">
                           <HStack spacing="8px">
                             <AvatarGroup size="xs" max={2} spacing="-8px" sx={{ "--avatar-font-size": "12px" }}>
-                              <Avatar
-                                key="first-attendee"
-                                name={attendees[0]?.name || "Guest 0"}
-                                getInitials={(name) => name.charAt(0).toUpperCase()}
-                                borderWidth="1px"
-                                bg={BOOKING_AVATAR_COLORS[booking.id % BOOKING_AVATAR_COLORS.length]}
-                                color="white"
-                                fontWeight="medium"
-                                sx={{ "--avatar-font-size": "12px" }}
-                              />
-                              <Avatar
-                                key="attendee-count"
-                                name={String(attendees.length)}
-                                getInitials={(name) => name}
-                                borderWidth="1px"
-                                bg="customGray.200"
-                                color="customGray.700"
-                                fontWeight="medium"
-                                sx={{ "--avatar-font-size": "12px" }}
-                              />
+                              {/* Only the first two attendees get an avatar — the
+                                  "N attendees" label beside them carries the count,
+                                  so no "+N" overflow badge is needed. */}
+                              {attendees.slice(0, 2).map((attendee, attendeeIndex) => (
+                                <Avatar
+                                  key={attendeeIndex}
+                                  name={attendee.name || attendee.email || `Attendee ${attendeeIndex + 1}`}
+                                  getInitials={(name) => name.charAt(0).toUpperCase()}
+                                  borderWidth="1px"
+                                  bg={BOOKING_AVATAR_COLORS[(booking.id + attendeeIndex) % BOOKING_AVATAR_COLORS.length]}
+                                  color="white"
+                                  fontWeight="medium"
+                                  sx={{ "--avatar-font-size": "12px" }}
+                                />
+                              ))}
                             </AvatarGroup>
                             <Text fontSize="sm" color="customGray.800" textUnderlineOffset="3px" _hover={{ textDecoration: "underline" }}>
                               {attendees.length} attendees

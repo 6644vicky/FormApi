@@ -13,6 +13,7 @@ import { getAgents, createAgent, deleteAgent } from "@/app/actions/agentActions"
 import CryptoJS from "crypto-js";
 import Sidebar from "@/app/components/Sidebar";
 import FullPageLoader from "@/app/components/FullPageLoader";
+import { FloatingScrollbar, HIDE_NATIVE_SCROLLBAR_SX } from "@/app/components/FloatingScrollbar";
 import UsernameModal from "@/app/components/UsernameModal";
 import ServiceSelector from "@/app/components/ServiceSelector";
 import OnboardingGate from "@/app/components/OnboardingGate";
@@ -66,13 +67,17 @@ import {
   PopoverBody,
   Portal,
 } from "@chakra-ui/react";
-import { SearchIcon, ChevronDownIcon, HamburgerIcon, CloseIcon, DeleteIcon, CopyIcon } from "@chakra-ui/icons";
+import { SearchIcon, ChevronDownIcon, HamburgerIcon, CloseIcon, DeleteIcon, CopyIcon, CheckIcon } from "@chakra-ui/icons";
 
 const MotionBox = motion(Box);
 
 // Chakra clones this with isIndeterminate/isChecked, so the same `icon`
 // can render the row checkmark and the header's "select all" dash.
-function CheckboxGlyph({ isIndeterminate }: { isIndeterminate?: boolean }) {
+function CheckboxGlyph({ isChecked, isIndeterminate }: { isChecked?: boolean; isIndeterminate?: boolean }) {
+  // Chakra renders the icon in both states, so an unchecked box would show a
+  // white tick against its light fill — draw nothing until it's actually on.
+  if (!isChecked && !isIndeterminate) return null;
+
   return isIndeterminate ? (
     <svg width="12" height="12" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
       <path d="M5 12H19" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
@@ -233,8 +238,17 @@ export default function BuilderPage() {
   const [bookingsSearchQuery, setBookingsSearchQuery] = useState("");
   const [bookingsResultsFilter, setBookingsResultsFilter] = useState<"All" | "Upcoming" | "Past" | "Cancelled" | "Rescheduled">("All");
   const [bookingsSort, setBookingsSort] = useState<"meeting_desc" | "meeting_asc" | "name_asc" | "name_desc">("meeting_desc");
+  // Each list scrolls natively with its own bar hidden; a FloatingScrollbar
+  // sibling draws the thumb over the top so nothing is inset.
+  const bookingsScrollRef = useRef<HTMLDivElement>(null);
+  const eventsScrollRef = useRef<HTMLDivElement>(null);
+  const agentsScrollRef = useRef<HTMLDivElement>(null);
   const [chatbotAgents, setChatbotAgents] = useState<Array<{ id: number; name: string; status: string; updated_at: string }>>([]);
   const [selectedEventIds, setSelectedEventIds] = useState<Set<number>>(new Set());
+  // Drives the selection bar's "Select all", which hides itself once every
+  // row in the current filter is already selected.
+  const areAllEventsSelected = () =>
+    filteredCalendarEvents.length > 0 && filteredCalendarEvents.every((event) => selectedEventIds.has(event.id));
   const [isBulkDeleting, setIsBulkDeleting] = useState(false);
   const [isBulkDuplicating, setIsBulkDuplicating] = useState(false);
   const [isBulkArchiving, setIsBulkArchiving] = useState(false);
@@ -517,14 +531,6 @@ export default function BuilderPage() {
       return;
     }
     setAllBookings((prev) => prev.filter((booking) => booking.id !== bookingId));
-  };
-
-  const isAllEventsSelected = filteredCalendarEvents.length > 0 && filteredCalendarEvents.every((e) => selectedEventIds.has(e.id));
-  const isSomeEventsSelected = selectedEventIds.size > 0 && !isAllEventsSelected;
-  const toggleSelectAllEvents = () => {
-    // Anything short of everything selected reads as "off" — clicking always
-    // selects all from there; only a fully-checked box clears the selection.
-    setSelectedEventIds(isAllEventsSelected ? new Set() : new Set(filteredCalendarEvents.map((e) => e.id)));
   };
 
   useEffect(() => {
@@ -1196,7 +1202,7 @@ export default function BuilderPage() {
       <VStack
         flex={1}
         h="100vh"
-        bg="customGray.100"
+        bg="appBg"
         spacing={0}
         align="stretch"
         overflow="hidden"
@@ -1558,22 +1564,10 @@ export default function BuilderPage() {
                         </Box>
                       )}
                       <Box flex="1" h="100%" bg="white" overflow="hidden" display="flex" flexDirection="column">
-                          {isLoadingAllBookings ? (
-                            <Box flex="1" py="40px" display="flex" alignItems="center" justifyContent="center">
-                              <Text fontSize="14px" color="customGray.500">Loading...</Text>
-                            </Box>
-                          ) : filteredAllBookings.length === 0 ? (
-                            <Box flex="1" py="40px" display="flex" alignItems="center" justifyContent="center">
-                              <Text fontSize="14px" color="customGray.500">
-                                {bookingsSearchQuery.trim() ? `No bookings match "${bookingsSearchQuery}"` : "No bookings yet."}
-                              </Text>
-                            </Box>
-                          ) : (
-                            <>
                               <Box flexShrink={0} w="100%" bg="customGray.50" borderBottom="1px solid" borderColor="customGray.200">
                                 <Table w="100%" sx={{ tableLayout: "fixed" }}>
                                   <colgroup>
-                                    <col style={{ width: "340px" }} />
+                                    <col style={{ width: "381px" }} />
                                     <col style={{ width: "214px" }} />
                                     <col style={{ width: "214px" }} />
                                     <col style={{ width: "140px" }} />
@@ -1592,20 +1586,18 @@ export default function BuilderPage() {
                                   </Thead>
                                 </Table>
                               </Box>
+                              <Box position="relative" flex="1" w="100%" minH="0">
+                              <FloatingScrollbar scrollRef={bookingsScrollRef} />
                               <Box
-                                flex="1"
+                                ref={bookingsScrollRef}
+                                h="100%"
                                 w="100%"
                                 overflowY="auto"
-                                sx={{
-                                  '&::-webkit-scrollbar': { width: '6px' },
-                                  '&::-webkit-scrollbar-track': { bg: 'transparent' },
-                                  '&::-webkit-scrollbar-thumb': { bg: 'customGray.300', borderRadius: '3px' },
-                                  '&::-webkit-scrollbar-thumb:hover': { bg: 'customGray.400' },
-                                }}
+                                sx={HIDE_NATIVE_SCROLLBAR_SX}
                               >
                                 <Table w="100%" sx={{ tableLayout: "fixed" }}>
                                   <colgroup>
-                                    <col style={{ width: "340px" }} />
+                                    <col style={{ width: "381px" }} />
                                     <col style={{ width: "214px" }} />
                                     <col style={{ width: "214px" }} />
                                     <col style={{ width: "140px" }} />
@@ -1613,7 +1605,21 @@ export default function BuilderPage() {
                                     <col style={{ width: "50px" }} />
                                   </colgroup>
                                   <Tbody>
-                                    {filteredAllBookings.map((booking) => {
+                                    {isLoadingAllBookings ? (
+                                      <Tr>
+                                        <Td colSpan={6} h="80px" textAlign="center" borderBottomColor="customGray.200">
+                                          <Text fontSize="14px" color="customGray.500">Loading...</Text>
+                                        </Td>
+                                      </Tr>
+                                    ) : filteredAllBookings.length === 0 ? (
+                                      <Tr>
+                                        <Td colSpan={6} h="80px" textAlign="center" borderBottomColor="customGray.200">
+                                          <Text fontSize="14px" color="customGray.500">
+                                            {bookingsSearchQuery.trim() ? `No bookings match "${bookingsSearchQuery}"` : "No bookings yet."}
+                                          </Text>
+                                        </Td>
+                                      </Tr>
+                                    ) : filteredAllBookings.map((booking) => {
                                       const initial = (booking.guest_name || "?").charAt(0).toUpperCase();
                                       const avatarColor = colors[booking.id % colors.length];
                                       const bookingAttendees = Array.isArray(booking.extra_fields?.attendees)
@@ -1654,32 +1660,25 @@ export default function BuilderPage() {
                                                   <HStack spacing="8px" cursor="pointer">
                                                     {attendeeCount > 1 ? (
                                                       <AvatarGroup size="xs" max={2} spacing="-8px" sx={{ "--avatar-font-size": "12px" }}>
-                                                        {(() => {
-                                                          const firstAttendee = bookingAttendees[0];
-                                                          const firstName = typeof firstAttendee?.name === "string" ? firstAttendee.name : "";
+                                                        {/* Only the first two attendees get an avatar — the
+                                                            "N attendees" label beside them carries the count,
+                                                            so no "+N" overflow badge is needed. */}
+                                                        {bookingAttendees.slice(0, 2).map((attendee, attendeeIndex) => {
+                                                          const attendeeName = typeof attendee?.name === "string" ? attendee.name : "";
+                                                          const attendeeEmail = typeof attendee?.email === "string" ? attendee.email : "";
                                                           return (
                                                             <Avatar
-                                                              key="first-attendee"
-                                                              name={firstName || "Attendee 1"}
+                                                              key={attendeeIndex}
+                                                              name={attendeeName || attendeeEmail || `Attendee ${attendeeIndex + 1}`}
                                                               getInitials={(name) => name.charAt(0).toUpperCase()}
                                                               borderWidth="1px"
-                                                              bg={colors[booking.id % colors.length]}
+                                                              bg={colors[(booking.id + attendeeIndex) % colors.length]}
                                                               color="white"
                                                               fontWeight="medium"
                                                               sx={{ "--avatar-font-size": "12px" }}
                                                             />
                                                           );
-                                                        })()}
-                                                        <Avatar
-                                                          key="attendee-count"
-                                                          name={String(attendeeCount)}
-                                                          getInitials={(name) => name}
-                                                          borderWidth="1px"
-                                                          bg="customGray.200"
-                                                          color="customGray.700"
-                                                          fontWeight="medium"
-                                                          sx={{ "--avatar-font-size": "12px" }}
-                                                        />
+                                                        })}
                                                       </AvatarGroup>
                                                     ) : (
                                                       <Box w="24px" h="24px" bg={avatarColor} borderRadius="full" display="flex" alignItems="center" justifyContent="center" flexShrink={0}>
@@ -1962,8 +1961,7 @@ export default function BuilderPage() {
                                   </Tbody>
                                 </Table>
                               </Box>
-                            </>
-                          )}
+                              </Box>
                         </Box>
                     </VStack>
                   ) : (
@@ -2064,23 +2062,8 @@ export default function BuilderPage() {
                         </colgroup>
                         <Thead>
                           <Tr>
-                            <Th border="none" h="50px" py="0" pl="12px" pr="0" fontSize="sm" fontWeight="medium" color="customGray.700" textTransform="none" letterSpacing="normal">
-                              <HStack spacing="10px" role="group">
-                                <Box
-                                  opacity={isAllEventsSelected || isSomeEventsSelected ? 1 : 0}
-                                  _groupHover={{ opacity: 1 }}
-                                  transition="opacity 0.15s"
-                                >
-                                  <Checkbox
-                                    isChecked={isAllEventsSelected}
-                                    onChange={toggleSelectAllEvents}
-                                    onKeyDown={(e) => { if (e.key === "Enter") e.preventDefault(); }}
-                                    icon={<CheckboxGlyph />}
-                                    sx={checkboxControlSx}
-                                  />
-                                </Box>
-                                <Text>Event Name</Text>
-                              </HStack>
+                            <Th border="none" h="50px" py="0" pl="26px" pr="0" fontSize="sm" fontWeight="medium" color="customGray.700" textTransform="none" letterSpacing="normal">
+                              <Text>Event Name</Text>
                             </Th>
                             <Th border="none" h="50px" py="0" px="0" fontSize="sm" fontWeight="medium" color="customGray.700" textTransform="none" letterSpacing="normal">Booking Link</Th>
                             <Th border="none" h="50px" py="0" px="0" fontSize="sm" fontWeight="medium" color="customGray.700" textTransform="none" letterSpacing="normal">Status</Th>
@@ -2091,17 +2074,9 @@ export default function BuilderPage() {
                         </Thead>
                       </Table>
                     </Box>
-                    <Box
-                      flex={1}
-                      w="100%"
-                      overflowY="auto"
-                      sx={{
-                        '&::-webkit-scrollbar': { width: '6px' },
-                        '&::-webkit-scrollbar-track': { bg: 'transparent' },
-                        '&::-webkit-scrollbar-thumb': { bg: 'customGray.300', borderRadius: '3px' },
-                        '&::-webkit-scrollbar-thumb:hover': { bg: 'customGray.400' },
-                      }}
-                    >
+                    <Box position="relative" flex={1} w="100%" minH="0">
+                    <FloatingScrollbar scrollRef={eventsScrollRef} />
+                    <Box ref={eventsScrollRef} h="100%" w="100%" overflowY="auto" sx={HIDE_NATIVE_SCROLLBAR_SX}>
                     <Table w="100%" sx={{ tableLayout: "fixed" }}>
                       <colgroup>
                         <col style={{ width: "300px" }} />
@@ -2115,7 +2090,7 @@ export default function BuilderPage() {
                     {isSearching ? (
                       [0, 1, 2].map((i) => (
                         <Tr key={`search-skeleton-${i}`}>
-                          <Td h="50px" py="0" pl="12px" pr="12px" borderBottomColor="customGray.200">
+                          <Td h="50px" py="0" pl="26px" pr="12px" borderBottomColor="customGray.200">
                             <HStack spacing="12px">
                               <Box w="19px" flexShrink={0} />
                               <Skeleton startColor="customGray.100" endColor="customGray.200" h="12px" w="140px" borderRadius="6px" />
@@ -2157,34 +2132,48 @@ export default function BuilderPage() {
                       };
                       return (
                         <Tr key={event.id} role="group" cursor="pointer" bg="white" _hover={{ bg: "sky.50" }} transition="background-color 0.2s" onClick={() => router.push(`/calendar-builder?id=${event.id}&tab=calendar`)}>
-                          <Td h="50px" py="0" pl="12px" pr="12px" borderBottomColor="customGray.200">
+                          <Td h="50px" py="0" pl="26px" pr="12px" borderBottomColor="customGray.200">
                             <Flex align="center">
-                              <Box display="contents" onClick={(e) => e.stopPropagation()}>
+                              {/* One slot, not two: the avatar is what you click to
+                                  select, swapping to a checkbox on hover or once the
+                                  row is selected. */}
+                              <Box
+                                position="relative"
+                                w="24px"
+                                h="24px"
+                                flexShrink={0}
+                                mr="10px"
+                                onClick={(e) => e.stopPropagation()}
+                              >
+                                <Box
+                                  position="absolute"
+                                  inset="0"
+                                  bg={badgeColor}
+                                  borderRadius="full"
+                                  display="flex"
+                                  alignItems="center"
+                                  justifyContent="center"
+                                  opacity={isSelected ? 0 : 1}
+                                  _groupHover={{ opacity: 0 }}
+                                  transition="opacity 0.15s"
+                                  pointerEvents="none"
+                                >
+                                  <Text fontSize="xs" fontWeight="medium" color="white">{initial}</Text>
+                                </Box>
                                 <Checkbox
                                   isChecked={isSelected}
                                   onChange={toggleSelected}
                                   onKeyDown={(e) => { if (e.key === "Enter") e.preventDefault(); }}
                                   icon={<CheckboxGlyph />}
                                   sx={checkboxControlSx}
-                                  flexShrink={0}
-                                  mr="10px"
+                                  position="absolute"
+                                  top="50%"
+                                  left="50%"
+                                  transform="translate(-50%, -50%)"
                                   opacity={isSelected ? 1 : 0}
                                   _groupHover={{ opacity: 1 }}
                                   transition="opacity 0.15s"
                                 />
-                              </Box>
-                              <Box
-                                w="24px"
-                                h="24px"
-                                bg={badgeColor}
-                                borderRadius="full"
-                                display="flex"
-                                alignItems="center"
-                                justifyContent="center"
-                                flexShrink={0}
-                                mr="10px"
-                              >
-                                <Text fontSize="xs" fontWeight="medium" color="white">{initial}</Text>
                               </Box>
                               <Text fontSize="sm" fontWeight="500" color="customGray.800" isTruncated minW="0" maxW="190px" mr="4px">{event.title}</Text>
                               <IconButton
@@ -2240,7 +2229,7 @@ export default function BuilderPage() {
                               as="button"
                               px="8px"
                               py="2px"
-                              bg={isLive ? "green.50" : "customGray.100"}
+                              bg={isLive ? "green.100" : "customGray.100"}
                               borderRadius="full"
                               display="inline-block"
                               onClick={(e: React.MouseEvent) => {
@@ -2297,6 +2286,7 @@ export default function BuilderPage() {
                       </Tbody>
                     </Table>
                     </Box>
+                    </Box>
                     {selectedEventIds.size > 0 && (
                       <HStack
                         position="absolute"
@@ -2310,6 +2300,13 @@ export default function BuilderPage() {
                         pr="8px"
                         py="6px"
                         spacing="16px"
+                        // Sizes to its labels instead of being squeezed by the
+                        // table's width, so "13 Selected" and "Select all" stay
+                        // on one line as actions are added.
+                        w="max-content"
+                        maxW="none"
+                        whiteSpace="nowrap"
+                        sx={{ "& > *": { flexShrink: 0 } }}
                         boxShadow="0 8px 24px rgba(0,0,0,0.25)"
                         zIndex={10}
                       >
@@ -2326,6 +2323,30 @@ export default function BuilderPage() {
                           />
                           <Text fontSize="sm" fontWeight="medium">{selectedEventIds.size} Selected</Text>
                         </HStack>
+                        {!areAllEventsSelected() && (
+                          <>
+                            <Box w="1px" h="20px" bg="customGray.600" />
+                            <Box
+                              as="button"
+                              display="flex"
+                              alignItems="center"
+                              gap="6px"
+                              h="32px"
+                              px="12px"
+                              borderRadius="full"
+                              bg="transparent"
+                              border="none"
+                              cursor="pointer"
+                              _hover={{ bg: "customGray.700" }}
+                              onClick={() => setSelectedEventIds(new Set(filteredCalendarEvents.map((event) => event.id)))}
+                            >
+                              <HStack spacing="6px" color="white" fontSize="sm" fontWeight="medium">
+                                <CheckIcon w="12px" h="12px" />
+                                <Text>Select all</Text>
+                              </HStack>
+                            </Box>
+                          </>
+                        )}
                         <Box w="1px" h="20px" bg="customGray.600" />
                         <Box
                           as="button"
@@ -2488,17 +2509,9 @@ export default function BuilderPage() {
                         </Thead>
                       </Table>
                     </Box>
-                    <Box
-                      flex={1}
-                      w="100%"
-                      overflowY="auto"
-                      sx={{
-                        '&::-webkit-scrollbar': { width: '6px' },
-                        '&::-webkit-scrollbar-track': { bg: 'transparent' },
-                        '&::-webkit-scrollbar-thumb': { bg: 'customGray.300', borderRadius: '3px' },
-                        '&::-webkit-scrollbar-thumb:hover': { bg: 'customGray.400' },
-                      }}
-                    >
+                    <Box position="relative" flex={1} w="100%" minH="0">
+                    <FloatingScrollbar scrollRef={agentsScrollRef} />
+                    <Box ref={agentsScrollRef} h="100%" w="100%" overflowY="auto" sx={HIDE_NATIVE_SCROLLBAR_SX}>
                       {chatbotAgents.length === 0 ? (
                         <VStack w="100%" py="60px" spacing="8px">
                           <Text fontSize="sm" color="customGray.500">No agents yet</Text>
@@ -2566,6 +2579,7 @@ export default function BuilderPage() {
                           </Tbody>
                         </Table>
                       )}
+                    </Box>
                     </Box>
                   </VStack>
                 </TabPanel>

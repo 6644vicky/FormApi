@@ -1,8 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   Box,
+  Button,
   HStack,
   Icon,
   IconButton,
@@ -15,7 +16,7 @@ import {
   Textarea,
   VStack,
 } from "@chakra-ui/react";
-import { AddIcon, ChevronDownIcon, DeleteIcon, WarningTwoIcon } from "@chakra-ui/icons";
+import { AddIcon, ChevronDownIcon, DeleteIcon, InfoOutlineIcon, WarningTwoIcon } from "@chakra-ui/icons";
 
 export type WorkflowAction = {
   id: string;
@@ -97,6 +98,9 @@ function Connector({ onAdd }: { onAdd: () => void }) {
 function NodeCard({ children }: { children: React.ReactNode }) {
   return (
     <Box
+      // Marks the card so a drag starting inside it pans nothing — the canvas
+      // only pans from empty space.
+      data-workflow-node
       w="500px"
       bg="white"
       border="1px solid"
@@ -179,6 +183,96 @@ export function WorkflowCanvas({
   onChange: (workflow: WorkflowState) => void;
 }) {
   const [zoom, setZoom] = useState(100);
+  // Free canvas: the content sits on a layer that pans and scales, rather
+  // than in a scroll container.
+  const [pan, setPan] = useState({ x: 0, y: 0 });
+  const [isPanning, setIsPanning] = useState(false);
+  const panStart = useRef({ pointerX: 0, pointerY: 0, panX: 0, panY: 0 });
+  const canvasRef = useRef<HTMLDivElement>(null);
+  const contentRef = useRef<HTMLDivElement>(null);
+  const [isFlowOutOfView, setIsFlowOutOfView] = useState(false);
+  // Recentring eases over a longer curve than an ordinary zoom step, so
+  // returning from far off-canvas reads as travel rather than a jump cut.
+  const [isRecentring, setIsRecentring] = useState(false);
+  const recentreTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const beginPan = (event: React.PointerEvent) => {
+    // Ignore drags that start on a node, so its inputs and menus still work.
+    if ((event.target as HTMLElement).closest("[data-workflow-node]")) return;
+    panStart.current = { pointerX: event.clientX, pointerY: event.clientY, panX: pan.x, panY: pan.y };
+    setIsPanning(true);
+  };
+
+  useEffect(() => {
+    if (!isPanning) return;
+    const onPointerMove = (event: PointerEvent) => {
+      setPan({
+        x: panStart.current.panX + (event.clientX - panStart.current.pointerX),
+        y: panStart.current.panY + (event.clientY - panStart.current.pointerY),
+      });
+    };
+    const onPointerUp = () => setIsPanning(false);
+    window.addEventListener("pointermove", onPointerMove);
+    window.addEventListener("pointerup", onPointerUp);
+    return () => {
+      window.removeEventListener("pointermove", onPointerMove);
+      window.removeEventListener("pointerup", onPointerUp);
+    };
+  }, [isPanning]);
+
+  // Wheel pans the canvas; with a modifier held it zooms, the way a design
+  // tool behaves. Registered natively rather than via React's onWheel, which
+  // is passive — preventDefault there is ignored, and a horizontal trackpad
+  // swipe would be taken as the browser's back gesture.
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const onWheel = (event: WheelEvent) => {
+      event.preventDefault();
+      if (event.ctrlKey || event.metaKey) {
+        setZoom((value) => Math.round(Math.min(150, Math.max(50, value - event.deltaY * 0.3))));
+        return;
+      }
+      setPan((previous) => ({ x: previous.x - event.deltaX, y: previous.y - event.deltaY }));
+    };
+    canvas.addEventListener("wheel", onWheel, { passive: false });
+    return () => canvas.removeEventListener("wheel", onWheel);
+  }, []);
+
+  // A sliver still technically intersects, so require this much of the flow to
+  // be on screen before it counts as visible.
+  const VISIBLE_MARGIN = 48;
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    const content = contentRef.current;
+    if (!canvas || !content) return;
+    const measure = () => {
+      const canvasRect = canvas.getBoundingClientRect();
+      const contentRect = content.getBoundingClientRect();
+      const overlapX = Math.min(canvasRect.right, contentRect.right) - Math.max(canvasRect.left, contentRect.left);
+      const overlapY = Math.min(canvasRect.bottom, contentRect.bottom) - Math.max(canvasRect.top, contentRect.top);
+      setIsFlowOutOfView(overlapX < VISIBLE_MARGIN || overlapY < VISIBLE_MARGIN);
+    };
+    // After the transform settles, so a zoom step isn't measured mid-animation.
+    const frame = requestAnimationFrame(measure);
+    return () => cancelAnimationFrame(frame);
+  }, [pan, zoom, isRecentring, workflow.actions.length]);
+
+  const RECENTRE_MS = 500;
+  const RECENTRE_EASING = "cubic-bezier(0.22, 1, 0.36, 1)";
+
+  const resetView = () => {
+    setIsRecentring(true);
+    setPan({ x: 0, y: 0 });
+    setZoom(100);
+    if (recentreTimer.current) clearTimeout(recentreTimer.current);
+    recentreTimer.current = setTimeout(() => setIsRecentring(false), RECENTRE_MS);
+  };
+
+  useEffect(() => () => {
+    if (recentreTimer.current) clearTimeout(recentreTimer.current);
+  }, []);
 
   const addAction = (index: number) => {
     const next = [...workflow.actions];
@@ -216,20 +310,41 @@ export function WorkflowCanvas({
     <Box
       flex="1"
       position="relative"
-      overflow="auto"
+      overflow="hidden"
       bg="customGray.50"
+      ref={canvasRef}
+      cursor={isPanning ? "grabbing" : "grab"}
+      onPointerDown={beginPan}
       sx={{
+        // Stops a horizontal trackpad swipe from being handed to the browser
+        // as back/forward navigation once the canvas has nothing left to give.
+        overscrollBehavior: "none",
         backgroundImage: "radial-gradient(circle, var(--chakra-colors-customGray-300) 1px, transparent 1px)",
-        backgroundSize: "22px 22px",
+        backgroundSize: `${22 * (zoom / 100)}px ${22 * (zoom / 100)}px`,
+        // Anchoring the grid to the pan makes the surface itself feel like it
+        // is moving, rather than the nodes sliding over a fixed backdrop.
+        backgroundPosition: `${pan.x}px ${pan.y}px`,
+        transition: isRecentring
+          ? `background-position ${RECENTRE_MS}ms ${RECENTRE_EASING}, background-size ${RECENTRE_MS}ms ${RECENTRE_EASING}`
+          : "none",
+        touchAction: "none",
       }}
     >
       <VStack
+        ref={contentRef}
         spacing="0px"
         align="center"
+        position="absolute"
+        top="0"
+        left="50%"
         py="40px"
-        transform={`scale(${zoom / 100})`}
+        transform={`translate(calc(-50% + ${pan.x}px), ${pan.y}px) scale(${zoom / 100})`}
         transformOrigin="top center"
-        transition="transform 0.15s"
+        transition={
+          isPanning ? "none"
+          : isRecentring ? `transform ${RECENTRE_MS}ms ${RECENTRE_EASING}`
+          : "transform 0.15s"
+        }
       >
         {/* Trigger — every workflow starts with exactly one, so it has no delete. */}
         <NodeCard>
@@ -300,9 +415,53 @@ export function WorkflowCanvas({
       </VStack>
 
       <HStack
+          data-workflow-node
+          position="absolute"
+          bottom="32px"
+          left="50%"
+          opacity={isFlowOutOfView ? 1 : 0}
+          transform={isFlowOutOfView ? "translate(-50%, 0)" : "translate(-50%, 8px)"}
+          pointerEvents={isFlowOutOfView ? "auto" : "none"}
+          transition="opacity 0.3s ease, transform 0.3s ease"
+          cursor="default"
+          spacing="12px"
+          bg="white"
+          border="1px solid"
+          borderColor="customGray.200"
+          borderRadius="12px"
+          boxShadow="0 4px 16px rgba(0,0,0,0.10)"
+          pl="14px"
+          pr="8px"
+          py="8px"
+          zIndex={3}
+        >
+          <HStack spacing="8px">
+            <InfoOutlineIcon w="14px" h="14px" color="brand.primary" />
+            <Text fontSize="14px" color="customGray.800">
+              <Text as="span" fontWeight="600">Your workflow</Text> is out of view.
+            </Text>
+          </HStack>
+          <Button
+            size="sm"
+            fontSize="14px"
+            fontWeight="500"
+            borderRadius="8px"
+            bg="brand.primary"
+            color="white"
+            _hover={{ bg: "brand.primaryHover" }}
+            _active={{ bg: "brand.primaryHover" }}
+            onClick={resetView}
+          >
+            Show
+          </Button>
+      </HStack>
+
+      <HStack
+        data-workflow-node
         position="absolute"
         bottom="16px"
         right="16px"
+        cursor="default"
         spacing="2px"
         bg="white"
         border="1px solid"
@@ -321,7 +480,18 @@ export function WorkflowCanvas({
           isDisabled={zoom <= 50}
           onClick={() => setZoom((value) => Math.max(50, value - 10))}
         />
-        <Text fontSize="14px" color="customGray.700" minW="46px" textAlign="center">{zoom}%</Text>
+        <Text
+          as="button"
+          fontSize="14px"
+          color="customGray.700"
+          minW="46px"
+          textAlign="center"
+          title="Reset view"
+          _hover={{ color: "customGray.900" }}
+          onClick={resetView}
+        >
+          {zoom}%
+        </Text>
         <IconButton
           aria-label="Zoom in"
           icon={<Text fontSize="16px" lineHeight="1">+</Text>}

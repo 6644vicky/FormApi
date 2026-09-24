@@ -242,8 +242,6 @@ export default function BuilderPage() {
   // sibling draws the thumb over the top so nothing is inset.
   const bookingsScrollRef = useRef<HTMLDivElement>(null);
   const eventsScrollRef = useRef<HTMLDivElement>(null);
-  const agentsScrollRef = useRef<HTMLDivElement>(null);
-  const [chatbotAgents, setChatbotAgents] = useState<Array<{ id: number; name: string; status: string; updated_at: string }>>([]);
   const [selectedEventIds, setSelectedEventIds] = useState<Set<number>>(new Set());
   // Drives the selection bar's "Select all", which hides itself once every
   // row in the current filter is already selected.
@@ -337,19 +335,33 @@ export default function BuilderPage() {
     toast({ title: "Event deleted", status: "success" });
   };
 
+  // Every selected event already archived means the only useful action is
+  // putting them back, so the bulk button flips rather than being a no-op.
+  const areAllSelectedArchived =
+    selectedEventIds.size > 0
+    && calendarEvents.filter((e) => selectedEventIds.has(e.id)).every((e) => e.is_archived);
+
   const handleBulkArchiveEvents = async () => {
     const ids = Array.from(selectedEventIds);
     if (ids.length === 0) return;
+    const archiving = !areAllSelectedArchived;
     setIsBulkArchiving(true);
-    const { error } = await supabase.from("calendar_events").update({ is_archived: true }).in("id", ids);
+    const { error } = await supabase.from("calendar_events").update({ is_archived: archiving }).in("id", ids);
     setIsBulkArchiving(false);
     if (error) {
-      toast({ title: "Failed to archive events", description: error.message, status: "error" });
+      toast({
+        title: `Failed to ${archiving ? "archive" : "restore"} events`,
+        description: error.message,
+        status: "error",
+      });
       return;
     }
-    setCalendarEvents((prev) => prev.map((e) => (selectedEventIds.has(e.id) ? { ...e, is_archived: true } : e)));
+    setCalendarEvents((prev) => prev.map((e) => (selectedEventIds.has(e.id) ? { ...e, is_archived: archiving } : e)));
     setSelectedEventIds(new Set());
-    toast({ title: `${ids.length} event${ids.length > 1 ? "s" : ""} archived`, status: "success" });
+    toast({
+      title: `${ids.length} event${ids.length > 1 ? "s" : ""} ${archiving ? "archived" : "restored"}`,
+      status: "success",
+    });
   };
 
   const handleBulkDuplicateEvents = async () => {
@@ -766,75 +778,6 @@ export default function BuilderPage() {
     };
   }, [loadCalendarEvents]);
 
-  const loadChatbotAgents = useCallback(async () => {
-    try {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session?.user) return;
-
-      // Same scoping as calendar events: no workspace selected means nothing
-      // to show rather than every agent across every workspace.
-      if (!selectedAgent) {
-        setChatbotAgents([]);
-        return;
-      }
-
-      const { data, error } = await supabase
-        .from("chatbot_agents")
-        .select("id, name, status, updated_at")
-        .eq("user_id", session.user.id)
-        .eq("workspace_name", selectedAgent)
-        .order("updated_at", { ascending: false });
-
-      if (error) {
-        console.log("Error loading chatbot agents:", error);
-        return;
-      }
-
-      if (data) {
-        setChatbotAgents(
-          data.map((a) => ({
-            id: a.id,
-            name: a.name || "Untitled",
-            status: a.status || "Draft",
-            updated_at: a.updated_at,
-          }))
-        );
-      }
-    } catch (error) {
-      console.error("Error loading chatbot agents:", error);
-    }
-    // Refetches whenever the user switches workspace.
-  }, [selectedAgent]);
-
-  useEffect(() => {
-    loadChatbotAgents();
-  }, [loadChatbotAgents]);
-
-  // Agents are created/edited on the chatbot-builder page, so refetch
-  // whenever this page regains focus — same reasoning as calendar events.
-  useEffect(() => {
-    const refresh = () => {
-      if (document.visibilityState === "visible") loadChatbotAgents();
-    };
-
-    window.addEventListener("focus", refresh);
-    document.addEventListener("visibilitychange", refresh);
-    return () => {
-      window.removeEventListener("focus", refresh);
-      document.removeEventListener("visibilitychange", refresh);
-    };
-  }, [loadChatbotAgents]);
-
-  const handleDeleteAgent = async (id: number) => {
-    const { error } = await supabase.from("chatbot_agents").delete().eq("id", id);
-    if (error) {
-      toast({ title: "Failed to delete agent", description: error.message, status: "error" });
-      return;
-    }
-    setChatbotAgents((prev) => prev.filter((a) => a.id !== id));
-    toast({ title: "Agent deleted", status: "success" });
-  };
-
   useEffect(() => {
     if (typeof window === 'undefined') return;
 
@@ -847,8 +790,6 @@ export default function BuilderPage() {
       setActiveTabIndex(0);
     } else if (tabParam === 'newsletter') {
       setActiveTabIndex(2);
-    } else if (tabParam === 'chatbot') {
-      setActiveTabIndex(3);
     }
   }, []);
 
@@ -1195,7 +1136,6 @@ export default function BuilderPage() {
         avatarUrl={avatarUrl}
         onDelete={handleDeleteAccount}
         onFeedbackOpen={onFeedbackOpen}
-        onSettingsClick={onUsernameOpen}
         isLoading={!hydrated}
       />
 
@@ -1407,10 +1347,6 @@ export default function BuilderPage() {
                     // Carry the workspace through so the new event/agent is
                     // created inside it and stays scoped to it.
                     const workspace = encodeURIComponent(selectedAgent || "");
-                    if (activeTabIndex === 3) {
-                      router.push(`/chatbot-builder?workspace=${workspace}`);
-                      return;
-                    }
                     const tab = activeTabIndex === 0 ? "form" : activeTabIndex === 1 ? "calendar" : "newsletter";
                     router.push(`/calendar-builder?tab=${tab}&workspace=${workspace}`);
                   }}>
@@ -1419,7 +1355,7 @@ export default function BuilderPage() {
                         <path d="M12 5v14M5 12h14" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
                       </svg>
                     </Box>
-                    {activeTabIndex === 0 ? "Create form" : activeTabIndex === 1 ? "Create event" : activeTabIndex === 3 ? "Create agent" : "Create newsletter"}
+                    {activeTabIndex === 0 ? "Create form" : activeTabIndex === 1 ? "Create event" : "Create newsletter"}
                   </Button>
                 )}
               </HStack>
@@ -2420,9 +2356,14 @@ export default function BuilderPage() {
                             <svg width="14" height="14" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
                               <path d="M2 4.66667C2 4.29848 2.29848 4 2.66667 4H13.3333C13.7015 4 14 4.29848 14 4.66667V5.33333C14 5.70152 13.7015 6 13.3333 6H2.66667C2.29848 6 2 5.70152 2 5.33333V4.66667Z" stroke="white" strokeWidth="1.33333" strokeLinecap="round" strokeLinejoin="round" />
                               <path d="M3.33333 6V12.6667C3.33333 13.403 3.93029 14 4.66667 14H11.3333C12.0697 14 12.6667 13.403 12.6667 12.6667V6" stroke="white" strokeWidth="1.33333" strokeLinecap="round" strokeLinejoin="round" />
-                              <path d="M6.66667 8.66667H9.33333" stroke="white" strokeWidth="1.33333" strokeLinecap="round" strokeLinejoin="round" />
+                              {areAllSelectedArchived ? (
+                                /* Arrow lifting out of the box — restoring, not filing away. */
+                                <path d="M8 12V8.33333M8 8.33333L6.66667 9.66667M8 8.33333L9.33333 9.66667" stroke="white" strokeWidth="1.33333" strokeLinecap="round" strokeLinejoin="round" />
+                              ) : (
+                                <path d="M6.66667 8.66667H9.33333" stroke="white" strokeWidth="1.33333" strokeLinecap="round" strokeLinejoin="round" />
+                              )}
                             </svg>
-                            <Text>Archive</Text>
+                            <Text>{areAllSelectedArchived ? "Unarchive" : "Archive"}</Text>
                           </HStack>
                         </Box>
                         <Box w="1px" h="20px" bg="customGray.600" />
@@ -2487,100 +2428,6 @@ export default function BuilderPage() {
                         </Text>
                       </VStack>
                     </VStack>
-                  </VStack>
-                </TabPanel>
-                <TabPanel h="100%" p="0" overflow="hidden">
-                  <VStack w="100%" h="100%" align="stretch" spacing={0} overflow="hidden">
-                    <Box flexShrink={0} w="100%" bg="customGray.50" borderBottom="1px solid" borderBottomColor="customGray.200">
-                      <Table w="100%" sx={{ tableLayout: "fixed" }}>
-                        <colgroup>
-                          <col style={{ width: "300px" }} />
-                          <col style={{ width: "180px" }} />
-                          <col />
-                          <col style={{ width: "56px" }} />
-                        </colgroup>
-                        <Thead>
-                          <Tr>
-                            <Th border="none" h="50px" py="0" pl="24px" pr="0" fontSize="sm" fontWeight="medium" color="customGray.600" textTransform="none" letterSpacing="normal">Agent Name</Th>
-                            <Th border="none" h="50px" py="0" px="0" fontSize="sm" fontWeight="medium" color="customGray.600" textTransform="none" letterSpacing="normal">Status</Th>
-                            <Th border="none" h="50px" py="0" px="0" fontSize="sm" fontWeight="medium" color="customGray.600" textTransform="none" letterSpacing="normal">Last Updated</Th>
-                            <Th border="none" h="50px" py="0" pr="24px" pl="0"></Th>
-                          </Tr>
-                        </Thead>
-                      </Table>
-                    </Box>
-                    <Box position="relative" flex={1} w="100%" minH="0">
-                    <FloatingScrollbar scrollRef={agentsScrollRef} />
-                    <Box ref={agentsScrollRef} h="100%" w="100%" overflowY="auto" sx={HIDE_NATIVE_SCROLLBAR_SX}>
-                      {chatbotAgents.length === 0 ? (
-                        <VStack w="100%" py="60px" spacing="8px">
-                          <Text fontSize="sm" color="customGray.500">No agents yet</Text>
-                          <Text fontSize="xs" color="customGray.400">Click "Create agent" to build your first chatbot</Text>
-                        </VStack>
-                      ) : (
-                        <Table w="100%" sx={{ tableLayout: "fixed" }}>
-                          <colgroup>
-                            <col style={{ width: "300px" }} />
-                            <col style={{ width: "180px" }} />
-                            <col />
-                            <col style={{ width: "56px" }} />
-                          </colgroup>
-                          <Tbody>
-                            {chatbotAgents.map((agent) => {
-                              const initial = (agent.name || "U").charAt(0).toUpperCase();
-                              const updatedLabel = new Date(agent.updated_at).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
-                              const isPublished = agent.status === "Published";
-                              return (
-                                <Tr key={agent.id} cursor="pointer" bg="white" _hover={{ bg: "customGray.50" }} transition="background-color 0.2s" onClick={() => router.push(`/chatbot-builder?id=${agent.id}&workspace=${encodeURIComponent(selectedAgent || "")}`)}>
-                                  <Td h="50px" py="0" pl="24px" pr="0" borderBottomColor="customGray.200">
-                                    <Flex align="center" gap="8px">
-                                      <Box w="24px" h="24px" bg="customGray.400" borderRadius="full" display="flex" alignItems="center" justifyContent="center" flexShrink={0}>
-                                        <Text fontSize="xs" fontWeight="medium" color="white">{initial}</Text>
-                                      </Box>
-                                      <Text fontSize="sm" color="customGray.800">{agent.name}</Text>
-                                    </Flex>
-                                  </Td>
-                                  <Td h="50px" py="0" px="0" borderBottomColor="customGray.200">
-                                    <Box px="8px" py="2px" bg={isPublished ? "green.100" : "customGray.100"} borderRadius="full" display="inline-block">
-                                      <Text fontSize="xs" fontWeight="medium" color={isPublished ? "green.700" : "customGray.600"}>{agent.status}</Text>
-                                    </Box>
-                                  </Td>
-                                  <Td h="50px" py="0" px="0" borderBottomColor="customGray.200">
-                                    <Text fontSize="sm" color="customGray.600">{updatedLabel}</Text>
-                                  </Td>
-                                  <Td h="50px" py="0" pr="24px" pl="0" borderBottomColor="customGray.200">
-                                    <Menu>
-                                      <MenuButton
-                                        as={IconButton}
-                                        aria-label="More options"
-                                        icon={
-                                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                                            <circle cx="12" cy="5" r="2" fill="currentColor" />
-                                            <circle cx="12" cy="12" r="2" fill="currentColor" />
-                                            <circle cx="12" cy="19" r="2" fill="currentColor" />
-                                          </svg>
-                                        }
-                                        size="sm"
-                                        variant="ghost"
-                                        color="customGray.600"
-                                        _hover={{ bg: "customGray.200" }}
-                                        onClick={(e: React.MouseEvent) => e.stopPropagation()}
-                                      />
-                                      <MenuList fontSize="sm" minW="160px">
-                                        <MenuItem color="red.500" onClick={() => handleDeleteAgent(agent.id)}>
-                                          Delete
-                                        </MenuItem>
-                                      </MenuList>
-                                    </Menu>
-                                  </Td>
-                                </Tr>
-                              );
-                            })}
-                          </Tbody>
-                        </Table>
-                      )}
-                    </Box>
-                    </Box>
                   </VStack>
                 </TabPanel>
               </TabPanels>

@@ -18,3 +18,18 @@ export async function getVerifiedUserId(): Promise<string | null> {
   if (error || !data.user) return null;
   return data.user.id;
 }
+
+// Same check, but hands back the verified user so callers that need the email
+// (Stripe checkout, for one) don't have to trust one sent from the browser.
+export async function getVerifiedUser(): Promise<{ id: string; email: string } | null> {
+  const token = cookies().get("sb-access-token")?.value;
+  if (!token) return null;
+
+  const supabase = createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL || "",
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ""
+  );
+  const { data, error } = await supabase.auth.getUser(token);
+  if (error || !data.user) return null;
+  return { id: data.user.id, email: data.user.email || "" };
+}

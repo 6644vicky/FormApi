@@ -1,9 +1,10 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { Box, VStack, HStack, Text, Button, Heading, Icon, IconButton, Input, Textarea, Image, useToast, Tabs, TabList, Tab, TabPanels, TabPanel, Avatar, Menu, MenuButton, MenuList, MenuItem, Modal, ModalOverlay, ModalContent, ModalHeader, ModalBody, ModalFooter, ModalCloseButton, useDisclosure, Divider, Tag, TagLabel, TagCloseButton, Tooltip, Switch, Radio, RadioGroup, Checkbox, Link } from "@chakra-ui/react";
-import { ArrowBackIcon, ArrowForwardIcon, AddIcon, CloseIcon, ChevronDownIcon, CopyIcon, InfoOutlineIcon, RepeatClockIcon } from "@chakra-ui/icons";
-import { useState, useEffect, useRef, useMemo, ComponentProps } from "react";
+import { Box, VStack, HStack, Text, Button, Heading, Icon, IconButton, Input, InputGroup, InputLeftElement, Textarea, Image, useToast, Tabs, TabList, Tab, TabPanels, TabPanel, Avatar, Menu, MenuButton, MenuList, MenuItem, Modal, ModalOverlay, ModalContent, ModalHeader, ModalBody, ModalFooter, ModalCloseButton, useDisclosure, Divider, Tag, TagLabel, TagCloseButton, Tooltip, Switch, Radio, RadioGroup, Checkbox, Link } from "@chakra-ui/react";
+import { ArrowBackIcon, ArrowForwardIcon, AddIcon, CloseIcon, ChevronDownIcon, CheckIcon, CopyIcon, InfoOutlineIcon, RepeatClockIcon, SearchIcon } from "@chakra-ui/icons";
+import { FloatingScrollbar, HIDE_NATIVE_SCROLLBAR_SX } from "@/app/components/FloatingScrollbar";
+import { useState, useEffect, useRef, useMemo, useCallback, ComponentProps } from "react";
 import { CalendarPicker } from "@/components/CalendarPicker";
 import { AddPage } from "@/components/AddPage";
 import { supabase, syncServerSession } from "@/lib/supabase";
@@ -54,18 +55,50 @@ function ComboMenu({
   options,
   onChange,
   w = "200px",
+  size = "md",
+  searchable = false,
+  searchPlaceholder = "Search...",
 }: {
   value: string;
   options: string[];
   onChange: (value: string) => void;
   w?: string;
+  size?: "sm" | "md";
+  searchable?: boolean;
+  searchPlaceholder?: string;
 }) {
+  const [query, setQuery] = useState("");
+  const searchRef = useRef<HTMLInputElement>(null);
+  const listRef = useRef<HTMLDivElement>(null);
+  // Match on letters and digits only, so "asiacalcutta" or "asia calcutta"
+  // still finds "Asia/Calcutta" — the separators are easy to forget.
+  const normalizedQuery = query.toLowerCase().replace(/[^a-z0-9]/g, "");
+  const visibleOptions = normalizedQuery
+    ? options.filter((option) => option.toLowerCase().replace(/[^a-z0-9]/g, "").includes(normalizedQuery))
+    : options;
+  // Bring the current value into view when the menu opens, so you can see what
+  // is set before typing. Scrolling the container directly (rather than
+  // scrollIntoView) keeps the page behind the menu still.
+  const selectedRef = useCallback((node: HTMLElement | null) => {
+    const list = listRef.current;
+    if (!node || !list) return;
+    list.scrollTop = Math.max(0, node.offsetTop - list.clientHeight / 2 + node.offsetHeight / 2);
+  }, []);
+  // Deliberately not matchWidth: full IANA zone names are longer than the
+  // button, and a width-matched list scrolls sideways. minW keeps the list at
+  // least as wide as the button; maxW stops it running off the panel.
   return (
-    <Menu matchWidth>
+    <Menu
+      onClose={() => setQuery("")}
+      initialFocusRef={searchable ? searchRef : undefined}
+      autoSelect={!searchable}
+      isLazy
+      lazyBehavior="unmount"
+    >
       <MenuButton
         as={Button}
         w={w}
-        size="md"
+        size={size}
         variant="outline"
         fontSize="14px"
         fontWeight="400"
@@ -86,12 +119,75 @@ function ComboMenu({
       >
         {value}
       </MenuButton>
-      <MenuList minW={w}>
-        {options.map((option) => (
-          <MenuItem key={option} fontSize="14px" py="6px" onClick={() => onChange(option)}>
-            {option}
-          </MenuItem>
-        ))}
+      {/* One card: the search row sits at the top of the menu itself, with the
+          options scrolling beneath it. */}
+      <MenuList
+        overflow="hidden"
+        boxShadow="0 2px 8px rgba(0, 0, 0, 0.06), 0 1px 2px rgba(0, 0, 0, 0.04)"
+        // A fixed width, so filtering down to one row (or none) doesn't make
+        // the card snap narrower as you type.
+        {...(searchable
+          ? { w: "280px", minW: "280px", maxW: "280px", p: 0 }
+          : { minW: w, maxW: "340px", maxH: "280px", overflowY: "auto" })}
+      >
+        {searchable && (
+          <Box borderBottom="1px solid" borderColor="customGray.200">
+            <InputGroup size="sm" alignItems="center">
+              <InputLeftElement pointerEvents="none" h="38px" w="34px">
+                <SearchIcon w="13px" h="13px" color="customGray.400" />
+              </InputLeftElement>
+              {/* Key events are stopped here or Chakra's menu typeahead
+                  swallows them before they reach the field. */}
+              <Input
+                ref={searchRef}
+                placeholder={searchPlaceholder}
+                value={query}
+                onChange={(event) => setQuery(event.target.value)}
+                onKeyDown={(event) => event.stopPropagation()}
+                variant="unstyled"
+                h="38px"
+                pl="34px"
+                pr="12px"
+                fontSize="14px"
+                color="customGray.800"
+                _placeholder={{ color: "customGray.400" }}
+              />
+            </InputGroup>
+          </Box>
+        )}
+        {searchable ? (
+          <Box position="relative" py="4px">
+            <FloatingScrollbar scrollRef={listRef} />
+            <Box ref={listRef} maxH="240px" overflowY="auto" overflowX="hidden" sx={HIDE_NATIVE_SCROLLBAR_SX}>
+              {visibleOptions.length === 0 && (
+                <Text fontSize="14px" color="customGray.500" px="12px" py="8px">No results</Text>
+              )}
+              {visibleOptions.map((option) => (
+                <MenuItem
+                  key={option}
+                  ref={option === value ? selectedRef : undefined}
+                  fontSize="14px"
+                  py="6px"
+                  gap="8px"
+                  bg={option === value ? "customGray.50" : undefined}
+                  fontWeight={option === value ? "500" : "400"}
+                  onClick={() => onChange(option)}
+                >
+                  <Box flex="1" minW="0" whiteSpace="nowrap" overflow="hidden" textOverflow="ellipsis">
+                    {option}
+                  </Box>
+                  {option === value && <CheckIcon w="12px" h="12px" color="customGray.700" flexShrink={0} />}
+                </MenuItem>
+              ))}
+            </Box>
+          </Box>
+        ) : (
+          options.map((option) => (
+            <MenuItem key={option} fontSize="14px" py="6px" whiteSpace="nowrap" onClick={() => onChange(option)}>
+              {option}
+            </MenuItem>
+          ))
+        )}
       </MenuList>
     </Menu>
   );
@@ -443,6 +539,24 @@ function SortableBookingQuestionRow({
   );
 }
 
+// Every IANA zone the browser knows, falling back to a short list on the
+// engines that don't expose supportedValuesOf.
+function listTimeZones(): string[] {
+  const detected = Intl.DateTimeFormat().resolvedOptions().timeZone;
+  try {
+    const supported = (Intl as unknown as { supportedValuesOf?: (key: string) => string[] }).supportedValuesOf;
+    if (supported) return supported("timeZone");
+  } catch {
+    // Older engine — fall through to the short list.
+  }
+  const fallback = [
+    "UTC", "America/Los_Angeles", "America/New_York", "America/Chicago", "America/Sao_Paulo",
+    "Europe/London", "Europe/Berlin", "Europe/Paris", "Africa/Lagos", "Asia/Dubai",
+    "Asia/Calcutta", "Asia/Kolkata", "Asia/Singapore", "Asia/Tokyo", "Australia/Sydney",
+  ];
+  return fallback.includes(detected) ? fallback : [detected, ...fallback];
+}
+
 // Top-nav tab order, mirrored into the URL's ?view= param (see tabIndex
 // below) so a refresh lands back on whichever tab was open instead of
 // always resetting to Build.
@@ -537,6 +651,10 @@ export default function CalendarBuilderPage() {
   const [hideNotesInCalendar, setHideNotesInCalendar] = useState(false);
   const [hideEventDetailsOnSharedCalendars, setHideEventDetailsOnSharedCalendars] = useState(false);
   const [weeklyHours, setWeeklyHours] = useState<WeeklyAvailability>(DEFAULT_AVAILABILITY);
+  // Availability timezone — local UI-only for now, same as the rest of
+  // Configure. Defaults to whatever zone the browser reports.
+  const [availabilityTimeZone, setAvailabilityTimeZone] = useState(() => Intl.DateTimeFormat().resolvedOptions().timeZone);
+  const timeZoneOptions = useMemo(listTimeZones, []);
   // Drives the "Main page" preview's calendar/time-slot list — the same
   // state shape PublicBookingView uses, so the preview behaves like the real
   // booking flow instead of a static mockup with hardcoded slots.
@@ -1423,14 +1541,34 @@ export default function CalendarBuilderPage() {
                 <Box flex="1" overflowY="auto" bg="customGray.50">
                 {configSection === "Availability" ? (
                 <Box w="688px" mx="auto" pt="64px" pb="64px">
-                  <Box>
+                  <Box mb="32px">
                     <Text fontSize="20px" fontWeight="500" color="customGray.800" mb="2px">Availability</Text>
-                    <Text fontSize="14px" color="customGray.500" mb="32px">Weekly hours, buffers, and booking limits</Text>
+                    <Text fontSize="14px" color="customGray.500">Weekly hours, buffers, and booking limits</Text>
                   </Box>
 
 
                   {isAvailabilityOpen && (
                     <>
+                    <Box bg="white" border="1px solid" borderColor="customGray.200" borderRadius="16px" px="24px" py="20px" mb="16px">
+                      <HStack justify="space-between" align="center" spacing="24px">
+                        <Box>
+                          <Text fontSize="14px" fontWeight="600" color="customGray.800" mb="2px">Timezone</Text>
+                          <Text fontSize="14px" color="customGray.500">
+                            The weekly hours below are set in this timezone.
+                          </Text>
+                        </Box>
+                        <ComboMenu
+                          value={availabilityTimeZone}
+                          options={timeZoneOptions}
+                          onChange={setAvailabilityTimeZone}
+                          w="180px"
+                          size="sm"
+                          searchable
+                          searchPlaceholder="Find timezone..."
+                        />
+                      </HStack>
+                    </Box>
+
                     <Box bg="white" border="1px solid" borderColor="customGray.200" borderRadius="16px" p="0px" mt="0px" mb="16px">
                       <VStack align="stretch" spacing="0px">
                         {WEEK_DAYS.map((day, dayIndex) => {

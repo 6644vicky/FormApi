@@ -21,6 +21,7 @@ const BASE_EVENT_COLUMNS =
 // environment that has `availability` but not yet `booking_questions` still
 // serves real weekly hours instead of falling all the way back to defaults.
 const EVENT_COLUMN_TIERS = [
+  `${BASE_EVENT_COLUMNS}, availability, booking_questions, design_settings`,
   `${BASE_EVENT_COLUMNS}, availability, booking_questions`,
   `${BASE_EVENT_COLUMNS}, availability`,
   BASE_EVENT_COLUMNS,
@@ -54,6 +55,7 @@ export function formatPublicEvent(data: {
   hide_form_page: boolean | null;
   availability?: WeeklyAvailability | null;
   booking_questions?: unknown;
+  design_settings?: unknown;
 }) {
   return {
     id: data.id,
@@ -66,6 +68,12 @@ export function formatPublicEvent(data: {
     hideFormPage: data.hide_form_page || false,
     availability: data.availability || DEFAULT_AVAILABILITY,
     bookingQuestions: formatBookingQuestions(data.booking_questions),
+    // Passed through as-is; the booking page merges it over its defaults, so a
+    // partial or absent object can't blank a setting.
+    designSettings:
+      data.design_settings && typeof data.design_settings === "object"
+        ? (data.design_settings as Record<string, unknown>)
+        : null,
   };
 }
 

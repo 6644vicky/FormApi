@@ -6,7 +6,9 @@ import { Box, VStack, HStack, Text, Button, IconButton, Input, Textarea, Avatar,
 import { AddIcon, CloseIcon, RepeatIcon } from "@chakra-ui/icons";
 import { CalendarPicker } from "@/components/CalendarPicker";
 import { PhoneNumberInput } from "@/app/components/PhoneNumberInput";
+import { TruncatedText } from "@/app/components/TruncatedText";
 import { findPhoneCountry, guessPhoneCountryCode } from "@/lib/phoneCountries";
+import { DEFAULT_DESIGN_SETTINGS, fontStackFor, type DesignSettings } from "@/app/components/DesignCustomizePanel";
 import { supabase } from "@/lib/supabase";
 import { parseDurationMinutes, formatTime, buildTimeSlots, getDayRanges, type WeeklyAvailability } from "@/lib/bookingTime";
 import FullPageLoader from "@/app/components/FullPageLoader";
@@ -24,6 +26,9 @@ type EventInfo = {
   // key -> shown, from the owner's "Booking questions" panel. A missing key
   // means the owner never touched that question, so it stays visible.
   bookingQuestions?: Record<string, boolean>;
+  // The owner's Design-tab theming. Merged over defaults below, so a null or
+  // partial object leaves the page looking exactly as it does untouched.
+  designSettings?: Partial<DesignSettings> | null;
 };
 
 // Renders the public booking flow for a resolved event. Used by both
@@ -119,6 +124,7 @@ export function PublicBookingView({ fetchUrl }: { fetchUrl: string }) {
   const showPhone = showQuestion("phone");
   const showNotes = showQuestion("notes");
   const showGuests = showQuestion("guests");
+  const design: DesignSettings = { ...DEFAULT_DESIGN_SETTINGS, ...(event.designSettings || {}) };
 
   const resetBooking = () => {
     setStep("main");
@@ -191,7 +197,7 @@ export function PublicBookingView({ fetchUrl }: { fetchUrl: string }) {
       <Box h="100vh" bg="white" display="flex" flexDirection="column" overflow="hidden">
         <HStack px="20px" py="14px" minH="64px" borderBottom="1px solid" borderColor="customGray.200" spacing="10px">
           <Avatar name={event.ownerName} src={event.avatarUrl || undefined} boxSize="32px" bg="customGray.300" color="customGray.800" />
-          <Text flex="1" fontSize="15px" fontWeight="600" color="customGray.900">{event.ownerName}</Text>
+          <TruncatedText flex="1" minW="0" fontSize="15px" fontWeight="600" color="customGray.900">{event.ownerName}</TruncatedText>
           <IconButton aria-label="Reset booking" icon={<RepeatIcon boxSize="17px" />} size="sm" variant="ghost" color="customGray.500" _hover={{ bg: "customGray.100" }} onClick={resetBooking} />
           <IconButton aria-label="Close booking widget" icon={<CloseIcon boxSize="13px" />} size="sm" variant="ghost" color="customGray.500" _hover={{ bg: "customGray.100" }} onClick={() => window.parent.postMessage({ type: "booking-widget-close" }, "*")} />
         </HStack>
@@ -236,7 +242,7 @@ export function PublicBookingView({ fetchUrl }: { fetchUrl: string }) {
   }
 
   return (
-    <Box minH="100vh" bg={isEmbedded ? "transparent" : "customGray.50"} display="flex" alignItems="center" justifyContent="center" p={isEmbedded ? "0px" : "24px"}>
+    <Box minH="100vh" bg={isEmbedded ? "transparent" : design.backgroundColor} display="flex" alignItems="center" justifyContent="center" p={isEmbedded ? "0px" : "24px"}>
       <Box
         w="fit-content"
         h={step === "main" ? "485px" : undefined}
@@ -249,7 +255,12 @@ export function PublicBookingView({ fetchUrl }: { fetchUrl: string }) {
         flexDirection={step === "success" ? undefined : "column"}
         p={step === "success" ? "0px" : "12px"}
         maxW="100%"
-        bg="white"
+        bg={design.contentAreaColor}
+        fontFamily={fontStackFor(design.fontFamily)}
+        /* Re-point the token the card's text uses, so Text color reaches every
+           heading and label. Buttons and the calendar accent set their colours
+           explicitly, so they don't inherit this. */
+        sx={{ "--chakra-colors-customGray-800": design.textColor }}
         borderRadius="20px"
         border="1px solid"
         borderColor="customGray.200"
@@ -259,9 +270,13 @@ export function PublicBookingView({ fetchUrl }: { fetchUrl: string }) {
         <HStack spacing="0px" align="stretch" flex={step === "success" ? undefined : "1"} minH={step === "success" ? undefined : "0"}>
           {step !== "success" && (
             <VStack spacing="16px" align="start" w="280px" flexShrink={0} pl="16px" pr="24px" pt="24px" pb="13px" overflowY="auto" maxH="600px">
-              <HStack spacing="12px">
+              {/* minW=0 lets the name shrink so it can ellipsise instead of
+                  wrapping onto a second line. */}
+              <HStack spacing="12px" w="100%" minW="0">
                 <Avatar name={event.ownerName} src={event.avatarUrl || undefined} size="sm" flexShrink={0} bg="customGray.300" color="customGray.800" />
-                <Text fontSize="14px" fontWeight="600" color="customGray.800">{event.ownerName}</Text>
+                <TruncatedText flex="1" minW="0" fontSize="14px" fontWeight="600" color="customGray.800">
+                  {event.ownerName}
+                </TruncatedText>
               </HStack>
               <VStack spacing="8px" align="start" w="100%">
                 <Text fontSize="lg" fontWeight="600" color="customGray.800">{event.title}</Text>
@@ -282,14 +297,15 @@ export function PublicBookingView({ fetchUrl }: { fetchUrl: string }) {
 
           {step === "main" && (
             <Box display="flex" alignItems="stretch" border="1px solid" borderColor="customGray.200" borderRadius="8px" overflow="hidden">
-              <Box w="440px" flexShrink={0} display="flex" alignItems="flex-start" justifyContent="center" bg="customGray.50" px="24px" pt="24px" pb="24px" overflowY="hidden">
+              <Box w="440px" flexShrink={0} display="flex" alignItems="flex-start" justifyContent="center" bg={design.contentAreaColor} backgroundImage="linear-gradient(rgba(0,0,0,0.03), rgba(0,0,0,0.03))" px="24px" pt="24px" pb="24px" overflowY="hidden">
                 <CalendarPicker
                   value={selectedDate}
                   onChange={(date) => { setSelectedDate(date); setSelectedTime(null); }}
                   isDateDisabled={(date) => getDayRanges(event.availability, date).length === 0}
+                  accentColor={design.uiElementsColor}
                 />
               </Box>
-              <VStack spacing="0px" w="259px" flexShrink={0} align="stretch" borderLeft="1px solid" borderColor="customGray.200" bg="customGray.50" p="0px">
+              <VStack spacing="0px" w="259px" flexShrink={0} align="stretch" borderLeft="1px solid" borderColor="customGray.200" bg={design.contentAreaColor} backgroundImage="linear-gradient(rgba(0,0,0,0.03), rgba(0,0,0,0.03))" p="0px">
                 <HStack w="100%" justify="space-between" px="20px" pt="24px" pb="12px">
                   <Text fontSize="14px" fontWeight="600" color="customGray.800">{dateLabel}</Text>
                   <Tabs
@@ -324,13 +340,13 @@ export function PublicBookingView({ fetchUrl }: { fetchUrl: string }) {
                       >
                         {isSelected ? (
                           <Box>
-                            <Box bg="customGray.700" color="white" minH="40px" px="16px" py="8px" display="flex" flexWrap="wrap" alignItems="center" justifyContent="center" fontSize="12px" fontWeight="700" textAlign="center">
+                            <Box bg={design.uiElementsColor} color="white" minH="40px" px="16px" py="8px" display="flex" flexWrap="wrap" alignItems="center" justifyContent="center" fontSize="12px" fontWeight="700" textAlign="center">
                               {compactDateLabel} {label}<Text as="span" fontSize="10px" fontWeight="500" ml="4px">({guestTimezone})</Text>
                             </Box>
                             <Button
                               w="100%"
                               h="40px"
-                              bg="customGray.800"
+                              bg={design.buttonsColor}
                               color="white"
                               fontSize="15px"
                               fontWeight="600"
@@ -382,7 +398,7 @@ export function PublicBookingView({ fetchUrl }: { fetchUrl: string }) {
               flex="1"
               minW="416px"
               align="stretch"
-              bg="customGray.50"
+              bg={design.contentAreaColor} backgroundImage="linear-gradient(rgba(0,0,0,0.03), rgba(0,0,0,0.03))"
               border="1px solid"
               borderColor="customGray.200"
               borderRadius="8px"
@@ -397,7 +413,7 @@ export function PublicBookingView({ fetchUrl }: { fetchUrl: string }) {
             >
               <Text fontSize="14px" color="customGray.600">{fullDateLabel} · {selectedTimeLabel}</Text>
               <VStack spacing="8px" align="stretch">
-                <Text fontSize="14px" fontWeight="600" color="customGray.800">Your name <Text as="span" color="red.500">*</Text></Text>
+                <Text fontSize="14px" fontWeight="600" color="customGray.800">Your name <Text as="span" color={design.alertsColor}>*</Text></Text>
                 <Input
                   size="sm"
                   placeholder="Your name"
@@ -418,7 +434,7 @@ export function PublicBookingView({ fetchUrl }: { fetchUrl: string }) {
               </VStack>
               {showEmail && (
               <VStack spacing="8px" align="stretch">
-                <Text fontSize="14px" fontWeight="600" color="customGray.800">Email address <Text as="span" color="red.500">*</Text></Text>
+                <Text fontSize="14px" fontWeight="600" color="customGray.800">Email address <Text as="span" color={design.alertsColor}>*</Text></Text>
                 <Input
                   size="sm"
                   type="email"
@@ -479,7 +495,7 @@ export function PublicBookingView({ fetchUrl }: { fetchUrl: string }) {
                   alignSelf="start"
                   fontSize="14px"
                   fontWeight="medium"
-                  color="brand.primary"
+                  color={design.buttonsColor}
                   _hover={{ textDecoration: "underline" }}
                   leftIcon={<AddIcon w="10px" h="10px" />}
                   onClick={addExtraGuestEmail}
@@ -525,7 +541,7 @@ export function PublicBookingView({ fetchUrl }: { fetchUrl: string }) {
                       alignSelf="start"
                       fontSize="14px"
                       fontWeight="medium"
-                      color="brand.primary"
+                      color={design.buttonsColor}
                       _hover={{ textDecoration: "underline" }}
                       leftIcon={
                         <svg width="14" height="14" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -548,9 +564,9 @@ export function PublicBookingView({ fetchUrl }: { fetchUrl: string }) {
                 <Button
                   flex="1"
                   fontSize="14px"
-                  bg="customGray.800"
+                  bg={design.buttonsColor}
                   color="white"
-                  _hover={{ bg: "customGray.700" }}
+                  _hover={{ filter: "brightness(0.9)" }}
                   isDisabled={guestName.trim() === "" || (showEmail && guestEmail.trim() === "")}
                   isLoading={isSaving}
                   onClick={async () => {
@@ -563,6 +579,9 @@ export function PublicBookingView({ fetchUrl }: { fetchUrl: string }) {
                   Schedule Event
                 </Button>
               </HStack>
+              {design.footerEnabled && design.footerText.trim() && (
+                <Text fontSize="xs" color="customGray.500" pt="4px">{design.footerText}</Text>
+              )}
             </VStack>
           )}
 
@@ -582,7 +601,7 @@ export function PublicBookingView({ fetchUrl }: { fetchUrl: string }) {
                 </VStack>
               </VStack>
 
-              <VStack spacing="16px" align="stretch" w="100%" border="1px solid" borderColor="customGray.200" borderRadius="12px" p="20px" bg="customGray.50">
+              <VStack spacing="16px" align="stretch" w="100%" border="1px solid" borderColor="customGray.200" borderRadius="12px" p="20px" bg={design.contentAreaColor} backgroundImage="linear-gradient(rgba(0,0,0,0.03), rgba(0,0,0,0.03))">
                 <VStack spacing="4px" align="start">
                   <Text fontSize="14px" fontWeight="600" color="customGray.800">What</Text>
                   <Text fontSize="14px" color="customGray.700">

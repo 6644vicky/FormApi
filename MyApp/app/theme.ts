@@ -121,6 +121,8 @@ const theme = extendTheme({
       800: "#5B21B6",
       900: "#4C1D95",
     },
+    // violet.900 at 11% — the fill behind the selected nav tile on the rail.
+    navActive: "rgba(76, 29, 149, 0.11)",
     // Single-shade semantic accents, pulled from what's actually used
     // across the app (not full 50-900 scales — these only ever appear as
     // one shade each).

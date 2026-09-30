@@ -21,7 +21,6 @@ const navItems = [
   { label: "Messages", icon: "messages" },
   { label: "Agents", icon: "agents" },
   { label: "Settings", icon: "settings" },
-  { label: "Help", icon: "help" },
   { label: "Contacts", icon: "contacts" },
 ];
 
@@ -30,6 +29,16 @@ export default function Sidebar({ selectedNav, onNavClick, userName = "", userEm
   // Settings is a page of its own now; a caller can still intercept the click
   // (the builder used to open a username modal here).
   const goToSettings = onSettingsClick ?? (() => router.push("/settings"));
+
+  // Warm the target route while the pointer is still on its way to the click,
+  // so the page's JS is already there when it lands.
+  const ROUTE_FOR_NAV: Record<string, string> = {
+    Home: "/inbox",
+    Messages: "/builder",
+    Agents: "/agents",
+    Settings: "/settings",
+    Contacts: "/contacts",
+  };
 
   const renderSvgIcon = (icon: string, strokeColor: string) => {
     if (icon === "contacts") {
@@ -90,14 +99,6 @@ export default function Sidebar({ selectedNav, onNavClick, userName = "", userEm
         </svg>
       );
     }
-
-    if (icon === "help") {
-      return (
-        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-          <path d="M20 7H11M14 17H5M14 17C14 18.6569 15.3431 20 17 20C18.6569 20 20 18.6569 20 17C20 15.3431 18.6569 14 17 14C15.3431 14 14 15.3431 14 17ZM10 7C10 8.65685 8.65685 10 7 10C5.34315 10 4 8.65685 4 7C4 5.34315 5.34315 4 7 4C8.65685 4 10 5.34315 10 7Z" stroke={strokeColor} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-        </svg>
-      );
-    }
   };
 
   return (
@@ -138,6 +139,7 @@ export default function Sidebar({ selectedNav, onNavClick, userName = "", userEm
           return (
             <Button
               key={item.label}
+              onMouseEnter={() => router.prefetch(ROUTE_FOR_NAV[item.label])}
               variant="unstyled"
               w="36px"
               h="36px"

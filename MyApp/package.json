@@ -4,7 +4,7 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "dev": "next dev",
+    "dev": "next dev --turbo",
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
@@ -43,6 +43,7 @@
     "uuid": "^11.0.0"
   },
   "devDependencies": {
+    "@opentelemetry/api": "^1.9.1",
     "@types/crypto-js": "^4.2.2",
     "@types/node": "26.0.1",
     "@types/react": "19.2.17",

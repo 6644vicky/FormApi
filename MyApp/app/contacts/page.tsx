@@ -16,6 +16,8 @@ import {
   MenuButton,
   MenuItem,
   MenuList,
+  Skeleton,
+  SkeletonCircle,
   Table,
   Tbody,
   Td,
@@ -28,7 +30,6 @@ import {
 } from "@chakra-ui/react";
 import { AddIcon, AtSignIcon, ChevronDownIcon, DownloadIcon, DragHandleIcon, LinkIcon, SearchIcon } from "@chakra-ui/icons";
 import Sidebar from "@/app/components/Sidebar";
-import FullPageLoader from "@/app/components/FullPageLoader";
 import { FloatingScrollbar, HIDE_NATIVE_SCROLLBAR_SX } from "@/app/components/FloatingScrollbar";
 import { supabase, syncServerSession } from "@/lib/supabase";
 
@@ -130,10 +131,12 @@ export default function ContactsPage() {
     (async () => {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session?.user) {
-        router.push("/login");
+        router.push("/");
         return;
       }
-      await syncServerSession(session);
+      // Cookie sync for Server Actions runs alongside the queries below
+      // rather than in front of them.
+      void syncServerSession(session);
       setUserEmail(session.user.email || "");
       setAvatarUrl(session.user.user_metadata?.avatar_url || "");
 
@@ -276,8 +279,6 @@ export default function ContactsPage() {
     setIsSegmentsOpen(true);
   };
 
-  if (isLoading) return <FullPageLoader />;
-
   const toolbarButton = {
     size: "sm" as const,
     variant: "ghost" as const,
@@ -294,6 +295,7 @@ export default function ContactsPage() {
         onNavClick={setSelectedNav}
         userEmail={userEmail}
         avatarUrl={avatarUrl}
+        isLoading={isLoading}
       />
 
       <VStack flex={1} h="100vh" bg="appBg" spacing={0} align="stretch" overflow="hidden" pt="12px" pr="12px" pb="12px">
@@ -502,7 +504,26 @@ export default function ContactsPage() {
             <Box ref={tableScrollRef} h="100%" w="100%" overflowY="auto" sx={HIDE_NATIVE_SCROLLBAR_SX}>
               <Table w="100%" sx={{ tableLayout: "fixed" }}>
                 <Tbody>
-                  {rows.length === 0 ? (
+                  {isLoading ? (
+                    // The chrome renders immediately; only the rows wait on the
+                    // query, so switching pages doesn't sit on a blank loader.
+                    [0, 1, 2, 3, 4].map((row) => (
+                      <Tr key={`skeleton-${row}`}>
+                        {visibleColumns.map((column, index) => (
+                          <Td key={column} h="52px" py="0" borderBottomColor="customGray.200" pl={index === 0 ? "16px" : undefined}>
+                            {index === 0 ? (
+                              <HStack spacing="10px">
+                                <SkeletonCircle size="24px" startColor="customGray.100" endColor="customGray.200" />
+                                <Skeleton h="12px" w="140px" borderRadius="6px" startColor="customGray.100" endColor="customGray.200" />
+                              </HStack>
+                            ) : (
+                              <Skeleton h="12px" w="70%" maxW="120px" borderRadius="6px" startColor="customGray.100" endColor="customGray.200" />
+                            )}
+                          </Td>
+                        ))}
+                      </Tr>
+                    ))
+                  ) : rows.length === 0 ? (
                     <Tr>
                       <Td colSpan={visibleColumns.length} h="80px" textAlign="center" borderBottomColor="customGray.200">
                         <Text fontSize="14px" color="customGray.500">

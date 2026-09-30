@@ -154,7 +154,8 @@ export default function InboxPage() {
 
     const checkAuth = async () => {
       try {
-        await supabase.auth.refreshSession();
+        // getSession() refreshes an expired token itself — an explicit
+        // refreshSession() here just adds a network round-trip to every load.
         const { data: { session } } = await supabase.auth.getSession();
 
         if (!session) {

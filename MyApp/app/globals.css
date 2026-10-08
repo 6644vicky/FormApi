@@ -31,3 +31,34 @@ body {
   height: 100%;
   width: 100%;
 }
+
+/*
+ * Anything clickable shows the hand cursor. Browsers give <button> a default
+ * arrow, and Chakra doesn't override it, so every Button, IconButton, MenuItem,
+ * Tab and `as="button"` Box read as non-interactive without this. Disabled
+ * controls say so instead.
+ */
+button:not(:disabled):not([aria-disabled="true"]),
+[role="button"]:not([aria-disabled="true"]),
+[role="menuitem"],
+[role="menuitemcheckbox"],
+[role="menuitemradio"],
+[role="tab"]:not([aria-disabled="true"]),
+[role="option"],
+[role="switch"],
+a[href],
+label.chakra-checkbox,
+label.chakra-radio,
+label.chakra-switch,
+summary {
+  cursor: pointer;
+}
+
+button:disabled,
+button[aria-disabled="true"],
+[role="button"][aria-disabled="true"],
+[role="tab"][aria-disabled="true"],
+label.chakra-checkbox[data-disabled],
+label.chakra-radio[data-disabled] {
+  cursor: not-allowed;
+}

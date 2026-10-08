@@ -12,8 +12,15 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey);
  * in browser storage.  Syncing the tokens at the boundary prevents actions
  * such as workspace creation from appearing to succeed only until refresh.
  */
+// The tokens already written to the cookie during this page load. Every page
+// used to POST them again on mount, which put a round-trip in front of its
+// first query on every client-side navigation. A module-level cache is reset
+// by a full reload, so a cleared cookie is never missed for long.
+let syncedAccessToken: string | null = null;
+
 export async function syncServerSession(session: Session | null): Promise<boolean> {
   if (!session?.access_token || !session.refresh_token) return false;
+  if (syncedAccessToken === session.access_token) return true;
 
   try {
     const response = await fetch("/api/auth/set-session", {
@@ -25,6 +32,7 @@ export async function syncServerSession(session: Session | null): Promise<boolea
       }),
     });
 
+    if (response.ok) syncedAccessToken = session.access_token;
     return response.ok;
   } catch (error) {
     console.error("Unable to sync the Supabase session with the server:", error);

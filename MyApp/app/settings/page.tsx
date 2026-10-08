@@ -16,76 +16,59 @@ import {
   MenuButton,
   MenuList,
   MenuItem,
+  Skeleton,
   Text,
   Textarea,
   VStack,
   useToast,
 } from "@chakra-ui/react";
 import {
-  AtSignIcon,
-  AttachmentIcon,
-  BellIcon,
   CheckIcon,
   ChevronDownIcon,
   ChevronLeftIcon,
   DeleteIcon,
-  DownloadIcon,
-  EditIcon,
-  EmailIcon,
-  ExternalLinkIcon,
-  HamburgerIcon,
-  InfoIcon,
-  LinkIcon,
-  LockIcon,
   MoonIcon,
-  PlusSquareIcon,
   RepeatIcon,
   SearchIcon,
-  SettingsIcon,
-  StarIcon,
   SunIcon,
-  ViewIcon,
 } from "@chakra-ui/icons";
 import Sidebar from "@/app/components/Sidebar";
-import FullPageLoader from "@/app/components/FullPageLoader";
 import UsernameField from "@/app/components/UsernameField";
 import { FloatingScrollbar, HIDE_NATIVE_SCROLLBAR_SX } from "@/app/components/FloatingScrollbar";
 import { detectTimeZone, listTimeZones } from "@/lib/timezones";
 import { CURRENCY_SYMBOL, PLANS, monthlyPrice, type BillingCycle } from "@/lib/plans";
 import { supabase, syncServerSession } from "@/lib/supabase";
 
-type IconType = typeof EditIcon;
-
-const NAV_GROUPS: { title: string; items: { label: string; icon: IconType }[] }[] = [
+const NAV_GROUPS: { title: string; items: { label: string }[] }[] = [
   {
     title: "Personal",
     items: [
-      { label: "Details", icon: EditIcon },
-      { label: "Notifications", icon: BellIcon },
+      { label: "Details" },
+      { label: "Notifications" },
     ],
   },
   {
     title: "Workspace",
     items: [
-      { label: "General", icon: SettingsIcon },
-      { label: "Billing", icon: StarIcon },
-      { label: "Email", icon: EmailIcon },
-      { label: "Teammates", icon: AtSignIcon },
-      { label: "Views", icon: ViewIcon },
-      { label: "Tags", icon: AttachmentIcon },
-      { label: "Segments", icon: HamburgerIcon },
-      { label: "Reports", icon: InfoIcon },
-      { label: "Import", icon: DownloadIcon },
-      { label: "Integrations", icon: LinkIcon },
-      { label: "Workflows", icon: RepeatIcon },
+      { label: "General" },
+      { label: "Billing" },
+      { label: "Email" },
+      { label: "Teammates" },
+      { label: "Views" },
+      { label: "Tags" },
+      { label: "Segments" },
+      { label: "Reports" },
+      { label: "Import" },
+      { label: "Integrations" },
+      { label: "Workflows" },
     ],
   },
   {
     title: "Developers",
     items: [
-      { label: "API Tokens", icon: LockIcon },
-      { label: "MCP connections", icon: PlusSquareIcon },
-      { label: "Webhooks", icon: ExternalLinkIcon },
+      { label: "API Tokens" },
+      { label: "MCP connections" },
+      { label: "Webhooks" },
     ],
   },
 ];
@@ -492,10 +475,12 @@ export default function SettingsPage() {
     (async () => {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session?.user) {
-        router.push("/login");
+        router.push("/");
         return;
       }
-      await syncServerSession(session);
+      // Cookie sync for Server Actions runs alongside the queries below
+      // rather than in front of them.
+      void syncServerSession(session);
 
       const meta = session.user.user_metadata || {};
       const nextName = meta.full_name || meta.name || "";
@@ -707,8 +692,6 @@ export default function SettingsPage() {
     }
   };
 
-  if (isLoading) return <FullPageLoader />;
-
   const fieldStyles = {
     fontSize: "14px",
     borderRadius: "8px",
@@ -726,6 +709,7 @@ export default function SettingsPage() {
         userName={fullName}
         userEmail={email}
         avatarUrl={avatarUrl}
+        isLoading={isLoading}
       />
 
       <VStack flex={1} h="100vh" bg="appBg" spacing={0} align="stretch" overflow="hidden" pt="12px" pr="12px" pb="12px">
@@ -793,7 +777,7 @@ export default function SettingsPage() {
               )}
               {visibleNavGroups.map((group) => (
                 <Box key={group.title} px="12px" pt="12px">
-                  <Text fontSize="13px" color="customGray.500" px="12px" pb="6px">{group.title}</Text>
+                  <Text fontSize="13px" fontWeight="600" color="customGray.800" px="12px" pb="6px">{group.title}</Text>
                   <VStack align="stretch" spacing="2px">
                     {group.items.map((item) => {
                       const isSelected = section === item.label;
@@ -809,8 +793,7 @@ export default function SettingsPage() {
                           _hover={{ bg: isSelected ? "customGray.100" : "customGray.50" }}
                           onClick={() => setSection(item.label)}
                         >
-                          <item.icon boxSize="16px" color="customGray.600" />
-                          <Text fontSize="14px" fontWeight={isSelected ? "500" : "400"} color="customGray.800">
+                          <Text fontSize="14px" fontWeight={isSelected ? "500" : "400"} color={isSelected ? "customGray.800" : "customGray.500"}>
                             {item.label}
                           </Text>
                         </HStack>
@@ -833,7 +816,7 @@ export default function SettingsPage() {
                   {SECTION_SUBTITLES[section] || "Nothing to configure here yet"}
                 </Text>
               </Box>
-              {section === "Details" && (
+              {section === "Details" && !isLoading && (
                 <Button
                   size="sm"
                   h="34px"
@@ -856,7 +839,21 @@ export default function SettingsPage() {
             <Box position="relative" flex="1" minH="0">
               <FloatingScrollbar scrollRef={contentRef} />
               <Box ref={contentRef} h="100%" overflowY="auto" sx={HIDE_NATIVE_SCROLLBAR_SX}>
-                {section === "Billing" ? (
+                {isLoading ? (
+                  // The nav and header render immediately; only the fields wait
+                  // on the session, so opening Settings feels instant.
+                  <VStack align="stretch" spacing="0">
+                    {[0, 1, 2, 3, 4].map((row) => (
+                      <HStack key={`skeleton-${row}`} align="flex-start" spacing="24px" px="32px" py="24px" borderBottom="1px solid" borderColor="customGray.200">
+                        <Box w="240px" flexShrink={0}>
+                          <Skeleton h="12px" w="90px" borderRadius="6px" startColor="customGray.100" endColor="customGray.200" />
+                          <Skeleton h="10px" w="170px" mt="8px" borderRadius="6px" startColor="customGray.100" endColor="customGray.200" />
+                        </Box>
+                        <Skeleton flex="1" h="40px" borderRadius="8px" startColor="customGray.100" endColor="customGray.200" />
+                      </HStack>
+                    ))}
+                  </VStack>
+                ) : section === "Billing" ? (
                   <BillingPanel />
                 ) : section !== "Details" ? (
                   <VStack align="start" spacing="6px" px="32px" py="32px">

@@ -15,7 +15,6 @@ import {
   MenuButton,
   MenuList,
   MenuItem,
-  Collapse,
   useToast,
 } from "@chakra-ui/react";
 import {
@@ -31,6 +30,10 @@ import {
 import { useState, useEffect, useRef, useMemo } from "react";
 import { supabase } from "@/lib/supabase";
 import FullPageLoader from "@/app/components/FullPageLoader";
+import { HIDE_NATIVE_SCROLLBAR_SX } from "@/app/components/FloatingScrollbar";
+import { AgentConfigPanel, type AgentConfig } from "@/app/components/AgentConfigPanel";
+
+const TABS = ["Build", "Design", "Deploy"];
 
 export default function ChatbotBuilderPage() {
   const router = useRouter();
@@ -44,12 +47,17 @@ export default function ChatbotBuilderPage() {
   const lastSavedSnapshotRef = useRef<string | null>(null);
   const insertInFlightRef = useRef(false);
 
-  const [isDeployOpen, setIsDeployOpen] = useState(true);
-  const [isGuidanceOpen, setIsGuidanceOpen] = useState(true);
-  const [isAppearanceOpen, setIsAppearanceOpen] = useState(true);
+  const [tabIndex, setTabIndex] = useState(0);
+  // New AI agents open on a prompt screen first; rule-based ones and any
+  // existing agent go straight into the builder.
+  const [agentType, setAgentType] = useState<"rules" | "ai">("rules");
+  const [isIntroOpen, setIsIntroOpen] = useState(false);
+  const [introPrompt, setIntroPrompt] = useState("");
   const [tone, setTone] = useState("Professional");
   const [responseLength, setResponseLength] = useState("Standard");
   const [businessContext, setBusinessContext] = useState("");
+  const [config, setConfig] = useState<AgentConfig>({});
+  const hasConfigColumnRef = useRef(true);
   const [alignment, setAlignment] = useState<"left" | "right">("right");
   const [name, setName] = useState("Untitled");
   const [welcomeMessage, setWelcomeMessage] = useState("Hi there! 👋 How can I help you today?");
@@ -115,7 +123,23 @@ export default function ChatbotBuilderPage() {
       try {
         const params = new URLSearchParams(window.location.search);
         const idParam = params.get("id");
+        const typeParam = params.get("type");
         workspaceNameRef.current = params.get("workspace") || null;
+        if (typeParam === "ai" || typeParam === "rules") {
+          setAgentType(typeParam);
+          setIsIntroOpen(!idParam && typeParam === "ai");
+          // Named in the "New chatbot" step before the builder opened.
+          const nameParam = params.get("name");
+          if (!idParam && nameParam) setName(nameParam);
+          const descriptionParam = params.get("description");
+          if (!idParam && descriptionParam) setBusinessContext(descriptionParam);
+        } else if (!idParam) {
+          // A brand new chatbot with no type chosen yet — that question has its
+          // own page, so send them there rather than opening an empty builder.
+          const workspace = workspaceNameRef.current;
+          router.replace(workspace ? `/agents/new?workspace=${encodeURIComponent(workspace)}` : "/agents/new");
+          return;
+        }
 
         const { data: { session } } = await supabase.auth.getSession();
         if (!session?.user) return;
@@ -133,10 +157,12 @@ export default function ChatbotBuilderPage() {
             setAgentId(data.id);
             workspaceNameRef.current = data.workspace_name ?? workspaceNameRef.current;
             setAgentStatus(data.status || "Draft");
+            setAgentType(data.agent_type === "ai" ? "ai" : "rules");
             setName(data.name || "Untitled");
             setTone(data.tone || "Professional");
             setResponseLength(data.response_length || "Standard");
             setBusinessContext(data.business_context || "");
+            setConfig((data.config as AgentConfig) || {});
             setAlignment(data.alignment === "left" ? "left" : "right");
             setWelcomeMessage(data.welcome_message || "Hi there! 👋 How can I help you today?");
             setMessagePlaceholder(data.message_placeholder || "Type your message...");
@@ -157,8 +183,31 @@ export default function ChatbotBuilderPage() {
     load();
   }, []);
 
+  const updateConfig = (patch: Partial<AgentConfig>) => setConfig((current) => ({ ...current, ...patch }));
+
+  const addKnowledgeFile = async (file: File) => {
+    if (file.size > 5 * 1024 * 1024) {
+      toast({ title: "That file is over 5MB", status: "error", duration: 3000 });
+      return;
+    }
+    const path = `knowledge/${agentIdRef.current ?? "new"}-${Date.now()}-${file.name}`;
+    // Prefer a dedicated bucket; fall back to the one that already exists.
+    let bucket = "agent-knowledge";
+    let uploadError = (await supabase.storage.from(bucket).upload(path, file)).error;
+    if (uploadError) {
+      bucket = "comment-attachments";
+      uploadError = (await supabase.storage.from(bucket).upload(path, file)).error;
+    }
+    if (uploadError) {
+      toast({ title: "Couldn't upload that file", description: uploadError.message, status: "error" });
+      return;
+    }
+    const { data } = supabase.storage.from(bucket).getPublicUrl(path);
+    updateConfig({ knowledge: [...(config.knowledge || []), { id: path, name: file.name, url: data.publicUrl }] });
+  };
+
   const buildSnapshot = () =>
-    JSON.stringify({ name, tone, responseLength, businessContext, alignment, welcomeMessage, messagePlaceholder, footerText });
+    JSON.stringify({ name, tone, responseLength, businessContext, alignment, welcomeMessage, messagePlaceholder, footerText, config });
 
   useEffect(() => {
     if (isLoading) return;
@@ -178,7 +227,7 @@ export default function ChatbotBuilderPage() {
     }, 1000);
 
     return () => clearTimeout(saveTimer);
-  }, [name, tone, responseLength, businessContext, alignment, welcomeMessage, messagePlaceholder, footerText, agentId, isLoading]);
+  }, [name, tone, responseLength, businessContext, alignment, welcomeMessage, messagePlaceholder, footerText, config, agentId, isLoading]);
 
   const saveAgentToDatabase = async (overrideStatus?: string) => {
     try {
@@ -196,12 +245,26 @@ export default function ChatbotBuilderPage() {
         welcome_message: welcomeMessage,
         message_placeholder: messagePlaceholder,
         footer_text: footerText,
+        agent_type: agentType,
         updated_at: new Date().toISOString(),
       };
+      if (hasConfigColumnRef.current) payload.config = config;
       if (overrideStatus) payload.status = overrideStatus;
 
+      // agent_type arrived with the chatbot-type chooser; drop it when the
+      // column hasn't been added yet rather than failing the whole save.
+      const withoutAgentType = () => {
+        const { agent_type: _agentType, config: _config, ...rest } = payload;
+        hasConfigColumnRef.current = false;
+        return rest;
+      };
+      const isMissingColumn = (error: { code?: string }) => error.code === "42703" || error.code === "PGRST204";
+
       if (agentIdRef.current) {
-        const { error } = await supabase.from("chatbot_agents").update(payload).eq("id", agentIdRef.current);
+        let { error } = await supabase.from("chatbot_agents").update(payload).eq("id", agentIdRef.current);
+        if (error && isMissingColumn(error)) {
+          ({ error } = await supabase.from("chatbot_agents").update(withoutAgentType()).eq("id", agentIdRef.current));
+        }
         if (error) {
           console.error("Error updating agent:", error);
           toast({ title: "Couldn't save changes", description: error.message, status: "error", isClosable: true });
@@ -210,11 +273,18 @@ export default function ChatbotBuilderPage() {
         if (insertInFlightRef.current) return;
         insertInFlightRef.current = true;
         try {
-          const { data, error } = await supabase
+          let { data, error } = await supabase
             .from("chatbot_agents")
             .insert(payload)
             .select("id")
             .single();
+          if (error && isMissingColumn(error)) {
+            ({ data, error } = await supabase
+              .from("chatbot_agents")
+              .insert(withoutAgentType())
+              .select("id")
+              .single());
+          }
           if (error) {
             console.error("Error creating agent:", error);
             toast({ title: "Couldn't create agent", description: error.message, status: "error", isClosable: true });
@@ -229,6 +299,17 @@ export default function ChatbotBuilderPage() {
     } catch (error) {
       console.error("Error:", error);
     }
+  };
+
+  const startFromPrompt = () => {
+    const goal = introPrompt.trim();
+    if (goal) {
+      setBusinessContext(goal);
+      // First line doubles as a working name until the user renames it.
+      const firstLine = goal.split("\n")[0].slice(0, 60);
+      if (firstLine) setName(firstLine);
+    }
+    setIsIntroOpen(false);
   };
 
   const handlePublish = async () => {
@@ -247,85 +328,279 @@ export default function ChatbotBuilderPage() {
       await saveAgentToDatabase();
     }
 
-    router.push(`/builder?tab=chatbot`);
+    router.push("/agents");
   };
 
   if (isLoading) {
     return <FullPageLoader />;
   }
 
+  // Row shapes lifted from the calendar builder's Build panel so both
+  // creation flows read the same: label left, control right, hairline between.
+  const fieldStyles = {
+    bg: "customGray.50",
+    border: "1px solid",
+    borderColor: "customGray.300",
+    borderRadius: "md",
+    fontSize: "14px",
+    color: "customGray.800",
+    _hover: { borderColor: "customGray.400" },
+    _focus: { bg: "customGray.50", borderColor: "customGray.500", boxShadow: "0 0 0 3px rgba(39, 39, 42, 0.1)" },
+  };
+
+  const Divider = () => <Box h="1px" bg="customGray.200" w="100%" />;
+
   return (
-    <Box h="100dvh" w="100vw" bg="customGray.100" position="relative" overflow="hidden">
+    <Box position="fixed" top={0} left={0} right={0} bottom={0} bg="appBg" overflow="hidden">
       <VStack h="100%" w="100%" align="stretch" spacing={0} overflow="hidden">
-        <Box minH="60px" h="60px" bg="white" pl="16px" pr="16px" display="flex" alignItems="center" justifyContent="space-between" borderBottom="1px solid" borderColor="customGray.200" flexShrink={0}>
-          <HStack spacing="6px">
-            <IconButton
+
+        {/* Top bar: back + inline title on the left, tabs centred, actions right */}
+        <Box minH="60px" h="60px" bg="white" pl="16px" pr="16px" display="flex" alignItems="center" justifyContent="center" position="relative" borderBottom="1px solid" borderColor="customGray.200" zIndex="20" flexShrink={0}>
+          {/* The name is edited in the panel below, so this is just the way out. */}
+          <HStack spacing="6px" position="absolute" left="16px">
+            <Button
               size="sm"
-              icon={<ArrowBackIcon w="20px" h="20px" />}
               variant="ghost"
+              iconSpacing="8px"
               color="customGray.800"
-              _hover={{ bg: "customGray.100" }}
-              onClick={handleBack}
-              aria-label="Back"
-            />
-            <Input
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="Untitled agent"
-              size="sm"
-              variant="unstyled"
-              fontWeight="500"
               fontSize="14px"
-              color="customGray.800"
-              px="8px"
-              py="4px"
-              borderRadius="md"
+              fontWeight="500"
               _hover={{ bg: "customGray.100" }}
-              _focus={{ bg: "white", boxShadow: "0 0 0 1px #27272a" }}
-            />
-            <Box px="8px" py="2px" bg={agentStatus === "Published" ? "green.100" : "customGray.100"} borderRadius="full">
-              <Text fontSize="xs" fontWeight="medium" color={agentStatus === "Published" ? "green.700" : "customGray.600"}>{agentStatus}</Text>
-            </Box>
+              leftIcon={
+                <svg width="18" height="18" viewBox="0 0 18 18" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <path d="M10.9688 5.0625L7.03125 9L10.9688 12.9375" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                </svg>
+              }
+              onClick={handleBack}
+            >
+              Back
+            </Button>
           </HStack>
 
-          <HStack spacing="8px">
-            <Button size="sm" px="14px" variant="outline" borderColor="customGray.300" color="customGray.800" _hover={{ bg: "customGray.50" }}>
+          <HStack spacing="24px" display={isIntroOpen ? "none" : "flex"}>
+            {TABS.map((label, index) => (
+              <Text
+                key={label}
+                fontSize="14px"
+                color={tabIndex === index ? "customGray.800" : "customGray.600"}
+                fontWeight={tabIndex === index ? "500" : "400"}
+                cursor="pointer"
+                onClick={() => setTabIndex(index)}
+                pb="2px"
+                borderBottom={tabIndex === index ? "2px solid" : "none"}
+                borderBottomColor={tabIndex === index ? "customGray.800" : "transparent"}
+              >
+                {label}
+              </Text>
+            ))}
+          </HStack>
+
+          <HStack spacing="8px" position="absolute" right="16px" display={isIntroOpen ? "none" : "flex"}>
+            <Button
+              size="sm"
+              px="14px"
+              variant="outline"
+              borderColor="customGray.300"
+              color="customGray.800"
+              _hover={{ bg: "customGray.50" }}
+              onClick={() => setIsWidgetOpen(true)}
+            >
               Preview
             </Button>
-            <Button size="sm" px="14px" bg="brand.primary" color="white" _hover={{ bg: "brand.primaryHover" }} onClick={handlePublish}>
-              Publish
-            </Button>
+            {tabIndex < TABS.length - 1 ? (
+              <Button
+                size="sm"
+                px="14px"
+                bg="brand.primary"
+                color="white"
+                _hover={{ bg: "brand.primaryHover" }}
+                onClick={() => setTabIndex(tabIndex + 1)}
+              >
+                Next
+              </Button>
+            ) : (
+              <Button
+                size="sm"
+                px="14px"
+                bg="brand.primary"
+                color="white"
+                _hover={{ bg: "brand.primaryHover" }}
+                onClick={handlePublish}
+              >
+                Publish
+              </Button>
+            )}
           </HStack>
         </Box>
 
-        <Flex flex={1} w="100%" overflow="hidden">
-          {/* Settings */}
-          <VStack
-            flex="1"
-            h="100%"
-            align="stretch"
-            spacing={0}
-            overflowY="auto"
-            borderRight="1px solid"
-            borderColor="customGray.200"
-            sx={{
-              '&::-webkit-scrollbar': { width: '6px' },
-              '&::-webkit-scrollbar-track': { bg: 'transparent' },
-              '&::-webkit-scrollbar-thumb': { bg: 'customGray.300', borderRadius: '3px' },
-            }}
-          >
-            {/* Deploy */}
-            <Box borderBottom="1px solid" borderColor="customGray.200">
-              <HStack px="24px" py="16px" spacing="8px" cursor="pointer" onClick={() => setIsDeployOpen(!isDeployOpen)}>
-                <ChevronDownIcon w="16px" h="16px" color="customGray.600" transform={isDeployOpen ? "rotate(0deg)" : "rotate(-90deg)"} transition="transform 0.15s" />
-                <Text fontSize="sm" fontWeight="600" color="customGray.800">Deploy</Text>
-                <Text fontSize="sm" color="customGray.500">· Add the chat widget to your site</Text>
-              </HStack>
-              <Collapse in={isDeployOpen} animateOpacity>
-                <Box px="24px" pb="20px">
-                  <Text fontSize="sm" fontWeight="600" color="customGray.800" mb="4px">Installation</Text>
-                  <Text fontSize="xs" color="customGray.500" mb="10px">Copy and paste the embed code near the end of your &lt;body&gt; tag</Text>
-                  <Box position="relative" bg="customGray.50" border="1px solid" borderColor="customGray.200" borderRadius="8px" p="12px" pr="36px" maxH="120px" overflowY="auto">
+        {isIntroOpen ? (
+          <Box flex="1" w="100%" bg="customGray.50" overflowY="auto" display="flex" alignItems="center" justifyContent="center" p="24px">
+            <VStack spacing="0" w="100%" maxW="620px">
+              <Text fontSize="14px" color="customGray.500">AI agent</Text>
+              <Text fontSize="24px" fontWeight="500" color="customGray.800" mt="6px" textAlign="center">
+                What would you like to create?
+              </Text>
+
+              <Box
+                w="100%"
+                mt="28px"
+                bg="white"
+                border="1px solid"
+                borderColor="customGray.300"
+                borderRadius="14px"
+                p="4px"
+                boxShadow="0 1px 2px rgba(0, 0, 0, 0.04)"
+              >
+                <Textarea
+                  value={introPrompt}
+                  onChange={(e) => setIntroPrompt(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
+                      e.preventDefault();
+                      startFromPrompt();
+                    }
+                  }}
+                  placeholder="Explain what this agent should help your visitors with."
+                  variant="unstyled"
+                  minH="120px"
+                  px="14px"
+                  pt="12px"
+                  fontSize="15px"
+                  color="customGray.800"
+                  _placeholder={{ color: "customGray.400" }}
+                  resize="none"
+                />
+                <HStack justify="flex-end" px="10px" pb="8px">
+                  <IconButton
+                    aria-label="Use this description"
+                    icon={<ArrowUpIcon w="16px" h="16px" />}
+                    size="sm"
+                    borderRadius="full"
+                    bg={introPrompt.trim() === "" ? "customGray.200" : "customGray.800"}
+                    color={introPrompt.trim() === "" ? "customGray.500" : "white"}
+                    _hover={introPrompt.trim() === "" ? { bg: "customGray.300" } : { bg: "customGray.700" }}
+                    isDisabled={introPrompt.trim() === ""}
+                    onClick={startFromPrompt}
+                  />
+                </HStack>
+              </Box>
+
+              <Box h="1px" w="100%" bg="customGray.200" my="32px" />
+
+              <Button
+                size="md"
+                px="24px"
+                h="44px"
+                borderRadius="10px"
+                bg="customGray.100"
+                color="customGray.800"
+                fontSize="14px"
+                fontWeight="400"
+                _hover={{ bg: "customGray.200" }}
+                onClick={() => setIsIntroOpen(false)}
+              >
+                Start from scratch
+              </Button>
+            </VStack>
+          </Box>
+        ) : (
+        <HStack spacing="0px" flex="1" minH="0" align="stretch" w="100%" overflow="hidden">
+          {/* Left panel */}
+          {tabIndex === 0 ? (
+            <AgentConfigPanel
+                name={name}
+                onNameChange={setName}
+                config={config}
+                onConfigChange={updateConfig}
+                tone={tone}
+                onToneChange={setTone}
+                responseLength={responseLength}
+                onResponseLengthChange={setResponseLength}
+                instructions={businessContext}
+                onInstructionsChange={setBusinessContext}
+                onAddKnowledgeFile={addKnowledgeFile}
+                markVariant={agentId ?? 0}
+              />
+          ) : (
+            <Box
+              flex="1"
+              minW="0"
+              h="100%"
+              minH="0"
+              bg="white"
+              borderRight="1px solid"
+              borderColor="customGray.200"
+              overflowX="hidden"
+              overflowY="auto"
+              sx={HIDE_NATIVE_SCROLLBAR_SX}
+            >
+              {tabIndex === 1 ? (
+              <VStack spacing="0px" align="stretch" w="100%">
+                <VStack spacing="2px" align="stretch" py="20px" px="20px">
+                  <Text fontSize="14px" fontWeight="500" color="customGray.800">Alignment</Text>
+                  <Text fontSize="xs" color="customGray.500">Which side of the page the chat widget sits on.</Text>
+                  <HStack spacing="8px" pt="12px">
+                    {(["left", "right"] as const).map((side) => (
+                      <Button
+                        key={side}
+                        size="sm"
+                        variant="outline"
+                        fontSize="14px"
+                        fontWeight="400"
+                        leftIcon={
+                          <Box w="14px" h="12px" border="1.5px solid" borderColor="currentColor" borderRadius="2px" display="flex" alignItems="center" justifyContent={side === "left" ? "flex-start" : "flex-end"} p="1px">
+                            <Box w="4px" h="100%" bg="currentColor" borderRadius="1px" />
+                          </Box>
+                        }
+                        bg={alignment === side ? "customGray.100" : "white"}
+                        borderColor={alignment === side ? "customGray.300" : "customGray.200"}
+                        color="customGray.800"
+                        _hover={{ bg: "customGray.100" }}
+                        onClick={() => setAlignment(side)}
+                        textTransform="capitalize"
+                      >
+                        {side}
+                      </Button>
+                    ))}
+                  </HStack>
+                </VStack>
+
+                <Divider />
+
+                <VStack spacing="2px" align="stretch" py="20px" px="20px">
+                  <Text fontSize="14px" fontWeight="500" color="customGray.800">Message placeholder</Text>
+                  <Text fontSize="xs" color="customGray.500">The hint text inside the message box.</Text>
+                  <Box pt="12px">
+                    <Input value={messagePlaceholder} onChange={(e) => setMessagePlaceholder(e.target.value)} {...fieldStyles} />
+                  </Box>
+                </VStack>
+
+                <Divider />
+
+                <VStack spacing="2px" align="stretch" py="20px" px="20px">
+                  <Text fontSize="14px" fontWeight="500" color="customGray.800">Footer text</Text>
+                  <Text fontSize="xs" color="customGray.500">Shown under the message box — a good spot for privacy and terms links.</Text>
+                  <Box pt="12px">
+                    <Input value={footerText} onChange={(e) => setFooterText(e.target.value)} {...fieldStyles} />
+                  </Box>
+                </VStack>
+
+                <Divider />
+
+                <VStack spacing="2px" align="stretch" py="20px" px="20px">
+                  <Text fontSize="14px" fontWeight="500" color="customGray.800">Quick prompts</Text>
+                  <Text fontSize="xs" color="customGray.500">Suggested questions above the message box, so customers know where to start.</Text>
+                  <Text fontSize="xs" color="customGray.500" pt="8px">
+                    Taken from the Fields list on the Build tab.
+                  </Text>
+                </VStack>
+              </VStack>
+            ) : (
+              <VStack spacing="0px" align="stretch" w="100%">
+                <VStack spacing="2px" align="stretch" py="20px" px="20px">
+                  <Text fontSize="14px" fontWeight="500" color="customGray.800">Installation</Text>
+                  <Text fontSize="xs" color="customGray.500">Paste this near the end of your &lt;body&gt; tag.</Text>
+                  <Box position="relative" bg="customGray.50" border="1px solid" borderColor="customGray.300" borderRadius="md" p="12px" pr="36px" mt="12px" maxH="220px" overflowY="auto" sx={HIDE_NATIVE_SCROLLBAR_SX}>
                     <Text as="pre" fontSize="xs" fontFamily="mono" color="customGray.700" whiteSpace="pre-wrap" wordBreak="break-all">
                       {embedCode}
                     </Text>
@@ -345,157 +620,45 @@ export default function ChatbotBuilderPage() {
                       }}
                     />
                   </Box>
-                </Box>
-              </Collapse>
-            </Box>
-
-            {/* Guidance */}
-            <Box borderBottom="1px solid" borderColor="customGray.200">
-              <HStack px="24px" py="16px" spacing="8px" cursor="pointer" onClick={() => setIsGuidanceOpen(!isGuidanceOpen)}>
-                <ChevronDownIcon w="16px" h="16px" color="customGray.600" transform={isGuidanceOpen ? "rotate(0deg)" : "rotate(-90deg)"} transition="transform 0.15s" />
-                <Text fontSize="sm" fontWeight="600" color="customGray.800">Guidance</Text>
-                <Text fontSize="sm" color="customGray.500">· Set guidelines for handling conversations</Text>
-              </HStack>
-              <Collapse in={isGuidanceOpen} animateOpacity>
-                <VStack align="stretch" spacing={0} px="24px" pb="8px">
-                  <HStack justify="space-between" py="14px" borderBottom="1px solid" borderColor="customGray.100" align="flex-start">
-                    <Box>
-                      <Text fontSize="sm" fontWeight="600" color="customGray.800">Tone</Text>
-                      <Text fontSize="xs" color="customGray.500">Set your agent's tone of voice</Text>
-                    </Box>
-                    <Menu>
-                      <MenuButton as={Button} size="sm" rightIcon={<ChevronDownIcon w="14px" h="14px" />} bg="customGray.100" color="customGray.800" fontWeight="500" _hover={{ bg: "customGray.200" }} _active={{ bg: "customGray.200" }} flexShrink={0}>
-                        {tone}
-                      </MenuButton>
-                      <MenuList fontSize="sm" minW="140px">
-                        {["Professional", "Friendly", "Casual", "Formal"].map((option) => (
-                          <MenuItem key={option} onClick={() => setTone(option)}>{option}</MenuItem>
-                        ))}
-                      </MenuList>
-                    </Menu>
-                  </HStack>
-                  <HStack justify="space-between" py="14px" borderBottom="1px solid" borderColor="customGray.100" align="flex-start">
-                    <Box>
-                      <Text fontSize="sm" fontWeight="600" color="customGray.800">Response length</Text>
-                      <Text fontSize="xs" color="customGray.500">Set the desired response length</Text>
-                    </Box>
-                    <Menu>
-                      <MenuButton as={Button} size="sm" rightIcon={<ChevronDownIcon w="14px" h="14px" />} bg="customGray.100" color="customGray.800" fontWeight="500" _hover={{ bg: "customGray.200" }} _active={{ bg: "customGray.200" }} flexShrink={0}>
-                        {responseLength}
-                      </MenuButton>
-                      <MenuList fontSize="sm" minW="140px">
-                        {["Concise", "Standard", "Detailed"].map((option) => (
-                          <MenuItem key={option} onClick={() => setResponseLength(option)}>{option}</MenuItem>
-                        ))}
-                      </MenuList>
-                    </Menu>
-                  </HStack>
-                  <Box py="14px">
-                    <Text fontSize="sm" fontWeight="600" color="customGray.800" mb="2px">Business context</Text>
-                    <Text fontSize="xs" color="customGray.500" mb="10px">Adding detailed context about your business helps your agent provide more accurate and helpful responses to your customers</Text>
-                    <Textarea
-                      value={businessContext}
-                      onChange={(e) => setBusinessContext(e.target.value)}
-                      placeholder="Provide relevant information about your business to help the agent provide accurate support to customers and avoid hallucination. This can include: your contact details, working hours, refund policy, etc."
-                      fontSize="sm"
-                      color="customGray.800"
-                      _placeholder={{ color: "customGray.400" }}
-                      borderColor="customGray.300"
-                      minH="90px"
-                      resize="vertical"
-                    />
-                  </Box>
                 </VStack>
-              </Collapse>
-            </Box>
 
-            {/* Appearance */}
-            <Box borderBottom="1px solid" borderColor="customGray.200">
-              <HStack px="24px" py="16px" spacing="8px" cursor="pointer" onClick={() => setIsAppearanceOpen(!isAppearanceOpen)}>
-                <ChevronDownIcon w="16px" h="16px" color="customGray.600" transform={isAppearanceOpen ? "rotate(0deg)" : "rotate(-90deg)"} transition="transform 0.15s" />
-                <Text fontSize="sm" fontWeight="600" color="customGray.800">Appearance</Text>
-                <Text fontSize="sm" color="customGray.500">· Customize how the chatbot looks and behaves</Text>
-              </HStack>
-              <Collapse in={isAppearanceOpen} animateOpacity>
-                <VStack align="stretch" spacing={0} px="24px" pb="20px">
-                  <Box py="14px" borderBottom="1px solid" borderColor="customGray.100">
-                    <Text fontSize="sm" fontWeight="600" color="customGray.800" mb="2px">Alignment</Text>
-                    <Text fontSize="xs" color="customGray.500" mb="10px">Display the chatbot on the left or right side of the embedded page</Text>
-                    <HStack spacing="8px">
-                      {(["left", "right"] as const).map((side) => (
-                        <Button
-                          key={side}
-                          size="sm"
-                          variant="outline"
-                          leftIcon={
-                            <Box w="14px" h="12px" border="1.5px solid" borderColor="currentColor" borderRadius="2px" display="flex" alignItems="center" justifyContent={side === "left" ? "flex-start" : "flex-end"} p="1px">
-                              <Box w="4px" h="100%" bg="currentColor" borderRadius="1px" />
-                            </Box>
-                          }
-                          bg={alignment === side ? "customGray.100" : "white"}
-                          borderColor={alignment === side ? "customGray.300" : "customGray.200"}
-                          color="customGray.800"
-                          fontWeight="500"
-                          _hover={{ bg: "customGray.100" }}
-                          onClick={() => setAlignment(side)}
-                          textTransform="capitalize"
-                        >
-                          {side}
-                        </Button>
-                      ))}
-                    </HStack>
-                  </Box>
-                  <Box py="14px" borderBottom="1px solid" borderColor="customGray.100">
-                    <Text fontSize="sm" fontWeight="600" color="customGray.800" mb="2px">Welcome message</Text>
-                    <Text fontSize="xs" color="customGray.500" mb="10px">The initial message sent when a customer starts a conversation</Text>
-                    <Textarea
-                      value={welcomeMessage}
-                      onChange={(e) => setWelcomeMessage(e.target.value)}
-                      fontSize="sm"
-                      color="customGray.800"
-                      borderColor="customGray.300"
-                      minH="60px"
-                      resize="vertical"
-                    />
-                  </Box>
-                  <Box py="14px" borderBottom="1px solid" borderColor="customGray.100">
-                    <Text fontSize="sm" fontWeight="600" color="customGray.800" mb="2px">Message placeholder</Text>
-                    <Text fontSize="xs" color="customGray.500" mb="10px">The placeholder text customers see in the message box</Text>
-                    <Input
-                      value={messagePlaceholder}
-                      onChange={(e) => setMessagePlaceholder(e.target.value)}
-                      fontSize="sm"
-                      color="customGray.800"
-                      borderColor="customGray.300"
-                    />
-                  </Box>
-                  <Box py="14px" borderBottom="1px solid" borderColor="customGray.100">
-                    <Text fontSize="sm" fontWeight="600" color="customGray.800" mb="2px">Footer text</Text>
-                    <Text fontSize="xs" color="customGray.500" mb="10px">Optional text displayed at the bottom of the chatbot. Select text to add links.</Text>
-                    <Input
-                      value={footerText}
-                      onChange={(e) => setFooterText(e.target.value)}
-                      fontSize="sm"
-                      color="customGray.800"
-                      borderColor="customGray.300"
-                    />
-                  </Box>
-                  <Box py="14px">
-                    <Text fontSize="sm" fontWeight="600" color="customGray.800" mb="2px">Quick prompts</Text>
-                    <Text fontSize="xs" color="customGray.500" mb="10px">Prompts appear above the message input, giving customers an easy way to ask questions</Text>
-                    <Button size="sm" bg="customGray.100" color="customGray.800" fontWeight="500" _hover={{ bg: "customGray.200" }}>
-                      Manage · 0
-                    </Button>
-                  </Box>
+                <Divider />
+
+                <VStack spacing="2px" align="stretch" py="20px" px="20px">
+                  <Text fontSize="14px" fontWeight="500" color="customGray.800">Status</Text>
+                  <Text fontSize="xs" color="customGray.500">
+                    {agentStatus === "Published"
+                      ? "This agent is live wherever the embed code is installed."
+                      : "Publish the agent to make it answer on your site."}
+                  </Text>
                 </VStack>
-              </Collapse>
+              </VStack>
+              )}
             </Box>
-          </VStack>
+          )}
 
           {/* Live preview */}
-          <Box flex="1" h="100%" bg="customGray.100" display="flex" alignItems="center" justifyContent="center" p="24px" overflow="hidden" position="relative">
+          <Box
+            // 620px up to a 1536px laptop; half the window on anything wider.
+            w="620px"
+            flexShrink={0}
+            h="100%"
+            bg="customGray.100"
+            p="24px"
+            display="flex"
+            alignItems="center"
+            justifyContent="center"
+            overflow="hidden"
+            position="relative"
+            sx={{
+              backgroundImage: "radial-gradient(circle, rgba(169, 169, 169, 0.1) 1px, transparent 1px)",
+              backgroundSize: "24px 24px",
+              "@media (min-width: 1537px)": { width: "50%" },
+            }}
+          >
+            <VStack spacing="16px" align="flex-end" maxH="100%">
             {isWidgetOpen && (
-              <Box bg="white" borderRadius="20px" boxShadow="0 20px 40px rgba(0,0,0,0.12)" w="360px" maxH="100%" display="flex" flexDirection="column" position="relative" overflow="hidden">
+              <Box bg="white" borderRadius="20px" boxShadow="0 20px 40px rgba(0,0,0,0.12)" w="400px" h="540px" maxH="100%" display="flex" flexDirection="column" position="relative" overflow="hidden">
                 <HStack px="16px" py="14px" borderBottom="1px solid" borderColor="customGray.100" spacing="10px">
                   <Box w="28px" h="28px" borderRadius="full" bg="customGray.800" display="flex" alignItems="center" justifyContent="center" flexShrink={0}>
                     <Text fontSize="xs" fontWeight="600" color="white">{(name || "U").charAt(0).toUpperCase()}</Text>
@@ -544,6 +707,35 @@ export default function ChatbotBuilderPage() {
                   )}
                   <Box ref={previewMessagesEndRef} />
                 </VStack>
+
+                {/* Suggested questions, tapped instead of typed. */}
+                {(config.fields || []).filter((prompt) => prompt.trim()).length > 0 && (
+                  <Flex px="16px" pb="10px" gap="8px" wrap="wrap" justify="flex-end">
+                    {(config.fields || [])
+                      .filter((prompt) => prompt.trim())
+                      .map((prompt, index) => (
+                        <Box
+                          key={index}
+                          as="button"
+                          px="14px"
+                          py="7px"
+                          minH="34px"
+                          maxW="100%"
+                          borderRadius="17px"
+                          border="1px solid"
+                          borderColor="customGray.200"
+                          bg="white"
+                          textAlign="left"
+                          _hover={{ bg: "customGray.50" }}
+                          onClick={() => setPreviewInput(prompt)}
+                        >
+                          {/* Long prompts wrap inside the pill instead of
+                              stretching it past the widget. */}
+                          <Text fontSize="sm" color="customGray.800" wordBreak="break-word">{prompt}</Text>
+                        </Box>
+                      ))}
+                  </Flex>
+                )}
 
                 <Box px="16px" pb="12px">
                   <HStack border="1px solid" borderColor="customGray.200" borderRadius="full" pl="14px" pr="6px" h="40px" spacing="6px">
@@ -600,9 +792,7 @@ export default function ChatbotBuilderPage() {
             <IconButton
               aria-label={isWidgetOpen ? "Close chat widget" : "Open chat widget"}
               icon={isWidgetOpen ? <ChevronDownIcon w="18px" h="18px" /> : <ChevronUpIcon w="18px" h="18px" />}
-              position="absolute"
-              bottom="24px"
-              right="24px"
+              flexShrink={0}
               size="lg"
               borderRadius="full"
               bg="customGray.800"
@@ -611,9 +801,12 @@ export default function ChatbotBuilderPage() {
               _hover={{ bg: "customGray.700" }}
               onClick={() => setIsWidgetOpen(!isWidgetOpen)}
             />
+            </VStack>
           </Box>
-        </Flex>
+        </HStack>
+        )}
       </VStack>
+
     </Box>
   );
 }

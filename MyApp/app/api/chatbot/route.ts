@@ -1,12 +1,46 @@
 import { NextRequest, NextResponse } from "next/server";
 import { isRateLimited, getClientIp } from "@/lib/rateLimit";
 
-// Free-tier OpenRouter model. Swap this if it gets deprecated or you'd
-// rather point at a paid model. Verified against the account's live
-// model list — several other :free slugs are currently 404ing on OpenRouter.
-// nemotron-nano-9b-v2 worked but ran ~4s/reply (mostly hidden reasoning
-// tokens); this one answers in ~1-1.5s at comparable quality.
-const CHATBOT_MODEL = "nvidia/nemotron-3-nano-30b-a3b:free";
+// Two providers, both OpenAI-compatible: NVIDIA's own endpoint when an
+// NVIDIA_API_KEY is present, otherwise the original OpenRouter relay. Model
+// slugs are overridable so a deprecated one can be swapped without a deploy.
+// Google exposes an OpenAI-compatible surface, so the request shape below
+// works unchanged across all three providers.
+const GEMINI_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions";
+const GEMINI_MODEL = process.env.GEMINI_CHAT_MODEL || "gemini-3.8-flash";
+
+const NVIDIA_BASE_URL = "https://integrate.api.nvidia.com/v1/chat/completions";
+const NVIDIA_MODEL = process.env.NVIDIA_CHAT_MODEL || "deepseek-ai/deepseek-v4.1-flash";
+
+const OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1/chat/completions";
+const OPENROUTER_MODEL = process.env.CHATBOT_MODEL || "nvidia/nemotron-3-nano-30b-a3b:free";
+
+// Retry a busy model twice before giving up, then fall back to the next slug.
+const RETRY_DELAYS_MS = [400, 1200];
+const TRANSIENT_STATUSES = new Set([429, 500, 502, 503, 504]);
+
+function chatProvider() {
+  if (process.env.GEMINI_API_KEY) {
+    return {
+      name: "Gemini",
+      url: GEMINI_BASE_URL,
+      models: [GEMINI_MODEL, "gemini-flash-latest"],
+      key: process.env.GEMINI_API_KEY,
+    };
+  }
+  if (process.env.NVIDIA_API_KEY) {
+    return { name: "NVIDIA", url: NVIDIA_BASE_URL, models: [NVIDIA_MODEL], key: process.env.NVIDIA_API_KEY };
+  }
+  if (process.env.CHATBOT_API_KEY) {
+    return {
+      name: "OpenRouter",
+      url: OPENROUTER_BASE_URL,
+      models: [OPENROUTER_MODEL],
+      key: process.env.CHATBOT_API_KEY,
+    };
+  }
+  return null;
+}
 
 const TONE_INSTRUCTIONS: Record<string, string> = {
   Professional: "Respond in a professional, polished tone.",
@@ -45,9 +79,12 @@ export async function POST(request: NextRequest) {
     return jsonWithCors({ error: "Too many requests. Please slow down." }, 429);
   }
 
-  const apiKey = process.env.CHATBOT_API_KEY;
-  if (!apiKey) {
-    return jsonWithCors({ error: "Chatbot is not configured." }, 500);
+  const provider = chatProvider();
+  if (!provider) {
+    return jsonWithCors(
+      { error: "Chatbot is not configured — add GEMINI_API_KEY (or NVIDIA_API_KEY / CHATBOT_API_KEY) to .env.local." },
+      500
+    );
   }
 
   const body = await request.json();
@@ -71,23 +108,55 @@ export async function POST(request: NextRequest) {
     systemLines.push(`Business context:\n${businessContext.trim()}`);
   }
 
-  try {
-    const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+  const payloadMessages = [{ role: "system", content: systemLines.join("\n\n") }, ...messages];
+
+  const ask = (model: string) =>
+    fetch(provider.url, {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${apiKey}`,
+        Authorization: `Bearer ${provider.key}`,
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({
-        model: CHATBOT_MODEL,
-        messages: [{ role: "system", content: systemLines.join("\n\n") }, ...messages],
-      }),
+      body: JSON.stringify({ model, messages: payloadMessages }),
     });
 
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error("OpenRouter error:", response.status, errorText);
-      return jsonWithCors({ error: "The chatbot failed to respond. Please try again." }, 502);
+  try {
+    let response: Response | null = null;
+    let lastStatus = 0;
+    let lastBody = "";
+
+    // Hosted models return 429/503 when they're busy; that's worth retrying
+    // before bothering the visitor, and worth trying the backup slug for.
+    outer: for (const model of provider.models) {
+      for (let attempt = 0; attempt < RETRY_DELAYS_MS.length + 1; attempt += 1) {
+        const candidate = await ask(model);
+        if (candidate.ok) {
+          response = candidate;
+          break outer;
+        }
+
+        lastStatus = candidate.status;
+        lastBody = await candidate.text();
+        console.error(`${provider.name} error (${model}):`, lastStatus, lastBody);
+
+        // A bad key or an unknown model won't fix itself — stop retrying.
+        if (!TRANSIENT_STATUSES.has(lastStatus)) break;
+        const delay = RETRY_DELAYS_MS[attempt];
+        if (delay === undefined) break;
+        await new Promise((resolve) => setTimeout(resolve, delay));
+      }
+    }
+
+    if (!response) {
+      const busy = TRANSIENT_STATUSES.has(lastStatus);
+      return jsonWithCors(
+        {
+          error: busy
+            ? "The assistant is busy right now. Please try again in a moment."
+            : `The chatbot failed to respond (${provider.name} ${lastStatus}). Please try again.`,
+        },
+        502
+      );
     }
 
     const data = await response.json();

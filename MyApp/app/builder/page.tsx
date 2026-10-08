@@ -585,7 +585,25 @@ export default function BuilderPage() {
       return list.length - 1;
     };
 
+    // Stale-while-revalidate: paint from the last known workspace list so the
+    // page appears immediately, then let the fetch below correct it. Without
+    // this the whole builder waits on a Server Action round-trip.
+    const paintFromCache = () => {
+      const cachedAgents = localStorage.getItem("workspace_agents");
+      if (!cachedAgents) return;
+      try {
+        const parsed = JSON.parse(cachedAgents);
+        if (!Array.isArray(parsed) || parsed.length === 0) return;
+        setAgents(parsed);
+        setSelectedAgentIndex(pickWorkspaceIndex(parsed));
+        setIsLoadingWorkspaces(false);
+      } catch (error) {
+        console.error("Error loading agents from localStorage:", error);
+      }
+    };
+
     const loadAgents = async () => {
+      paintFromCache();
       try {
         const { data: { session } } = await supabase.auth.getSession();
         if (session?.user?.id) {
@@ -798,7 +816,8 @@ export default function BuilderPage() {
 
     const checkAuth = async () => {
       try {
-        await supabase.auth.refreshSession();
+        // getSession() refreshes an expired token itself — an explicit
+        // refreshSession() here just adds a network round-trip to every load.
         const { data: { session } } = await supabase.auth.getSession();
 
         if (!session) {
@@ -2079,6 +2098,7 @@ export default function BuilderPage() {
                                 h="24px"
                                 flexShrink={0}
                                 mr="10px"
+                                cursor="pointer"
                                 onClick={(e) => e.stopPropagation()}
                               >
                                 <Box
@@ -2147,6 +2167,7 @@ export default function BuilderPage() {
                                   textDecoration="underline"
                                   noOfLines={1}
                                   maxW="160px"
+                                  cursor="pointer"
                                   _hover={{ color: "sky.500" }}
                                   onClick={(e) => {
                                     e.stopPropagation();

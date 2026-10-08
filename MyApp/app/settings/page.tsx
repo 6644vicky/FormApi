@@ -23,29 +23,14 @@ import {
   useToast,
 } from "@chakra-ui/react";
 import {
-  AtSignIcon,
-  AttachmentIcon,
-  BellIcon,
   CheckIcon,
   ChevronDownIcon,
   ChevronLeftIcon,
   DeleteIcon,
-  DownloadIcon,
-  EditIcon,
-  EmailIcon,
-  ExternalLinkIcon,
-  HamburgerIcon,
-  InfoIcon,
-  LinkIcon,
-  LockIcon,
   MoonIcon,
-  PlusSquareIcon,
   RepeatIcon,
   SearchIcon,
-  SettingsIcon,
-  StarIcon,
   SunIcon,
-  ViewIcon,
 } from "@chakra-ui/icons";
 import Sidebar from "@/app/components/Sidebar";
 import UsernameField from "@/app/components/UsernameField";
@@ -54,38 +39,36 @@ import { detectTimeZone, listTimeZones } from "@/lib/timezones";
 import { CURRENCY_SYMBOL, PLANS, monthlyPrice, type BillingCycle } from "@/lib/plans";
 import { supabase, syncServerSession } from "@/lib/supabase";
 
-type IconType = typeof EditIcon;
-
-const NAV_GROUPS: { title: string; items: { label: string; icon: IconType }[] }[] = [
+const NAV_GROUPS: { title: string; items: { label: string }[] }[] = [
   {
     title: "Personal",
     items: [
-      { label: "Details", icon: EditIcon },
-      { label: "Notifications", icon: BellIcon },
+      { label: "Details" },
+      { label: "Notifications" },
     ],
   },
   {
     title: "Workspace",
     items: [
-      { label: "General", icon: SettingsIcon },
-      { label: "Billing", icon: StarIcon },
-      { label: "Email", icon: EmailIcon },
-      { label: "Teammates", icon: AtSignIcon },
-      { label: "Views", icon: ViewIcon },
-      { label: "Tags", icon: AttachmentIcon },
-      { label: "Segments", icon: HamburgerIcon },
-      { label: "Reports", icon: InfoIcon },
-      { label: "Import", icon: DownloadIcon },
-      { label: "Integrations", icon: LinkIcon },
-      { label: "Workflows", icon: RepeatIcon },
+      { label: "General" },
+      { label: "Billing" },
+      { label: "Email" },
+      { label: "Teammates" },
+      { label: "Views" },
+      { label: "Tags" },
+      { label: "Segments" },
+      { label: "Reports" },
+      { label: "Import" },
+      { label: "Integrations" },
+      { label: "Workflows" },
     ],
   },
   {
     title: "Developers",
     items: [
-      { label: "API Tokens", icon: LockIcon },
-      { label: "MCP connections", icon: PlusSquareIcon },
-      { label: "Webhooks", icon: ExternalLinkIcon },
+      { label: "API Tokens" },
+      { label: "MCP connections" },
+      { label: "Webhooks" },
     ],
   },
 ];
@@ -794,7 +777,7 @@ export default function SettingsPage() {
               )}
               {visibleNavGroups.map((group) => (
                 <Box key={group.title} px="12px" pt="12px">
-                  <Text fontSize="13px" color="customGray.500" px="12px" pb="6px">{group.title}</Text>
+                  <Text fontSize="13px" fontWeight="600" color="customGray.800" px="12px" pb="6px">{group.title}</Text>
                   <VStack align="stretch" spacing="2px">
                     {group.items.map((item) => {
                       const isSelected = section === item.label;
@@ -810,8 +793,7 @@ export default function SettingsPage() {
                           _hover={{ bg: isSelected ? "customGray.100" : "customGray.50" }}
                           onClick={() => setSection(item.label)}
                         >
-                          <item.icon boxSize="16px" color="customGray.600" />
-                          <Text fontSize="14px" fontWeight={isSelected ? "500" : "400"} color="customGray.800">
+                          <Text fontSize="14px" fontWeight={isSelected ? "500" : "400"} color={isSelected ? "customGray.800" : "customGray.500"}>
                             {item.label}
                           </Text>
                         </HStack>

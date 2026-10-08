@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type ComponentProps } from "react";
 import { useRouter } from "next/navigation";
 import {
   Box,
@@ -14,8 +14,12 @@ import {
   MenuItem,
   MenuList,
   SimpleGrid,
+  Icon,
   Skeleton,
   SkeletonCircle,
+  Tag,
+  TagLabel,
+  TagLeftIcon,
   Text,
   VStack,
   useToast,
@@ -26,6 +30,20 @@ import { AgentMark } from "@/app/components/AgentMark";
 import { FloatingScrollbar, HIDE_NATIVE_SCROLLBAR_SX } from "@/app/components/FloatingScrollbar";
 import { AGENT_CATEGORIES, type AgentConfig } from "@/app/components/AgentConfigPanel";
 import { supabase, syncServerSession } from "@/lib/supabase";
+
+// Status tick for the agent card footer — inherits the tag's colour scheme.
+function StatusCheckIcon(props: ComponentProps<typeof Icon>) {
+  return (
+    <Icon viewBox="0 0 16 16" fill="none" {...props}>
+      <path
+        fillRule="evenodd"
+        clipRule="evenodd"
+        d="M2 8C2 11.3133 4.68674 14 8 14C11.3133 14 14 11.3133 14 8C14 4.68674 11.3133 2 8 2C4.68674 2 2 4.68674 2 8ZM11.0036 7.17059C11.2714 6.9028 11.2714 6.46863 11.0036 6.20084C10.7359 5.93305 10.3017 5.93305 10.0339 6.20084L7.18545 9.04929L5.67074 7.53363C5.40304 7.26575 4.96887 7.26562 4.70099 7.53332C4.43312 7.80102 4.43298 8.23519 4.70069 8.50307L6.70027 10.5039C6.82885 10.6326 7.00328 10.7049 7.18518 10.7049C7.36708 10.7049 7.54154 10.6327 7.67017 10.5041L11.0036 7.17059Z"
+        fill="currentColor"
+      />
+    </Icon>
+  );
+}
 
 type AgentRow = {
   id: number;
@@ -78,6 +96,7 @@ export default function AgentsPage() {
   const toast = useToast({ position: "top" });
   const scrollRef = useRef<HTMLDivElement>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
+  const searchBoxRef = useRef<HTMLDivElement>(null);
 
   const [isLoading, setIsLoading] = useState(true);
   const [userEmail, setUserEmail] = useState("");
@@ -131,6 +150,18 @@ export default function AgentsPage() {
       setIsLoading(false);
     })();
   }, [router]);
+
+  useEffect(() => {
+    if (!isSearchExpanded) return;
+    const onPointerDown = (event: MouseEvent) => {
+      if (searchBoxRef.current?.contains(event.target as Node)) return;
+      // A typed query stays put — collapsing it would hide a filter that is
+      // still narrowing the list.
+      if (searchQuery === "") setIsSearchExpanded(false);
+    };
+    document.addEventListener("mousedown", onPointerDown);
+    return () => document.removeEventListener("mousedown", onPointerDown);
+  }, [isSearchExpanded, searchQuery]);
 
   const visibleAgents = useMemo(() => {
     const query = searchQuery.trim().toLowerCase();
@@ -270,12 +301,13 @@ export default function AgentsPage() {
         border="1px solid"
         borderColor="customGray.200"
         borderRadius="16px"
-        p="20px"
+        overflow="hidden"
         cursor="pointer"
         transition="border-color 0.15s ease, box-shadow 0.15s ease"
         _hover={{ borderColor: "customGray.300", boxShadow: "0 2px 8px rgba(0, 0, 0, 0.06)" }}
         onClick={() => openAgent(agent)}
       >
+        <Box p="20px">
         <HStack justify="space-between" align="flex-start">
           <AgentMark size={40} variant={agent.id} animate={false} />
           <Menu isLazy placement="bottom-end">
@@ -313,17 +345,19 @@ export default function AgentsPage() {
         <Text fontSize="14px" color="customGray.500" mt="2px" noOfLines={2} minH="40px">
           {agent.config?.description || "No description yet"}
         </Text>
+        </Box>
 
-        <Box h="1px" bg="customGray.200" mt="16px" mb="12px" />
+        {/* The rule runs wall to wall, so the footer reads as its own band. */}
+        <Box h="1px" bg="customGray.200" />
 
-        <HStack justify="space-between">
-          <Text fontSize="13px" color="customGray.500" isTruncated>
+        <HStack justify="space-between" px="20px" py="12px">
+          <Text fontSize="14px" color="customGray.500" isTruncated>
             {agent.workspace_name || "Personal"}
           </Text>
-          <HStack spacing="6px">
-            <Box w="7px" h="7px" borderRadius="full" bg={isLive ? "green.500" : "customGray.300"} />
-            <Text fontSize="13px" color="customGray.500">{isLive ? "Online" : "Draft"}</Text>
-          </HStack>
+          <Tag size="md" variant="subtle" colorScheme={isLive ? "green" : "gray"} borderRadius="full" pl="4px" flexShrink={0}>
+            <TagLeftIcon as={StatusCheckIcon} boxSize="16px" mr="2px" />
+            <TagLabel fontSize="12px" fontWeight="500">{isLive ? "Online" : "Draft"}</TagLabel>
+          </Tag>
         </HStack>
       </VStack>
     );
@@ -475,7 +509,7 @@ export default function AgentsPage() {
             <Box ref={scrollRef} h="100%" overflowY="auto" sx={HIDE_NATIVE_SCROLLBAR_SX}>
               <Box maxW="1120px" mx="auto" px="32px" pb="48px">
                 {/* Heading */}
-                <Text fontSize="xl" fontWeight="500" color="customGray.800" mt="24px">Agents</Text>
+                <Text fontSize="xl" fontWeight="500" color="customGray.800" mt="32px">Agents</Text>
                 <Text fontSize="14px" color="customGray.600" mt="6px">
                   Agents answer your visitors around the clock. Give them your knowledge base, a tone of voice,
                   and the questions you want them to handle.
@@ -505,6 +539,7 @@ export default function AgentsPage() {
                   <HStack spacing="10px">
                     {/* Same expanding search the events list uses. */}
                     <HStack
+                      ref={searchBoxRef}
                       spacing="0"
                       bg="transparent"
                       borderRadius="6px"
@@ -524,7 +559,13 @@ export default function AgentsPage() {
                         flexShrink={0}
                         _hover={isSearchExpanded ? undefined : { bg: "customGray.50" }}
                         onMouseDown={(event) => event.preventDefault()}
-                        onClick={() => setIsSearchExpanded(!isSearchExpanded)}
+                        onClick={() => {
+                          const next = !isSearchExpanded;
+                          setIsSearchExpanded(next);
+                          // Expanding puts the cursor in the field, so you can
+                          // type straight away.
+                          if (next) requestAnimationFrame(() => searchInputRef.current?.focus({ preventScroll: true }));
+                        }}
                       />
                       <Input
                         ref={searchInputRef}
